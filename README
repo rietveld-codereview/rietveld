@@ -1,0 +1,56 @@
+Welcome to Rietveld
+-------------------
+
+This project shows how to create a somewhat substantial web
+application using Django on Google App Engine.
+
+In addition, I hope it will serve as a practical tool for the Python
+developer community, and hopefully for other open source
+communities. As I've learned over the last two years at Google, where
+I developed a similar tool named Mondrian, proper code review habits
+can really improve the quality of a code base, and good tools for code
+review will improve developers' life.
+
+Some code in this project was derived from Mondrian, but this is not
+the full Mondrian tool.
+
+--Guido van Rossum, Python creator and Google employee
+
+Links
+-----
+
+Mondrian video: http://www.youtube.com/watch?v=sMql3Di4Kgc
+Google App Engine: http://code.google.com/appengine/
+Live app: http://codereview.appspot.com
+About code review: http://en.wikipedia.org/wiki/Code_review
+Django: http://djangoproject.com
+Python: http://python.org
+
+License
+-------
+
+The license is Apache 2.0.  See the file COPYING.
+
+Running
+-------
+
+To run the app locally (e.g. for testing), download the Google App
+Engine SDK from http://code.google.com/appengine/downloads.html.  You
+can then run the server using
+
+  make serve
+
+(assuming you're on Linux or Mac OS X).
+
+The server is only accessible on http://localhost:8080.  The server in
+the Google App Engine SDK is not designed for serving real traffic.
+The App Engine FAQ at http://code.google.com/appengine/kb/general.html
+says about this: "You can override this using the -a <hostname> flag
+when running it, but doing so is not recommended because the SDK has
+not been hardened for security and may contain vulnerabilities."
+
+To deploy your own instance of the app to Google App Engine, register
+your own application ID on the App Engine admin site, edit app.yaml to
+use this instead of 'codereview', and then upload using
+
+  make update
