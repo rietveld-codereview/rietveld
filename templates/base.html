@@ -17,23 +17,25 @@
 <div align="right">
 {%if is_dev%}
 <div style="float:left; color:green; font-weight:bold">DEVELOPMENT SERVER</div>
+{%else%}
+<div style="float:left; font-weight:bold"><i>Rietveld</i> Code Review Tool</div>
 {%endif%}
 {%if user%}
 <b>{{user.nickname}}</b>
 |
 {%endif%}
-{%if is_admin and is_dev%}
-<a class="novisit" href="/_ah/admin">Admin</a>
+{%if is_dev%}
+<a class="novisit" target="_blank" href="/_ah/admin">Admin</a>
 |
 {%endif%}
-<a target="_blank"
+<a class="novisit" target="_blank"
    href="http://code.google.com/p/rietveld/wiki/CodeReviewHelp">Help</a>
 |
-<a target="_blank"
-   href="http://code.google.com/p/rietveld/issues/list">Report a problem</a>
+<a class="novisit" target="_blank"
+   href="http://code.google.com/p/rietveld/issues/list">Bug tracker</a>
 |
-<a target="_blank"
-   href="http://groups.google.com/group/codereview-discuss">Send feedback</a>
+<a class="novisit" target="_blank"
+   href="http://groups.google.com/group/codereview-discuss">Discussion group</a>
 |
 {%if user%}
 <a class="novisit" href="{{sign_out}}">Sign out</a>
