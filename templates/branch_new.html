@@ -1,0 +1,12 @@
+{%extends "base.html"%}
+{%block body%}
+<h2>Create New Branch in Repository '{{repo.name}}'</h2>
+
+<form action="{%url views.branch_new%}" method="post">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Create Branch"></td></tr>
+</table>
+</form>
+
+{%endblock%}

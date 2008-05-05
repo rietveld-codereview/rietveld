@@ -1,0 +1,25 @@
+{%extends "base.html"%}
+{%block body%}
+<h2>Edit Issue: {{issue.subject}}</h2>
+
+<form action="{%url views.edit issue.key.id%}" method="post">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Update Issue"></td></tr>
+</table>
+</form>
+
+<p>
+<ul>
+<li>Owner: {{issue.owner}}
+<li>Created: {{issue.created|date:"Y/m/d H:i:s"}}
+<li>Modified: {{issue.modified|date:"Y/m/d H:i:s"}}
+</ul>
+
+<h2>Delete This Issue</h2>
+
+<form action="{%url views.delete issue.key.id%}" method="post">
+<input type="submit" value="Delete Issue"> There is no undo!
+</form>
+
+{%endblock%}

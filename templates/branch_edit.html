@@ -1,0 +1,20 @@
+{%extends "base.html"%}
+{%block body%}
+<h2>Edit Branch '{{branch.name}}' in Repository '{{branch.repo.name}}'</h2>
+
+<form action="{%url views.branch_new%}" method="post">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Update Branch"></td></tr>
+</table>
+</form>
+
+<hr>
+
+<form action="{%url views.branch_delete branch.key.id%}" method="post">
+<table>
+<tr><td><input type="submit" value="Delete This Branch"></td></tr>
+</table>
+</form>
+
+{%endblock%}

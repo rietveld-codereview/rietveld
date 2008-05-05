@@ -1,0 +1,173 @@
+{%extends "base.html"%}
+{%block body%}
+<h2>Issue: {{issue.subject}}</h2>
+
+{%if issue.draft_count%}
+<div class="error">You have <b>{{issue.draft_count}} draft</b>
+ comment{{issue.draft_count|pluralize}}.
+Drafts are not viewable by others; use
+<a class="novisit" href="{%url views.publish issue.key.id%}">
+Publish+Mail Comments</a> to let others view them.
+</div>
+{%endif%}
+
+<div style="float: left; padding-right: 1em">
+<div>
+  <i>Created:</i> {{issue.created|timesince}} ago by <b>{{issue.owner}}</b>;
+  <i>Last updated:</i> {{issue.modified|timesince}} ago
+</div>
+<div><i>SVN Base:</i> {{issue.base}}</div>
+<div><i>Reviewers:</i> {{issue.reviewers|join:", "}}</div>
+<div>
+  {%ifequal issue.owner user %}
+  <a class="novisit" href="{%url views.edit issue.key.id%}">Edit/Delete
+  Issue</a>
+  {%else%}
+  <font color="gray">Can't Edit/Delete</font>
+  {%endifequal%}
+  |
+  <a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
+  Comments</a>
+</div>
+</div>
+
+{%if issue.description%}
+<div style="float: left"><i>Description:</i>
+<pre style="background-color: #e5ecf9; margin-top: 0; padding: 3px; overflow: auto">
+{{issue.description|urlize}}</pre>
+</div>
+{%endif%}
+<div style="clear:both"></div>
+
+{%for patchset in patchsets%}
+<h3>
+<a id="ps-{{patchset.key.id}}-pointer"
+   href="javascript:M_toggleSection('ps-{{patchset.key.id}}')"
+   class="toggled-section">
+Patch Set {{forloop.counter}}:
+{%if patchset.message%}{{patchset.message}}{%endif%}</a></h3>
+{%if patchset.n_comments or patchset.n_drafts%}
+<div>
+<i>Total comments:</i> {{patchset.n_comments}}
+{%if patchset.n_drafts%}
+<span style="color:red">
+<b>+ {{patchset.n_drafts}} draft{{patchset.n_drafts|pluralize}}</b></span>
+</div>
+{%endif%}
+{%endif%}
+<div id="ps-{{patchset.key.id}}"
+     style="{%if forloop.last or patchset.n_drafts%}{%else%}display:none{%endif%}">
+{%if patchset.url%}
+<div>Downloaded from: <a href="{{patchset.url}}">{{patchset.url}}</a></div>
+{%endif%}
+<div>
+  <i>Created:</i> {{patchset.created|timesince}} ago
+  {%ifnotequal patchset.owner issue.owner%}
+  by <b>{{patchset.owner}}</b>{%endifnotequal%}
+</div>
+<div>
+  <a href="{%url views.download issue.key.id,patchset.key.id%}">Download raw patch set</a>
+</div>
+<table id="queues">
+<tr>
+  <th>Raw unified diffs</th>
+  <th colspan="2">Stats</th>
+  <th>Side-by-side diffs with inline comments</th>
+{%for patch in patchset.patches%}
+<tr>
+  <td>
+    <a class="noul"
+       href="{%url views.patch issue.key.id,patch.patchset.key.id,patch.key.id%}">
+    {{patch.filename}}</a>
+  </td>
+  <td>{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
+  <td>{{patch.num_lines}} line{{patch.num_lines|pluralize}}</td>
+  <td>
+  {%if patch.num_comments or patch.num_drafts%}<b>{%endif%}
+  <a class="noul" href="{%url views.diff issue.key.id,patch.patchset.key.id,patch.key.id%}">
+    {{patch.num_comments}} comment{{patch.num_comments|pluralize}}
+    {%if patch.num_drafts%}<span style="color:red">+
+    {{patch.num_drafts}} draft{{patch.num_drafts|pluralize}}</span>
+    {%endif%}
+  </a>
+  {%if patch.num_comments or patch.num_drafts%}</b>{%endif%}
+  </td>
+  <td>
+    {%for other in patchsets%}
+      {%ifnotequal other patchset%}
+        <a href="/{{issue.key.id}}/diff2/{{other.key.id}}:{{patchset.key.id}}/{{patch.key.id}}">delta from patch set {{forloop.counter}}</a>
+      {%endifnotequal%}
+    {%endfor%}
+  </td>
+</tr>
+{%endfor%}
+</table>
+</div>
+{%endfor%}
+
+{%ifequal user issue.owner%}
+<h3>
+<a id="add-pointer"
+   href="javascript:M_toggleSection('add')"
+   class="toggled-section">
+Add Another Patch Set</a>
+</h3>
+
+<form id="add" style="{%if not form.errors%}display:none{%endif%}"
+      action="{%url views.add issue.key.id%}" method="post"
+      enctype="multipart/form-data">
+<table>
+{{form}}
+<tr>
+  <td><input type="submit" value="Add Patch Set"></td>
+  <td>
+    You can also add a patch set to this issue using
+    <code>upload.py -i {{issue.key.id}}</code>
+  </td>
+</tr>
+</table>
+</form>
+{%endifequal%}
+
+{%if messages%}
+<h2>Messages</h2>
+
+<a href="javascript:M_showAllComments('cl', {{messages|length}})">
+Expand All Comments</a>
+|
+<a href="javascript:M_hideAllComments('cl', {{messages|length}})">
+Collapse All Comments</a>
+
+{%for message in messages%}
+<div class="comment_title"
+     onclick="M_switchChangelistComment({{forloop.counter0}})">
+  From:
+  {%ifequal message.sender user.email%}me
+  {%else%}{{message.sender}}{%endifequal%}
+  <span id="cl-preview-{{forloop.counter0}}" class="extra">
+    {{message.date|timesince}} ago
+  </span>
+</div>
+<div id="cl-comment-{{forloop.counter0}}" style="display: none;">
+  <div>Subject: {{message.subject}}</div>
+  <div>To: {{message.recipients|join:", "}}</div>
+  <div>Date: {{message.date|timesince}} ago</div>
+  <pre>{{message.text|urlize}}</pre>
+</div>
+{%endfor%}
+
+<div style="border-top: thin solid;"></div>
+
+<a href="javascript:M_showAllComments('cl', {{messages|length}})">
+Expand All Comments</a>
+|
+<a href="javascript:M_hideAllComments('cl', {{messages|length}})">
+Collapse All Comments</a>
+{%endif%}
+
+<script language="JavaScript" type="text/javascript"><!--
+document.onkeypress = function(evt) { return M_changelistKeyPress(evt); }
+// -->
+</script>
+
+{%endblock%}

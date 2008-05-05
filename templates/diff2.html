@@ -1,0 +1,177 @@
+{%extends "base.html"%}
+{%block body%}
+
+<script language="JavaScript" type="text/javascript"><!--
+function keyPressIntermediary(evt) {
+  return M_keyPress(evt);
+}
+document.onkeypress = keyPressIntermediary;
+{%if user%}
+logged_in = true;
+{%else%}
+logged_in = false;
+login_warned = false;
+{%endif%}
+// -->
+</script>
+
+<!-- Form used by in-line comment JS; XXX filled in by JS code -->
+<form id="dainlineform" style="display: none;"
+      action="{%url views.inline_draft%}" method="post">
+  <div class="comment-border" name="form-container">
+    <input type="hidden" name="snapshot" value="XXX">
+    <input type="hidden" name="lineno" value="XXX">
+    <input type="hidden" name="side" value="XXX">
+    <input type="hidden" name="issue" value="{{issue.key.id}}">
+    <input type="hidden" name="ps_left" value="{{ps_left.key.id}}">
+    <input type="hidden" name="patch_left" value="{{patch_left.key.id}}">
+    <input type="hidden" name="ps_right" value="{{ps_right.key.id}}">
+    <input type="hidden" name="patch_right" value="{{patch_right.key.id}}">
+    <textarea name="text" cols="60" rows="5"></textarea><br>
+    <input type="submit" name="save" value="Save"
+           onclick="return M_submitInlineComment(this.form);">
+    <input type="reset" name="cancel" value="Cancel"
+           onclick="M_removeTempInlineComment(this.form)">
+  </div>
+  <div class="comment-border" style="padding: 0pt;"></div>
+</form>
+<a id="resizer" style="display:none;cursor:pointer"><img src="/static/zippyplus.gif"></a>
+
+<h2>Delta Between Two Patch Sets: {{patch_right.filename}}</h2>
+
+<div>
+  <b>Issue:</b>
+  <a id="upCL" href="{%url views.show issue.key.id%}">{{issue.subject}}</a>
+  ('u')
+</div>
+<div>
+  <i>Created:</i> {{issue.created|timesince}} ago by <b>{{issue.owner}}</b>;
+  <i>Last updated:</i> {{issue.modified|timesince}} ago
+</div>
+<div><i>SVN Base:</i> {{issue.base}}</div>
+<div><i>Reviewers:</i> {{issue.reviewers|join:", "}}</div>
+<div><b>Left Patch Set: {%firstof ps_left.message%}</b></div>
+<div><a href="{%url views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}">View regular side-by-side diff</a></div>
+{%if ps_left.url%}
+<div><i>Downloaded from:</i> <a href="{{ps_left.url}}">{{ps_left.url}}</a></div>
+{%endif%}
+<div>
+  <i>Created:</i> {{ps_left.created|timesince}} ago
+  {%ifnotequal ps_left.owner issue.owner%}
+  by <b>{{ps_left.owner}}</b>{%endifnotequal%}
+</div>
+<div><b>Right Patch Set: {%firstof ps_right.message%}</b></div>
+<div><a href="{%url views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}">View regular side-by-side diff</a></div>
+{%if ps_right.url%}
+<div><i>Downloaded from:</i> <a href="{{ps_right.url}}">{{ps_right.url}}</a></div>
+{%endif%}
+<div>
+  <i>Created:</i> {{ps_right.created|timesince}} ago
+  {%ifnotequal ps_right.owner issue.owner%}
+  by <b>{{ps_right.owner}}</b>{%endifnotequal%}
+</div>
+
+<p>
+{%comment%}
+For some reason,
+{%url views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}
+doesn't work.  Go figure.  Bleah.  So use absolute URLs.
+{%endcomment%}
+{%if patch_right.prev%}
+<a id="prevFile" 
+   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.prev.key.id}}">
+&laquo; {{patch_right.prev.filename}}</a> ('k'){%else%}
+<font color="gray">&laquo; no previous file</font>{%endif%}
+|
+{%if patch_right.next%}
+<a id="nextFile"
+   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.next.key.id}}">
+{{patch_right.next.filename}} &raquo;</a> ('j'){%else%}
+<font color="gray">no next file &raquo;</font>{%endif%}
+|
+<a href="javascript:if (intraLineDiff) intraLineDiff.toggle()">
+Toggle Intra-line Diffs</a> ('i')
+|
+<a href="javascript:M_expandAllInlineComments()">Expand Comments</a> ('e')
+|
+<a href="javascript:M_collapseAllInlineComments()">Collapse Comments</a> ('c')
+|
+<a id="show-all-inline"
+   style="display:none"
+   href="javascript:M_showAllInlineComments()">Show Comments</a>
+<a id="hide-all-inline"
+   href="javascript:M_hideAllInlineComments()">Hide Comments</a> ('s')
+|
+<a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
+Comments</a>
+</p>
+
+<h3>Side by Side Diff</h3>
+
+<p><i>Use n/p to move between diff chunks;
+N/P to move between comments.
+{%if user%}
+Double-click a line to add a draft in-line comment.
+<br><span style="color:red">Draft comments are only viewable by you;</span>
+use <a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
+Comments</a> to let others view them.
+{%else%}
+Please <a class="novisit" href="{{sign_in}}">Sign in</a>
+to add in-line comments.
+{%endif%}
+</i></p>
+
+<div style="position:relative" id="table-top">
+
+<span id="hook-sel" style="display:none;"></span>
+
+<table border="0" cellpadding="0" cellspacing="0" id="thecode"
+       ondblclick="M_handleTableDblClick(event)">
+
+<tr><th>LEFT</th><th>RIGHT</th></tr>
+
+{%for row in rows%}{{row|safe}}{%endfor%}
+
+<tr><th>LEFT</th><th>RIGHT</th></tr>
+
+</table>
+
+</div>
+
+<p>
+{%if patch_right.prev%}
+<a id="prevFile"
+   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.prev.key.id}}">
+&laquo; {{patch_right.prev.filename}}</a> ('k'){%else%}
+<font color="gray">&laquo; no previous file</font>{%endif%}
+|
+{%if patch_right.next%}
+<a id="nextFile"
+   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.next.key.id}}">
+{{patch_right.next.filename}} &raquo;</a> ('j'){%else%}
+<font color="gray">no next file &raquo;</font>{%endif%}
+|
+<a href="javascript:if (intraLineDiff) intraLineDiff.toggle()">
+Toggle Intra-line Diffs</a> ('i')
+|
+<a href="javascript:M_expandAllInlineComments()">Expand Comments</a> ('e')
+|
+<a href="javascript:M_collapseAllInlineComments()">Collapse Comments</a> ('c')
+|
+<a href="javascript:M_toggleAllInlineComments()">
+Toggle Comments</a> ('s')
+|
+<a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
+Comments</a>
+</p>
+
+</script>
+<script language="JavaScript" type="text/javascript"><!--
+var old_snapshot = "new";
+var new_snapshot = "new";
+var intraLineDiff = new M_IntraLineDiff();
+var hookState = new M_HookState(window);
+hookState.updateHooks();
+// -->
+</script>
+{%endblock%}

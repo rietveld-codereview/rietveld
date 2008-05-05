@@ -1,0 +1,19 @@
+{%extends "base.html"%}
+{%block body%}
+<h2>Publish + Mail Draft Comments</h2>
+
+<form action="{%url views.publish%}" method="post">
+<table>
+{%ifnotequal request.user issue.owner%}
+<tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
+<tr><th>Reviewers:</th><td>{{issue.reviewers|join:", "}}</td></tr>
+{%endifnotequal%}
+{{form}}
+<tr>
+  <td><input type="submit" value="Publish All My Drafts"></td>
+  <td><i>The message will be included in the email sent (if any).</i></td>
+</tr>
+</table>
+</form>
+
+{%endblock%}

@@ -1,0 +1,12 @@
+{%extends "base.html"%}
+{%block body%}
+<h2>Create New Repository</h2>
+
+<form action="{%url views.repo_new%}" method="post">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Create Repository"></td></tr>
+</table>
+</form>
+
+{%endblock%}

@@ -1,0 +1,67 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+  "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+  <title>
+    {%if issue%}{{issue.subject}} -{%endif%}
+    {%if is_dev%}
+    DEV SERVER
+    {%else%}
+    Code Review
+    {%endif%}
+  </title>
+  <link type="text/css" rel="stylesheet" href="/static/styles.css">
+  <script type="text/javascript" src="/static/script.js"></script>
+</head>
+<body>
+<div align="right">
+{%if is_dev%}
+<div style="float:left; color:green; font-weight:bold">DEVELOPMENT SERVER</div>
+{%endif%}
+{%if user%}
+<b>{{user.nickname}}</b>
+{%if is_admin and is_dev%}
+| <a class="novisit" href="/_ah/admin">Admin</a>{%endif%}
+| <a target="_blank"
+     href="http://code.google.com/p/rietveld/wiki/CodeReviewHelp">Help</a>
+| <a class="novisit" href="{{sign_out}}">Sign out</a>
+{% else %}
+<a target="_blank" 
+   href="http://code.google.com/p/rietveld/wiki/CodeReviewHelp">Help</a>
+| <a class="novisit" href="{{sign_in}}">Sign in</a>
+{%endif%}
+</div>
+<hr />
+<div style="float:right"><font size="-2">({{counter}})</font></div>
+<div>
+{%if user%}
+<a class="novisit" href="{%url views.new%}">Create Issue</a>
+|
+<a class="novisit" href="{%url views.index%}">My Issues</a>
+|
+<a class="novisit" href="{%url views.all%}">Recent Issues</a>
+{%else%}
+<a class="novisit" href="{%url views.index%}">Recent Issues</a>
+{%endif%}
+|
+<a class="novisit" href="{%url views.repos%}">Repositories</a>
+{%if not user%}
+|
+<a class="novisit" href="{{sign_in}}">Sign in</a>
+with your <a href="https://www.google.com/accounts/NewAccount">Google
+Account</a> to create issues and add comments
+{%endif%}
+</div>
+<hr />
+
+<div>
+{%block body%}BODY GOES HERE{%endblock%}
+</div>
+
+<p />
+<a target="_blank" href="http://code.google.com/appengine/"><img border="0"
+ src="http://code.google.com/appengine/images/appengine-noborder-120x30.gif"
+ alt="Powered by Google App Engine" /></a>
+
+</body>
+</html>

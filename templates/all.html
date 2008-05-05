@@ -1,0 +1,34 @@
+{%extends "base.html"%}
+{%block body%}
+
+<table id="queues">
+
+<tr><td colspan="5"><h2>Recent Issues</h2></td></tr>
+
+<tr align="left">
+  <th>Id</th>
+  <th>Subject</th>
+  <th>Owner</th>
+  <th>Reviewers</th>
+  <th>Comments</th>
+  <th>Drafts (mine)</th>
+  <th>Last update</th>
+</tr>
+{%for issue in issues%}
+<tr {%if issue.num_drafts%}style="color:red"{%endif%}>
+  <td align="right"><div class="subject">{{issue.key.id}}</td>
+  <td><div class="subject">
+  <a class="noul" href="{%url views.show issue.key.id%}">{{issue.subject}}</a>
+  </div></td>
+  <td><div class="users">
+  {%ifequal issue.owner request.user%}me{%else%}{{issue.owner}}{%endifequal%}
+  </div></td>
+  <td><div class="users">{{issue.reviewers|join:", "}}</div></td>
+  <td align="center">{%firstof issue.num_comments%}</td>
+  <td align="center"><b>{%firstof issue.num_drafts%}</b></td>
+  <td><div class="date">{{issue.modified|timesince}}</div></td>
+</tr>
+{%endfor%}
+</table>
+
+{%endblock%}

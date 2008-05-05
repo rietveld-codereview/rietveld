@@ -1,0 +1,23 @@
+{%extends "base.html"%}
+{%block body%}
+
+{%if form.errors%}
+<h2>There Were Errors!</h2>
+{%else%}
+<h2>Create New Issue</h2>
+{%endif%}
+
+<form action="{%url views.new%}" method="post" enctype="multipart/form-data">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Create Issue"></td></tr>
+</table>
+</form>
+
+<h2>Upload Utility</h2>
+
+<p>Tired of uploading files through this form? 
+Download <a href="/static/upload.py">upload.py</a>, a simple utility
+that will invoke "svn diff" and upload the output for you.
+
+{%endblock%}
