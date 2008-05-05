@@ -473,6 +473,8 @@ def GuessBase():
         logging.info("Guessed CollabNet base = %s", base)
       elif netloc.endswith(".googlecode.com"):
         base = url + "/"
+        if base.startswith("https"):
+          base = "http" + base[5:]
         logging.info("Guessed Google Code base = %s", base)
       else:
         ErrorExit("Unrecognized svn project root: %s" % url)

@@ -842,6 +842,7 @@ Sincerely,
 """
 
 @issue_required
+@login_required
 def publish(request):
   """ /<issue>/publish - Publish draft comments and send mail."""
   issue = request.issue

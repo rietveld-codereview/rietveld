@@ -93,9 +93,11 @@ Toggle Intra-line Diffs</a> ('i')
    href="javascript:M_showAllInlineComments()">Show Comments</a>
 <a id="hide-all-inline"
    href="javascript:M_hideAllInlineComments()">Hide Comments</a> ('s')
+{%if user%}
 |
 <a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
 Comments</a>
+{%endif%}
 </p>
 
 <h3>Side by Side Diff</h3>
@@ -155,9 +157,11 @@ Toggle Intra-line Diffs</a> ('i')
 |
 <a href="javascript:M_toggleAllInlineComments()">
 Toggle Comments</a> ('s')
+{%if user%}
 |
 <a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
 Comments</a>
+{%endif%}
 </p>
 
 </script>
