@@ -20,15 +20,25 @@
 {%endif%}
 {%if user%}
 <b>{{user.nickname}}</b>
+|
+{%endif%}
 {%if is_admin and is_dev%}
-| <a class="novisit" href="/_ah/admin">Admin</a>{%endif%}
-| <a target="_blank"
-     href="http://code.google.com/p/rietveld/wiki/CodeReviewHelp">Help</a>
-| <a class="novisit" href="{{sign_out}}">Sign out</a>
-{% else %}
-<a target="_blank" 
+<a class="novisit" href="/_ah/admin">Admin</a>
+|
+{%endif%}
+<a target="_blank"
    href="http://code.google.com/p/rietveld/wiki/CodeReviewHelp">Help</a>
-| <a class="novisit" href="{{sign_in}}">Sign in</a>
+|
+<a target="_blank"
+   href="http://code.google.com/p/rietveld/issues/list">Report a problem</a>
+|
+<a target="_blank"
+   href="http://groups.google.com/group/codereview-discuss">Send feedback</a>
+|
+{%if user%}
+<a class="novisit" href="{{sign_out}}">Sign out</a>
+{% else %}
+<a class="novisit" href="{{sign_in}}">Sign in</a>
 {%endif%}
 </div>
 <hr />
