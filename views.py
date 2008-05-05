@@ -522,10 +522,17 @@ def show(request, form=AddForm()):
       for patch in patchset.patches:
         patchset.n_drafts += patch.num_drafts
       issue.draft_count += patchset.n_drafts
+  last_patchset = first_patch = None
+  if patchsets:
+    last_patchset = patchsets[-1]
+    if last_patchset.patches:
+      first_patch = last_patchset.patches[0]
   messages = list(issue.message_set.order('date'))
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
-                  'messages': messages, 'form': form})
+                  'messages': messages, 'form': form,
+                  'last_patchset': last_patchset,
+                  'first_patch': first_patch})
 
 
 @issue_owner_required
