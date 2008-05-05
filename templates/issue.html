@@ -34,7 +34,7 @@ Publish+Mail Comments</a> to let others view them.
 {%if issue.description%}
 <div style="float: left"><i>Description:</i>
 <pre style="background-color: #e5ecf9; margin-top: 0; padding: 3px; overflow: auto">
-{{issue.description|urlize}}</pre>
+{{issue.description|wordwrap:"80"|urlize}}</pre>
 </div>
 {%endif%}
 <div style="clear:both"></div>
@@ -152,7 +152,7 @@ Collapse All Comments</a>
   <div>Subject: {{message.subject}}</div>
   <div>To: {{message.recipients|join:", "}}</div>
   <div>Date: {{message.date|timesince}} ago</div>
-  <pre>{{message.text|urlize}}</pre>
+  <pre>{{message.text|wordwrap:"80"|urlize}}</pre>
 </div>
 {%endfor%}
 
