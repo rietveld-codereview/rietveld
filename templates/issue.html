@@ -32,10 +32,12 @@ Publish+Mail Comments</a> to let others view them.
   {%else%}
   <font color="gray">Can't Publish+Mail</font>
   {%endif%}
+  {%if last_patchset and first_patch%}
   |
   <a class="novisit"
      href="{%url views.diff issue.key.id,last_patchset.key.id,first_patch.key.id%}">
   <b>Start Review</b></a>
+  {%endif%}
 </div>
 </div>
 
