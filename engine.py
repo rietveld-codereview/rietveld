@@ -131,7 +131,6 @@ def _MakeUrl(base, filename, rev):
     path = path[5:]  # Strip "/svn/"
     url = "%s://%s/svn-history/r%d/%s/%s" % (scheme, netloc, rev,
                                              path, filename)
-    logging.info("url = %s", url)
     return url
   # Default for viewvc-based URLs (svn.python.org)
   url = base
