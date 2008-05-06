@@ -17,6 +17,12 @@ serve:
 serve_remote:
 	$(DEV_APPSERVER) --address 0.0.0.0 .
 
+serve_email:
+	$(DEV_APPSERVER) --enable_sendmail .
+
+serve_remote_email:
+	$(DEV_APPSERVER) --enable_sendmail --address 0.0.0.0 .
+
 update:
 	$(APPCFG) update .
 

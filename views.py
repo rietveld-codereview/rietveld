@@ -54,6 +54,7 @@ from django.shortcuts import render_to_response
 # Local imports
 import models
 import engine
+import library
 import patching
 
 
@@ -932,10 +933,14 @@ def publish(request):
 
   if send_mail:
     url = request.build_absolute_uri('/%s' % issue.key().id())
+    addressees_nicknames = ", ".join(library.nickname(addressee, True)
+                                     for addressee in addressees)
+    my_nickname = library.nickname(request.user, True)
     addressees = ', '.join(addressees)
     description = (issue.description or '').replace('\r\n', '\n')
     home = request.build_absolute_uri('/')
-    body = PUBLISH_MAIL_TEMPLATE % (addressees, my_email, url, message,
+    body = PUBLISH_MAIL_TEMPLATE % (addressees_nicknames, my_nickname,
+                                    url, message,
                                     details, description, home)
     # XXX Add In-reply-to or References header?
     logging.warn('Mail: to=%s; cc=%s', addressees, my_email)
