@@ -186,14 +186,18 @@ class MiniPublishForm(forms.Form):
                             widget=forms.Textarea(attrs={'cols': 60}))
 
 
-# Counter displayed on every page showing how many requests the
-# current incarnation has handled.  (Not counting redirects.)
-# See templates/base.html.
-counter = 0
+class SettingsForm(forms.Form):
+
+  nickname = forms.CharField(max_length=30)
 
 
 ### Helper functions ###
 
+
+# Counter displayed (by respond()) below) on every page showing how
+# many requests the current incarnation has handled, not counting
+# redirects.  Rendered by templates/base.html.
+counter = 0
 
 def respond(request, template, params=None):
   """Helper to render a response, passing standard stuff to the response.
@@ -1120,4 +1124,27 @@ def branch_delete(request, branch_id):
 
 @login_required
 def settings(request):
-  return HttpResponse('Not Yet implemented')
+  account = models.Account.get_account_for_user(request.user)
+  if request.method != 'POST':
+    nickname = account.nickname
+    form = SettingsForm(initial={'nickname': nickname})
+    return respond(request, 'settings.html', {'form': form})
+  form = SettingsForm(request.POST)
+  if form.is_valid():
+    nickname = form.cleaned_data['nickname'].strip()
+    if not nickname:
+      form.errors['nickname'] = ['Your nickname cannot be empty.']
+    elif '@' in nickname:
+      form.errors['nickname'] = ['Your nickname cannot contain "@".']
+    elif ',' in nickname:
+      form.errors['nickname'] = ['Your nickname cannot contain ",".']
+    elif nickname != account.nickname:
+      accounts = models.Account.get_accounts_for_nickname(nickname)
+      if accounts:
+        form.errors['nickname'] = ['This nickname is already in use.']
+      else:
+        account.nickname = nickname
+        account.put()
+  if not form.is_valid():
+    return respond(request, 'settings.html', {'form': form})
+  return HttpResponseRedirect('/settings')

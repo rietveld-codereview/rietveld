@@ -21,12 +21,11 @@
 <div style="float:left; font-weight:bold"><i>Rietveld</i> Code Review Tool</div>
 {%endif%}
 {%if user%}
-<b>{{user.nickname}}</b>
+<b>{{user.email}} ({{user|nickname:"x"}})</b>
 |
-{%comment%}
+<span style="color:red">New! change your nickname with</span>
 <a class="novisit" href="{%url views.settings%}">Settings</a>
 |
-{%endcomment%}
 {%endif%}
 {%if is_dev%}
 <a class="novisit" target="_blank" href="/_ah/admin">Admin</a>

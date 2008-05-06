@@ -348,10 +348,12 @@ class Account(db.Model):
   user = db.UserProperty(required=True)
   email = db.EmailProperty(required=True)  # key == <email>
   nickname = db.StringProperty(required=True)
+  created = db.DateTimeProperty(auto_now_add=True)
+  modified = db.DateTimeProperty(auto_now=True)
 
   @classmethod
   def get_account_for_user(cls, user):
-    """Get the account object for a user, creating a default one if needed."""
+    """Get the Account for a user, creating a default one if needed."""
     email = user.email()
     assert email
     key = '<%s>' % email
@@ -368,7 +370,7 @@ class Account(db.Model):
 
   @classmethod
   def get_account_for_email(cls, email):
-    """Get the account object for an email address, or return None."""
+    """Get the Account for an email address, or return None."""
     assert email
     key = '<%s>' % email
     return cls.get_by_key_name(key)
@@ -386,15 +388,19 @@ class Account(db.Model):
     return nickname
 
   @classmethod
+  def get_accounts_for_nickname(cls, nickname):
+    """Get the list of Accounts that have this nickname."""
+    assert nickname
+    assert '@' not in nickname
+    return list(cls.gql('WHERE nickname = :1', nickname))
+
+  @classmethod
   def get_email_for_nickname(cls, nickname):
-    """Go the other way: turn a nickname into an email address.
+    """Turn a nickname into an email address.
 
     If the nickname is not unique or does not exist, this returns None.
     """
-    assert nickname
-    assert '@' not in nickname
-    query = cls.gql('WHERE nickname = :1', nickname)
-    results = query.fetch(2)
-    if len(results) != 1:
+    accounts = cls.get_accounts_for_nickname(nickname)
+    if len(accounts) != 1:
       return None
-    return results[0].email
+    return accounts[0].email

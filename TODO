@@ -2,6 +2,7 @@ Bugs
 ----
 
 Support for non-ASCII is terrible
+If a user never logs in, someone else can grab their nickname
 
 Issues
 ------
@@ -61,13 +62,10 @@ Need a more powerful way to specify the URL for finding a revision
 User Experience
 ---------------
 
-Let users pick their own nickname
 Make Edit/Delete Issue show the form inline instead of opening a new page?
-Help links instead of happy talk on the page
 Support more of the Mondrian functionality already in script.js, e.g. '?'
 Prettify UI (ask John Skidgel for help?)
 Fields "SVN Base" and "Base" have hard-to-guess names
-Hide email addresses from casual observers
 Better UI for adding branches?  (Low priority now we have upload.py)
 
 Software Engineering
