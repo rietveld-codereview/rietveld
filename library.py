@@ -15,11 +15,12 @@
 """Django template library for Rietveld."""
 
 from google.appengine.api import users
-from google.appengine.ext.webapp import template
+
+import django.template
 
 import models
 
-register = template.create_template_register()
+register = django.template.Library()
 
 @register.filter
 def nickname(email, arg=None):
