@@ -34,14 +34,6 @@ The license is Apache 2.0.  See the file COPYING.
 Running
 -------
 
-** Important: ** Before you start, you must check out the Django
-subversion HEAD revision (currently labeled as 0.97.pre) and create a
-symbolic link to its "django" directory in the rietveld directory.  If
-you don't do this, App Engine will attempt to use Django 0.96 which is
-provided by the App Engine standard library, but this will fail
-because many APIs changed between 0.96 and 0.97.  Use newer versions
-at your own risk.
-
 To run the app locally (e.g. for testing), download the Google App
 Engine SDK from http://code.google.com/appengine/downloads.html.  You
 can then run the server using
