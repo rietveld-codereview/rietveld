@@ -30,9 +30,9 @@ def nickname(email, arg=None):
   'me' is returned, unless the argument is non-empty.
   """
   if isinstance(email, users.User):
-    if email == users.get_current_user() and not arg:
-      return 'me'
     email = email.email()
+  if not arg and email == users.get_current_user().email():
+    return "me"
   try:
     return models.Account.get_nickname_for_email(email)
   except:
