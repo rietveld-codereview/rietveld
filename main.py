@@ -95,6 +95,10 @@ django.dispatch.dispatcher.disconnect(
     django.db._rollback_on_exception,
     django.core.signals.got_request_exception)
 
+# Add our own template library.
+from google.appengine.ext.webapp import template
+template.register_template_library('library')
+
 def real_main():
   """Main program."""
   # Create a Django application for WSGI.

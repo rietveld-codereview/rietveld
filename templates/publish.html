@@ -4,9 +4,9 @@
 
 <form action="{%url views.publish%}" method="post">
 <table>
-{%ifnotequal request.user issue.owner%}
+{%ifnotequal user issue.owner%}
 <tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
-<tr><th>Reviewers:</th><td>{{issue.reviewers|join:", "}}</td></tr>
+<tr><th>Reviewers:</th><td>{{issue.reviewers|nicknames}}</td></tr>
 {%endifnotequal%}
 {{form}}
 <tr>

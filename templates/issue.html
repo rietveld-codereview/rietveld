@@ -13,11 +13,12 @@ Publish+Mail Comments</a> to let others view them.
 
 <div style="float: left; padding-right: 1em">
 <div>
-  <i>Created:</i> {{issue.created|timesince}} ago by <b>{{issue.owner}}</b>;
+  <i>Created:</i> {{issue.created|timesince}} ago by
+  <b>{{issue.owner|nickname}}</b>;
   <i>Last updated:</i> {{issue.modified|timesince}} ago
 </div>
 <div><i>SVN Base:</i> {{issue.base}}</div>
-<div><i>Reviewers:</i> {{issue.reviewers|join:", "}}</div>
+<div><i>Reviewers:</i> {{issue.reviewers|nicknames}}</div>
 <div>
   {%ifequal issue.owner user %}
   <a class="novisit" href="{%url views.edit issue.key.id%}">Edit/Delete
@@ -73,7 +74,7 @@ Patch Set {{forloop.counter}}:
 <div>
   <i>Created:</i> {{patchset.created|timesince}} ago
   {%ifnotequal patchset.owner issue.owner%}
-  by <b>{{patchset.owner}}</b>{%endifnotequal%}
+  by <b>{{patchset.owner|nickname}}</b>{%endifnotequal%}
 </div>
 <div>
   <a href="{%url views.download issue.key.id,patchset.key.id%}">Download raw patch set</a>
@@ -151,16 +152,14 @@ Collapse All Comments</a>
 {%for message in messages%}
 <div class="comment_title"
      onclick="M_switchChangelistComment({{forloop.counter0}})">
-  From:
-  {%ifequal message.sender user.email%}me
-  {%else%}{{message.sender}}{%endifequal%}
+  From: {{message.sender|nickname}}
   <span id="cl-preview-{{forloop.counter0}}" class="extra">
     {{message.date|timesince}} ago
   </span>
 </div>
 <div id="cl-comment-{{forloop.counter0}}" style="display: none;">
   <div>Subject: {{message.subject}}</div>
-  <div>To: {{message.recipients|join:", "}}</div>
+  <div>To: {{message.recipients|nicknames}}</div>
   <div>Date: {{message.date|timesince}} ago</div>
   <pre>{{message.text|wordwrap:"80"|urlize}}</pre>
 </div>

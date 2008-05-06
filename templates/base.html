@@ -23,6 +23,10 @@
 {%if user%}
 <b>{{user.nickname}}</b>
 |
+{%comment%}
+<a class="novisit" href="{%url views.settings%}">Settings</a>
+|
+{%endcomment%}
 {%endif%}
 {%if is_dev%}
 <a class="novisit" target="_blank" href="/_ah/admin">Admin</a>

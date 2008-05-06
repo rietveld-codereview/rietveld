@@ -24,10 +24,8 @@
   <td><div class="subject">
   <a class="noul" href="{%url views.show issue.key.id%}">{{issue.subject}}</a>
   </div></td>
-  <td><div class="users">
-  {%ifequal issue.owner request.user%}me{%else%}{{issue.owner}}{%endifequal%}
-  </div></td>
-  <td><div class="users">{{issue.reviewers|join:", "}}</div></td>
+  <td><div class="users">{{issue.owner|nickname}}</div></td>
+  <td><div class="users">{{issue.reviewers|nicknames}}</div></td>
   <td align="center">{%firstof issue.num_comments%}</td>
   <td align="center"><b>{%firstof issue.num_drafts%}</b></td>
   <td><div class="date">{{issue.modified|timesince}}</div></td>
@@ -55,10 +53,8 @@
   <td><div class="subject">
   <a class="noul" href="{%url views.show issue.key.id%}">{{issue.subject}}</a>
   </div></td>
-  <td><div class="users">
-  {%ifequal issue.owner request.user%}me{%else%}{{issue.owner}}{%endifequal%}
-  </div></td>
-  <td><div class="users">{{issue.reviewers|join:", "}}</div></td>
+  <td><div class="users">{{issue.owner|nickname}}</div></td>
+  <td><div class="users">{{issue.reviewers|nicknames}}</div></td>
   <td align="center">{%firstof issue.num_comments%}</td>
   <td align="center"><b>{%firstof issue.num_drafts%}</b></td>
   <td><div class="date">{{issue.modified|timesince}}</div></td>

@@ -1114,3 +1114,10 @@ def branch_delete(request, branch_id):
     # repositories have no representation on screen.
     repo.delete()
   return HttpResponseRedirect('/repos')
+
+
+### User Profiles ###
+
+@login_required
+def settings(request):
+  return HttpResponse('Not Yet implemented')

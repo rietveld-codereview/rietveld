@@ -11,9 +11,9 @@
 
 <p>
 <ul>
-<li>Owner: {{issue.owner}}
+<li>Owner: {{issue.owner.email}} ({{issue.owner|nickname}})
 <li>Created: {{issue.created|date:"Y/m/d H:i:s"}}
-<li>Modified: {{issue.modified|date:"Y/m/d H:i:s"}}
+<li>Last updated: {{issue.modified|date:"Y/m/d H:i:s"}}
 </ul>
 
 <h2>Delete This Issue</h2>

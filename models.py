@@ -26,6 +26,9 @@ import engine
 import patching
 
 
+### Issues, PatchSets, Patches, Contents, Comments, Messages ###
+
+
 class Issue(db.Model):
   """The major top-level entity.
 
@@ -303,6 +306,9 @@ class Bucket(db.Model):
   text = db.TextProperty()
 
 
+### Repositories and Branches ###
+
+
 class Repository(db.Model):
   """A specific Subversion repository."""
 
@@ -323,3 +329,72 @@ class Branch(db.Model):
   name = db.StringProperty(required=True)
   url = db.URLProperty(required=True)
   owner = db.UserProperty()
+
+
+### Accounts ###
+
+
+class Account(db.Model):
+  """Maps a user or email address to a user-selected nickname.
+
+  Nicknames do not have to be unique.
+
+  The default nickname is generated from the email address by
+  stripping the first '@' sign and everything after it.  The email
+  should not be empty nor should it start with '@' (AssertionError
+  error is raised if either of these happens).
+  """
+
+  user = db.UserProperty(required=True)
+  email = db.EmailProperty(required=True)  # key == <email>
+  nickname = db.StringProperty(required=True)
+
+  @classmethod
+  def get_account_for_user(cls, user):
+    """Get the account object for a user, creating a default one if needed."""
+    email = user.email()
+    assert email
+    key = '<%s>' % email
+    nickname = user.nickname()
+    if '@' in nickname:
+      nickname = nickname.split('@', 1)[0]
+    assert nickname
+    return cls.get_or_insert(key, user=user, email=email, nickname=nickname)
+
+  @classmethod
+  def get_nickname_for_user(cls, user):
+    """Get the nickname for a user."""
+    return cls.get_account_for_user(user).nickname
+
+  @classmethod
+  def get_account_for_email(cls, email):
+    """Get the account object for an email address, or return None."""
+    assert email
+    key = '<%s>' % email
+    return cls.get_by_key_name(key)
+
+  @classmethod
+  def get_nickname_for_email(cls, email):
+    """Get the nickname for an email address, possibly a default."""
+    account = cls.get_account_for_email(email)
+    if account is not None and account.nickname:
+      return account.nickname
+    nickname = email
+    if '@' in nickname:
+      nickname = nickname.split('@', 1)[0]
+    assert nickname
+    return nickname
+
+  @classmethod
+  def get_email_for_nickname(cls, nickname):
+    """Go the other way: turn a nickname into an email address.
+
+    If the nickname is not unique or does not exist, this returns None.
+    """
+    assert nickname
+    assert '@' not in nickname
+    query = cls.gql('WHERE nickname = :1', nickname)
+    results = query.fetch(2)
+    if len(results) != 1:
+      return None
+    return results[0].email
