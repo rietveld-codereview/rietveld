@@ -373,7 +373,9 @@ def GetRpcServer(options):
 
   def GetUserCredentials():
     """Prompts the user for a username and password."""
-    email = raw_input("Email: ").strip()
+    email = options.email
+    if email is None:
+      email = raw_input("Email: ").strip()
     password = getpass.getpass("Password for %s: " % email)
     return (email, password)
 
