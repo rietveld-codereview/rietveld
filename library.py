@@ -31,8 +31,10 @@ def nickname(email, arg=None):
   """
   if isinstance(email, users.User):
     email = email.email()
-  if not arg and email == users.get_current_user().email():
-    return "me"
+  if not arg:
+    user = users.get_current_user()
+    if user is not None and email == user.email():
+      return "me"
   try:
     return models.Account.get_nickname_for_email(email)
   except:
