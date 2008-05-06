@@ -874,11 +874,12 @@ def publish(request):
     reviewers = _get_reviewers(form)
   if not form.is_valid():
     return respond(request, 'publish.html',  {'form': form, 'issue': issue})
+  tbd = []  # List of things to put() after all is said and done
   if request.user == issue.owner:
     subject = form.cleaned_data['subject']
     issue.subject = subject
     issue.reviewers = reviewers
-  issue.put()  # Always put, to update the last modified time
+  tbd.append(issue)  # To update the last modified time
   message = form.cleaned_data['message'].replace('\r\n', '\n')
   send_mail = form.cleaned_data['send_mail']
   comments = []
@@ -905,7 +906,7 @@ def publish(request):
         if pkey in patches:
           patch = patches[pkey]
           c.patch = patch
-      db.put(ps_comments)
+      tbd.append(ps_comments)
       ps_comments.sort(key=lambda c: (c.patch.filename, not c.left,
                                       c.lineno, c.date))
       comments += ps_comments
@@ -929,7 +930,7 @@ def publish(request):
                        recipients=everyone,
                        text=db.Text(text),
                        parent=issue)
-  msg.put()
+  tbd.append(msg)
 
   if send_mail:
     url = request.build_absolute_uri('/%s' % issue.key().id())
@@ -951,6 +952,8 @@ def publish(request):
                    cc=my_email,
                    reply_to=', '.join(everyone))
 
+  for obj in tbd:
+    db.put(obj)
   return HttpResponseRedirect('/%s' % issue.key().id())
 
 
