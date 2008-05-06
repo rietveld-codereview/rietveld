@@ -397,28 +397,30 @@ def _make_new(request, form):
   if base is None:
     return None
 
-  issue = models.Issue(subject=form.cleaned_data['subject'],
-                       description=form.cleaned_data['description'],
-                       base=base,
-                       reviewers=reviewers,
-                       owner=request.user)
-  issue.put()
+  def txn():
+    issue = models.Issue(subject=form.cleaned_data['subject'],
+                         description=form.cleaned_data['description'],
+                         base=base,
+                         reviewers=reviewers,
+                         owner=request.user)
+    issue.put()
 
-  patchset = models.PatchSet(issue=issue, data=data, url=url,
-                             base=base, owner=request.user, parent=issue)
-  patchset.put()
+    patchset = models.PatchSet(issue=issue, data=data, url=url,
+                               base=base, owner=request.user, parent=issue)
+    patchset.put()
 
-  patches = engine.ParsePatchSet(patchset)
-  if not patches:
-    patchset.delete()
-    issue.delete()
-    errkey = url and 'url' or 'data'
-    form.errors[errkey] = ['Patch set contains no recognizable patches']
-    return None
+    patches = engine.ParsePatchSet(patchset)
+    if not patches:
+      patchset.delete()
+      issue.delete()
+      errkey = url and 'url' or 'data'
+      form.errors[errkey] = ['Patch set contains no recognizable patches']
+      return None
 
-  db.put(patches)
+    db.put(patches)
+    return issue
 
-  return issue
+  return db.run_in_transaction(txn)
 
 
 def _get_data_url(form):
