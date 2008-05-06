@@ -10,14 +10,14 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
-# Unused in query history -- copied from input.
+# Used 128 times in query history.
 - kind: Branch
   properties:
   - name: repo
   - name: category
   - name: name
 
-# Unused in query history -- copied from input.
+# Used 185 times in query history.
 - kind: Comment
   properties:
   - name: left
@@ -25,20 +25,20 @@ indexes:
   - name: patch
   - name: date
 
-# Unused in query history -- copied from input.
+# Used 126 times in query history.
 - kind: Comment
   properties:
   - name: left
   - name: patch
   - name: date
 
-# Unused in query history -- copied from input.
+# Used 225 times in query history.
 - kind: Comment
   properties:
   - name: patch
   - name: date
 
-# Unused in query history -- copied from input.
+# Used 591 times in query history.
 - kind: Comment
   ancestor: yes
 
@@ -49,56 +49,56 @@ indexes:
   - name: author
   - name: draft
 
-# Unused in query history -- copied from input.
+# Used 5 times in query history.
 - kind: Content
   ancestor: yes
 
-# Used once in query history.
+# Used 73 times in query history.
 - kind: Issue
   properties:
   - name: modified
     direction: desc
 
-# Used once in query history.
+# Used 136 times in query history.
 - kind: Issue
   properties:
   - name: owner
   - name: modified
     direction: desc
 
-# Used once in query history.
+# Used 136 times in query history.
 - kind: Issue
   properties:
   - name: reviewers
   - name: modified
     direction: desc
 
-# Unused in query history -- copied from input.
+# Used 210 times in query history.
 - kind: Message
   properties:
   - name: issue
   - name: date
 
-# Unused in query history -- copied from input.
+# Used 5 times in query history.
 - kind: Message
   ancestor: yes
 
-# Unused in query history -- copied from input.
+# Used 638 times in query history.
 - kind: Patch
   properties:
   - name: patchset
   - name: filename
 
-# Unused in query history -- copied from input.
+# Used 5 times in query history.
 - kind: Patch
   ancestor: yes
 
-# Unused in query history -- copied from input.
+# Used 240 times in query history.
 - kind: PatchSet
   properties:
   - name: issue
   - name: created
 
-# Unused in query history -- copied from input.
+# Used 5 times in query history.
 - kind: PatchSet
   ancestor: yes
