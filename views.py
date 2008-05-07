@@ -376,6 +376,10 @@ def upload(request):
   return HttpResponse(msg, content_type='text/plain')
 
 
+class EmptyPatchSet(Exception):
+  """Exception used inside _make_new() to break out of the transaction."""
+
+
 def _make_new(request, form):
   """Helper for new().
 
@@ -411,16 +415,16 @@ def _make_new(request, form):
 
     patches = engine.ParsePatchSet(patchset)
     if not patches:
-      patchset.delete()
-      issue.delete()
-      errkey = url and 'url' or 'data'
-      form.errors[errkey] = ['Patch set contains no recognizable patches']
-      return None
-
+      raise EmptyPatchSet  # Abort the transaction
     db.put(patches)
     return issue
 
-  return db.run_in_transaction(txn)
+  try:
+    return db.run_in_transaction(txn)
+  except EmptyPatchSet:
+    errkey = url and 'url' or 'data'
+    form.errors[errkey] = ['Patch set contains no recognizable patches']
+    return None
 
 
 def _get_data_url(form):
