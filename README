@@ -49,8 +49,19 @@ says about this: "You can override this using the -a <hostname> flag
 when running it, but doing so is not recommended because the SDK has
 not been hardened for security and may contain vulnerabilities."
 
-To deploy your own instance of the app to Google App Engine, register
-your own application ID on the App Engine admin site, edit app.yaml to
-use this instead of 'codereview', and then upload using
+To deploy your own instance of the app to Google App Engine:
 
-  make update
+  1. Register your own application ID on the App Engine admin site.
+  2. Edit app.yaml to use this app ID instead of 'codereview'.
+  3. Change the SENDER variable defined in views.py to be one of your
+     app's admins.
+  4. Upload using
+
+    make update
+
+*** Don't forget steps 2 and 3!  If you forget step 2, you'll get a
+error message from "appcfg.py update" (called by "make update")
+complaining you don't have the right to administer this app.  If you
+forget step 3, everything will work fine, except the "Publish+Mail
+Comments" command will respond with a 500 server error, logging an
+InvalidSenderError exception.
