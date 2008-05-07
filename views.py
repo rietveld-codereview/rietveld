@@ -934,7 +934,7 @@ def publish(request):
       comments += ps_comments
 
   if comments:
-    logging.warn('Published %d comments', len(comments))
+    logging.warn('Publishing %d comments', len(comments))
   # Decide who should receive mail
   my_email = db.Email(request.user.email())
   addressees = [db.Email(issue.owner.email())] + issue.reviewers
@@ -965,6 +965,8 @@ def publish(request):
     body = PUBLISH_MAIL_TEMPLATE % (addressees_nicknames, my_nickname,
                                     url, message,
                                     details, description, home)
+    if isinstance(body, unicode):
+      body = body.encode('utf-8')
     # XXX Add In-reply-to or References header?
     logging.warn('Mail: to=%s; cc=%s', addressees, my_email)
     mail.send_mail(sender=SENDER,
