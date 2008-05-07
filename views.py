@@ -471,6 +471,7 @@ def add(request):
 
 def add_patchset_from_form(request, issue, form, message_key='message'):
   """Helper for add() and upload()."""
+  # TODO(guido): use a transaction like in _make_new(); may be share more code?
   if form.is_valid():
     data_url = _get_data_url(form)
   if not form.is_valid():

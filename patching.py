@@ -97,7 +97,7 @@ def ParseRevision(lines):
   for line in lines[:10]:
     if line.startswith('@'):
       break
-    m = re.match(r'---\s.*\(revision\s(\d+)\)\s*$', line)
+    m = re.match(r'---\s.*\(.*\s(\d+)\)\s*$', line)
     if m:
       return int(m.group(1))
   return None

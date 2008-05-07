@@ -624,4 +624,4 @@ def _ToText(lines):
   Returns:
     A db.Text instance.
   """
-  return db.Text(''.join(lines))
+  return db.Text(''.join(lines), encoding='utf-8')
