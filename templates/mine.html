@@ -1,10 +1,10 @@
 {%extends "base.html"%}
 {%block body%}
-<h2>Issues for {{user|nickname:"x"}}</h2>
+<h2>Issues for {{user|nickname}}</h2>
 
 <table id="queues">
 
-<tr><td colspan="5"><h3>Issues Created by Me</h3></td></tr>
+<tr><td colspan="5"><h3>Issues Created by {{user|nickname}}</h3></td></tr>
 
 {%if not my_issues%}
 <tr><td colspan="5"><font color="gray">(None)</td></tr>
@@ -33,7 +33,7 @@
 {%endfor%}
 {%endif%}
 
-<tr><td colspan="5"><h3>Issues Reviewable by Me</h3></td></tr>
+<tr><td colspan="5"><h3>Issues Reviewable by {{user|nickname}}</h3></td></tr>
 
 {%if not review_issues%}
 <tr><td colspan="5"><font color="gray">(None)</td></tr>

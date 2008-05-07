@@ -1,7 +1,6 @@
 Bugs
 ----
 
-Support for non-ASCII is terrible
 If a user never logs in, someone else can grab their nickname
 
 Issues
@@ -28,7 +27,7 @@ Automatically add Repository entries when a new project uploads stuff?
 Searching, Organizing
 ---------------------
 
-View all open issues by base, or by repository
+View all open issues by base, or by repository, or by user
 
 Commenting
 ----------

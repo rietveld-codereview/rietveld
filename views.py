@@ -306,12 +306,27 @@ def all(request):
 @login_required
 def mine(request):
   """/mine - Show a list of issues created by the current user."""
+  user = request.user
+  if 'user' in request.GET:
+    name = request.GET['user']
+    if '@' in name:
+      account = models.Account.get_account_for_email(name)
+      if account is not None:
+        user = account.user
+      else:
+        user = users.User(email=name)
+    elif name != 'me':
+      accounts = models.Account.get_accounts_for_nickname(name)
+      if accounts:
+        user = accounts[0].user
+      else:
+        return HttpResponseNotFound('No user found with nickname %r' % name)
   my_issues = list(db.GqlQuery(
       'SELECT * FROM Issue WHERE owner = :1 ORDER BY modified DESC',
-      request.user))
+      user))
   review_issues = list(db.GqlQuery(
       'SELECT * FROM Issue WHERE reviewers = :1 ORDER BY modified DESC',
-      request.user.email()))
+      user.email()))
   return respond(request, 'mine.html',
                  {'my_issues': my_issues, 'review_issues': review_issues})
 
