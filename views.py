@@ -965,20 +965,24 @@ def publish(request):
     body = PUBLISH_MAIL_TEMPLATE % (addressees_nicknames, my_nickname,
                                     url, message,
                                     details, description, home)
-    if isinstance(body, unicode):
-      body = body.encode('utf-8')
-    # XXX Add In-reply-to or References header?
     logging.warn('Mail: to=%s; cc=%s', addressees, my_email)
     mail.send_mail(sender=SENDER,
-                   to=addressees,
-                   subject='Re: ' + issue.subject,
-                   body=body,
-                   cc=my_email,
-                   reply_to=', '.join(everyone))
+                   to=_encode_safely(addressees),
+                   subject=_encode_safely('Re: ' + subject),
+                   body=_encode_safely(body),
+                   cc=_encode_safely(my_email),
+                   reply_to=_encode_safely(', '.join(everyone)))
 
   for obj in tbd:
     db.put(obj)
   return HttpResponseRedirect('/%s' % issue.key().id())
+
+
+def _encode_safely(s):
+  """Helper to turn a unicode string into 8-bit bytes."""
+  if isinstance(s, unicode):
+    s = s.encode('utf-8')
+  return s
 
 
 def _get_draft_details(request, comments):
