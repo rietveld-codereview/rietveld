@@ -225,8 +225,6 @@ def respond(request, template, params=None):
     if delta.days < 0:
       delta = -delta
     must_choose_nickname = delta.days == 0 and delta.seconds < 2
-    if must_choose_nickname:
-      logging.info("delta = %r", delta)
   params['request'] = request
   params['counter'] = counter
   params['user'] = request.user
