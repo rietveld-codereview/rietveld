@@ -218,6 +218,15 @@ def respond(request, template, params=None):
   counter += 1
   if params is None:
     params = {}
+  must_choose_nickname = False
+  if request.user is not None:
+    account = models.Account.get_account_for_user(request.user)
+    delta = account.created - account.modified
+    if delta.days < 0:
+      delta = -delta
+    must_choose_nickname = delta.days == 0 and delta.seconds < 2
+    if must_choose_nickname:
+      logging.info("delta = %r", delta)
   params['request'] = request
   params['counter'] = counter
   params['user'] = request.user
@@ -225,6 +234,7 @@ def respond(request, template, params=None):
   params['is_dev'] = IS_DEV
   params['sign_in'] = users.create_login_url(request.path)
   params['sign_out'] = users.create_logout_url(request.path)
+  params['must_choose_nickname'] = must_choose_nickname
   try:
     return render_to_response(template, params)
   except DeadlineExceededError:
@@ -1213,9 +1223,9 @@ def settings(request):
       form.errors['nickname'] = ['Your nickname cannot contain "@".']
     elif ',' in nickname:
       form.errors['nickname'] = ['Your nickname cannot contain ",".']
-    elif nickname != account.nickname:
+    else:
       accounts = models.Account.get_accounts_for_nickname(nickname)
-      if accounts:
+      if nickname != account.nickname and accounts:
         form.errors['nickname'] = ['This nickname is already in use.']
       else:
         account.nickname = nickname

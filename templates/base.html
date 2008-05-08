@@ -23,7 +23,8 @@
 {%if user%}
 <b>{{user.email}} ({{user|nickname:"x"}})</b>
 |
-<span style="color:red">New! change your nickname with</span>
+{%if must_choose_nickname%}
+<span style="color:red">Please choose your nickname with</span>{%endif%}
 <a class="novisit" href="{%url views.settings%}">Settings</a>
 |
 {%endif%}
