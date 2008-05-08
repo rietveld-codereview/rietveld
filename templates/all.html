@@ -3,7 +3,17 @@
 
 <table id="queues">
 
-<tr><td colspan="5"><h2>Recent Issues</h2></td></tr>
+<tr><td colspan="7"><h2>Recent Issues</h2></td></tr>
+
+<tr>
+  <td colspan="7" align="right">
+  {%if prev%}<a href="{{prev}}">&laquo; Previous {{limit}}</a>
+  {%else%}<span style="color:gray">&laquo; Previous {{limit}}</span>{%endif%}
+  |
+  {%if next%}<a href="{{next}}">Next {{limit}} &raquo;</a>
+  {%else%}<span style="color:gray">Next {{limit}} &raquo;</span>{%endif%}
+  </td>
+</tr>
 
 <tr align="left">
   <th>Id</th>
@@ -27,6 +37,17 @@
   <td><div class="date">{{issue.modified|timesince}}</div></td>
 </tr>
 {%endfor%}
+
+<tr>
+  <td colspan="7" align="right">
+  {%if prev%}<a href="{{prev}}">&laquo; Previous {{limit}}</a>
+  {%else%}<span style="color:gray">&laquo; Previous {{limit}}</span>{%endif%}
+  |
+  {%if next%}<a href="{{next}}">Next {{limit}} &raquo;</a>
+  {%else%}<span style="color:gray">Next {{limit}} &raquo;</span>{%endif%}
+  </td>
+</tr>
+
 </table>
 
 {%endblock%}

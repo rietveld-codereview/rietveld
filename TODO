@@ -42,6 +42,7 @@ Mail
 Add message-id for better gmail threading (if supported)
 Add links to draft comments to Publish page
 Use Django templates for mail bodies?
+Add nosy lists a la Roundup
 
 Diffs and Patches
 -----------------
@@ -50,7 +51,6 @@ Improve UI for selecting patch set deltas; handle missing files better
 Colorize unified diffs
 Record revision and show in UI; indicate action (add/edit/delete)
 Handle propsets?
-Handle non-ASCII text
 Handle binary files?!
 Option to change threshold for suppressing long blocks of equal lines;
    and/or a JS UI to fetch the missing lines somehow
@@ -70,5 +70,6 @@ Better UI for adding branches?  (Low priority now we have upload.py)
 Software Engineering
 --------------------
 
+Use http://code.google.com/p/google-app-engine-django
 Unittests
 Docstrings (module, class and file)

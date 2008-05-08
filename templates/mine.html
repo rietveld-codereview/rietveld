@@ -4,10 +4,10 @@
 
 <table id="queues">
 
-<tr><td colspan="5"><h3>Issues Created by {{user|nickname}}</h3></td></tr>
+<tr><td colspan="7"><h3>Issues Created by {{user|nickname}}</h3></td></tr>
 
 {%if not my_issues%}
-<tr><td colspan="5"><font color="gray">(None)</td></tr>
+<tr><td colspan="7"><font color="gray">(None)</td></tr>
 {%else%}
 <tr align="left">
   <th>Id</th>
@@ -33,10 +33,10 @@
 {%endfor%}
 {%endif%}
 
-<tr><td colspan="5"><h3>Issues Reviewable by {{user|nickname}}</h3></td></tr>
+<tr><td colspan="7"><h3>Issues Reviewable by {{user|nickname}}</h3></td></tr>
 
 {%if not review_issues%}
-<tr><td colspan="5"><font color="gray">(None)</td></tr>
+<tr><td colspan="7"><font color="gray">(None)</td></tr>
 {%else%}
 <tr align="left">
   <th>Id</th>

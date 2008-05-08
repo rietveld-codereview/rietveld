@@ -297,10 +297,47 @@ def index(request):
     return mine(request)
 
 
+DEFAULT_LIMIT = 30
+
 def all(request):
-  """/all - Show a list of up to 30 recent issues."""
-  issues = db.GqlQuery('SELECT * FROM Issue ORDER BY modified DESC LIMIT 30')
-  return respond(request, 'all.html', {'issues': issues})
+  """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
+  offset = request.GET.get('offset')
+  if offset:
+    try:
+      offset = int(offset)
+    except:
+      offset = 0
+    else:
+      offset = max(0, offset)
+  else:
+    offset = 0
+  limit = request.GET.get('limit')
+  if limit:
+    try:
+      limit = int(limit)
+    except:
+      limit = DEFAULT_LIMIT
+    else:
+      limit = max(1, min(limit, 100))
+  else:
+    limit = DEFAULT_LIMIT
+  query = db.GqlQuery('SELECT * FROM Issue ORDER BY modified DESC')
+  # Fetch one more to see if there should be a 'next' link
+  issues = query.fetch(limit+1, offset)
+  more = bool(issues[limit:])
+  if more:
+    del issues[limit:]
+  if more:
+    next = '/all?offset=%d&limit=%d' % (offset+limit, limit)
+  else:
+    next = ''
+  if offset > 0:
+    prev = '/all?offset=%d&limit=%d' % (max(0, offset-limit), limit)
+  else:
+    prev = ''
+  return respond(request, 'all.html',
+                 {'issues': issues, 'prev': prev, 'next': next,
+                  'limit': limit})
 
 
 @login_required
@@ -901,6 +938,8 @@ def publish(request):
     subject = form.cleaned_data['subject']
     issue.subject = subject
     issue.reviewers = reviewers
+  else:
+    subject = issue.subject
   tbd.append(issue)  # To update the last modified time
   message = form.cleaned_data['message'].replace('\r\n', '\n')
   send_mail = form.cleaned_data['send_mail']
