@@ -19,8 +19,7 @@ Engine, especially when using a newer version of Django than provided
 in the App Engine standard library.
 
 The site-specific code is all in other files: urls.py, models.py,
-views.py.  (We don't use settings.py; instead, we initialize the parts
-we need explicitly by calling settings.configure() below.)
+views.py, settings.py.
 """
 
 # Standard Python imports.
@@ -53,26 +52,8 @@ def BREAKPOINT():
 
 # Custom Django configuration.
 from django.conf import settings
-debug = os.environ['SERVER_SOFTWARE'].startswith('Dev')
-settings.configure(
-    APPEND_SLASH=False,
-    DEBUG=debug,
-    MIDDLEWARE_CLASSES = (
-        'django.middleware.common.CommonMiddleware',
-        'django.middleware.http.ConditionalGetMiddleware',
-        'middleware.AddUserToRequestMiddleware',
-    ),
-    ROOT_URLCONF='urls',
-    SETTINGS_MODULE='google.appengine',
-    TEMPLATE_DEBUG=debug,
-    TEMPLATE_CONTEXT_PROCESSORS=(),
-    TEMPLATE_DIRS = (
-        os.path.join(os.path.dirname(__file__), 'templates'),
-        ),
-    TEMPLATE_LOADERS = (
-        'django.template.loaders.filesystem.load_template_source',
-        ),
-    )
+settings._target = None
+os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
 
 # Import various parts of Django.
 import django.core.handlers.wsgi

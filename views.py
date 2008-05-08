@@ -243,6 +243,9 @@ def respond(request, template, params=None):
   except MemoryError:
     logging.exception('MemoryError')
     return HttpResponse('MemoryError')
+  except AssertionError:
+    logging.exception('AssertionError')
+    return HttpResponse('AssertionError')
 
 
 def _random_bytes(n):
