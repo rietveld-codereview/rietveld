@@ -536,3 +536,15 @@ span.visualtab {
   color: red;
   font-weight: bold;
 }
+
+/* Disabled text. */
+.disabled {
+  color: gray;
+}
+
+/* Generation counter. */
+.counter {
+  float: right;
+  font-size: 80%;
+  color: gray;
+}

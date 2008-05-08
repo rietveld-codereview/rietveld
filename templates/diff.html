@@ -70,13 +70,13 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 <a id="prevFile" 
    href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.prev.key.id}}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
-<font color="gray">&laquo; no previous file</font>{%endif%}
+<span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
    href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.next.key.id}}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
-<font color="gray">no next file &raquo;</font>{%endif%}
+<span class="disabled">no next file &raquo;</span>{%endif%}
 |
 <a href="{%url views.patch issue.key.id,patchset.key.id,patch.key.id%}">
 View unified diff</a>
@@ -137,13 +137,13 @@ to add in-line comments.
 <a id="prevFile"
    href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.prev.key.id}}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
-<font color="gray">&laquo; no previous file</font>{%endif%}
+<span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
    href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.next.key.id}}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
-<font color="gray">no next file &raquo;</font>{%endif%}
+<span class="disabled">no next file &raquo;</span>{%endif%}
 |
 <a href="{%url views.patch issue.key.id,patchset.key.id,patch.key.id%}">
 View unified diff</a>

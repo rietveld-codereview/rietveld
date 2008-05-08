@@ -24,14 +24,14 @@ Publish+Mail Comments</a> to let others view them.
   <a class="novisit" href="{%url views.edit issue.key.id%}">Edit/Delete
   Issue</a>
   {%else%}
-  <font color="gray">Can't Edit/Delete</font>
+  <span class="disabled">Can't Edit/Delete</span>
   {%endifequal%}
   |
   {%if user%}
   <a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
   Comments</a>
   {%else%}
-  <font color="gray">Can't Publish+Mail</font>
+  <span class="disabled">Can't Publish+Mail</span>
   {%endif%}
   {%if last_patchset and first_patch%}
   |
