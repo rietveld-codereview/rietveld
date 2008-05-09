@@ -313,7 +313,7 @@ def index(request):
     return mine(request)
 
 
-DEFAULT_LIMIT = 30
+DEFAULT_LIMIT = 10
 
 def all(request):
   """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
@@ -351,9 +351,13 @@ def all(request):
     prev = '/all?offset=%d&limit=%d' % (max(0, offset-limit), limit)
   else:
     prev = ''
+  newest = ''
+  if offset > limit:
+    newest = '/all?limit=%d' % limit
   return respond(request, 'all.html',
-                 {'issues': issues, 'prev': prev, 'next': next,
-                  'limit': limit})
+                 {'issues': issues, 'limit': limit,
+                  'newest': newest, 'prev': prev, 'next': next,
+                  'first': offset+1, 'last': offset+len(issues)})
 
 
 @login_required

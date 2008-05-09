@@ -479,6 +479,7 @@ table.history .sep {
 
 table#queues, table#clfiles {
   border-collapse: collapse;
+  width: 100%;
 }
 
 table#queues tr, table#clfiles tr {
