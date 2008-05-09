@@ -37,6 +37,10 @@ for key in [key for key in sys.modules if key.startswith('django')]:
 # Force sys.path to have our own directory first, so we can import from it.
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
+# Load and install the AppEngine helper.
+from appengine_django import InstallAppengineHelperForDjango
+InstallAppengineHelperForDjango()
+
 # AppEngine imports.
 from google.appengine.ext.webapp import util
 

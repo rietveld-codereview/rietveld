@@ -16,9 +16,13 @@
 
 import os
 
+os.environ.setdefault('SERVER_SOFTWARE', 'DevHelper/1.0')
+
 APPEND_SLASH = False
+DATABASE_ENGINE = 'appengine'
 DEBUG = os.environ['SERVER_SOFTWARE'].startswith('Dev')
 INSTALLED_APPS = (
+    'appengine_django',
     'rietveld',
 )
 MIDDLEWARE_CLASSES = (

@@ -22,6 +22,7 @@ from google.appengine.api import users
 from google.appengine.ext import db
 
 # Local imports
+from appengine_django.models import BaseModel
 import engine
 import patching
 
@@ -29,7 +30,7 @@ import patching
 ### Issues, PatchSets, Patches, Contents, Comments, Messages ###
 
 
-class Issue(db.Model):
+class Issue(BaseModel):
   """The major top-level entity.
 
   It has one or more PatchSets as its descendants.
@@ -87,7 +88,7 @@ class Issue(db.Model):
     return self._num_drafts
 
 
-class PatchSet(db.Model):
+class PatchSet(BaseModel):
   """A set of patchset uploaded together.
 
   This is a descendant of an Issue and has Patches as descendants.
@@ -102,7 +103,7 @@ class PatchSet(db.Model):
   modified = db.DateTimeProperty(auto_now=True)
 
 
-class Message(db.Model):
+class Message(BaseModel):
   """A copy of a message sent out in email.
 
   This is a descendant of an Issue.
@@ -116,7 +117,7 @@ class Message(db.Model):
   text = db.TextProperty()
 
 
-class Content(db.Model):
+class Content(BaseModel):
   """The content of a text file.
 
   This is a descendant of a Patch.
@@ -133,7 +134,7 @@ class Content(db.Model):
     return self.text.splitlines(True)
 
 
-class Patch(db.Model):
+class Patch(BaseModel):
   """A single patch, i.e. a set of changes to a single file.
 
   This is a descendant of a PatchSet.
@@ -270,7 +271,7 @@ class Patch(db.Model):
     return patched_content
 
 
-class Comment(db.Model):
+class Comment(BaseModel):
   """A Comment for a specific line of a specific file.
 
   This is a descendant of a Patch.
@@ -293,7 +294,7 @@ class Comment(db.Model):
     self.buckets = [Bucket(text=self.text)]
 
 
-class Bucket(db.Model):
+class Bucket(BaseModel):
   """A 'Bucket' of text.
 
   A comment may consist of multiple text buckets, some of which may be
@@ -309,7 +310,7 @@ class Bucket(db.Model):
 ### Repositories and Branches ###
 
 
-class Repository(db.Model):
+class Repository(BaseModel):
   """A specific Subversion repository."""
 
   name = db.StringProperty(required=True)
@@ -320,7 +321,7 @@ class Repository(db.Model):
     return self.name
 
 
-class Branch(db.Model):
+class Branch(BaseModel):
   """A trunk, branch, or atag in a specific Subversion repository."""
 
   repo = db.ReferenceProperty(Repository, required=True)
@@ -334,7 +335,7 @@ class Branch(db.Model):
 ### Accounts ###
 
 
-class Account(db.Model):
+class Account(BaseModel):
   """Maps a user or email address to a user-selected nickname.
 
   Nicknames do not have to be unique.
