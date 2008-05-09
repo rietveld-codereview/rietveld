@@ -19,13 +19,14 @@ import os
 APPEND_SLASH = False
 DEBUG = os.environ['SERVER_SOFTWARE'].startswith('Dev')
 INSTALLED_APPS = (
+    'rietveld',
 )
 MIDDLEWARE_CLASSES = (
     'django.middleware.common.CommonMiddleware',
     'django.middleware.http.ConditionalGetMiddleware',
-    'middleware.AddUserToRequestMiddleware',
+    'rietveld.middleware.AddUserToRequestMiddleware',
 )
-ROOT_URLCONF = 'urls'
+ROOT_URLCONF = 'rietveld.urls'
 SETTINGS_MODULE = 'settings'
 TEMPLATE_CONTEXT_PROCESSORS = ()
 TEMPLATE_DEBUG = DEBUG

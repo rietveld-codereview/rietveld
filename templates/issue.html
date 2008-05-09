@@ -6,7 +6,7 @@
 <div class="error">You have <b>{{issue.draft_count}} draft</b>
  comment{{issue.draft_count|pluralize}}.
 Drafts are not viewable by others; use
-<a class="novisit" href="{%url views.publish issue.key.id%}">
+<a class="novisit" href="{%url rietveld.views.publish issue.key.id%}">
 Publish+Mail Comments</a> to let others view them.
 </div>
 {%endif%}
@@ -21,14 +21,14 @@ Publish+Mail Comments</a> to let others view them.
 <div><i>Reviewers:</i> {{issue.reviewers|nicknames}}</div>
 <div>
   {%ifequal issue.owner user %}
-  <a class="novisit" href="{%url views.edit issue.key.id%}">Edit/Delete
+  <a class="novisit" href="{%url rietveld.views.edit issue.key.id%}">Edit/Delete
   Issue</a>
   {%else%}
   <span class="disabled">Can't Edit/Delete</span>
   {%endifequal%}
   |
   {%if user%}
-  <a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
+  <a class="novisit" href="{%url rietveld.views.publish issue.key.id%}">Publish+Mail
   Comments</a>
   {%else%}
   <span class="disabled">Can't Publish+Mail</span>
@@ -36,7 +36,7 @@ Publish+Mail Comments</a> to let others view them.
   {%if last_patchset and first_patch%}
   |
   <a class="novisit"
-     href="{%url views.diff issue.key.id,last_patchset.key.id,first_patch.key.id%}">
+     href="{%url rietveld.views.diff issue.key.id,last_patchset.key.id,first_patch.key.id%}">
   <b>Start Review</b></a>
   {%endif%}
 </div>
@@ -77,7 +77,7 @@ Patch Set {{forloop.counter}}:
   by <b>{{patchset.owner|nickname}}</b>{%endifnotequal%}
 </div>
 <div>
-  <a href="{%url views.download issue.key.id,patchset.key.id%}">Download raw patch set</a>
+  <a href="{%url rietveld.views.download issue.key.id,patchset.key.id%}">Download raw patch set</a>
 </div>
 <table id="queues">
 <tr>
@@ -88,14 +88,14 @@ Patch Set {{forloop.counter}}:
 <tr>
   <td>
     <a class="noul"
-       href="{%url views.patch issue.key.id,patch.patchset.key.id,patch.key.id%}">
+       href="{%url rietveld.views.patch issue.key.id,patch.patchset.key.id,patch.key.id%}">
     {{patch.filename}}</a>
   </td>
   <td>{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
   <td>{{patch.num_lines}} line{{patch.num_lines|pluralize}}</td>
   <td>
   {%if patch.num_comments or patch.num_drafts%}<b>{%endif%}
-  <a class="noul" href="{%url views.diff issue.key.id,patch.patchset.key.id,patch.key.id%}">
+  <a class="noul" href="{%url rietveld.views.diff issue.key.id,patch.patchset.key.id,patch.key.id%}">
     {{patch.num_comments}} comment{{patch.num_comments|pluralize}}
     {%if patch.num_drafts%}<span style="color:red">+
     {{patch.num_drafts}} draft{{patch.num_drafts|pluralize}}</span>
@@ -125,7 +125,7 @@ Add Another Patch Set</a>
 </h3>
 
 <form id="add" style="{%if not form.errors%}display:none{%endif%}"
-      action="{%url views.add issue.key.id%}" method="post"
+      action="{%url rietveld.views.add issue.key.id%}" method="post"
       enctype="multipart/form-data">
 <table>
 {{form}}

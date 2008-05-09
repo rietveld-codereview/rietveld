@@ -17,7 +17,7 @@ login_warned = false;
 
 <!-- Form used by in-line comment JS; XXX filled in by JS code -->
 <form id="dainlineform" style="display: none;"
-      action="{%url views.inline_draft%}" method="post">
+      action="{%url rietveld.views.inline_draft%}" method="post">
   <div class="comment-border" name="form-container">
     <input type="hidden" name="snapshot" value="XXX">
     <input type="hidden" name="lineno" value="XXX">
@@ -41,7 +41,7 @@ login_warned = false;
 
 <div>
   <b>Issue:</b>
-  <a id="upCL" href="{%url views.show issue.key.id%}">{{issue.subject}}</a>
+  <a id="upCL" href="{%url rietveld.views.show issue.key.id%}">{{issue.subject}}</a>
   ('u')
 </div>
 <div>
@@ -51,7 +51,7 @@ login_warned = false;
 <div><i>SVN Base:</i> {{issue.base}}</div>
 <div><i>Reviewers:</i> {{issue.reviewers|nicknames}}</div>
 <div><b>Left Patch Set: {%firstof ps_left.message%}</b></div>
-<div><a href="{%url views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}">View regular side-by-side diff</a></div>
+<div><a href="{%url rietveld.views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}">View regular side-by-side diff</a></div>
 {%if ps_left.url%}
 <div><i>Downloaded from:</i> <a href="{{ps_left.url}}">{{ps_left.url}}</a></div>
 {%endif%}
@@ -61,7 +61,7 @@ login_warned = false;
   by <b>{{ps_left.owner|nickname}}</b>{%endifnotequal%}
 </div>
 <div><b>Right Patch Set: {%firstof ps_right.message%}</b></div>
-<div><a href="{%url views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}">View regular side-by-side diff</a></div>
+<div><a href="{%url rietveld.views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}">View regular side-by-side diff</a></div>
 {%if ps_right.url%}
 <div><i>Downloaded from:</i> <a href="{{ps_right.url}}">{{ps_right.url}}</a></div>
 {%endif%}
@@ -74,7 +74,7 @@ login_warned = false;
 <p>
 {%comment%}
 For some reason,
-{%url views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}
+{%url rietveld.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}
 doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {%endcomment%}
 {%if patch_right.prev%}
@@ -102,7 +102,7 @@ Toggle Intra-line Diffs</a> ('i')
 <a id="hide-all-inline"
    href="javascript:M_hideAllInlineComments()">Hide Comments</a> ('s')
 |
-<a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
+<a class="novisit" href="{%url rietveld.views.publish issue.key.id%}">Publish+Mail
 Comments</a>
 </p>
 
@@ -113,7 +113,7 @@ N/P to move between comments.
 {%if user%}
 Double-click a line to add a draft in-line comment.
 <br><span style="color:red">Draft comments are only viewable by you;</span>
-use <a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
+use <a class="novisit" href="{%url rietveld.views.publish issue.key.id%}">Publish+Mail
 Comments</a> to let others view them.
 {%else%}
 Please <a class="novisit" href="{{sign_in}}">Sign in</a>
@@ -161,7 +161,7 @@ Toggle Intra-line Diffs</a> ('i')
 <a href="javascript:M_toggleAllInlineComments()">
 Toggle Comments</a> ('s')
 |
-<a class="novisit" href="{%url views.publish issue.key.id%}">Publish+Mail
+<a class="novisit" href="{%url rietveld.views.publish issue.key.id%}">Publish+Mail
 Comments</a>
 </p>
 

@@ -60,7 +60,6 @@ import django.core.handlers.wsgi
 import django.core.signals
 import django.db
 import django.dispatch.dispatcher
-import django.template
 
 def log_exception(*args, **kwds):
   """Django signal handler to log an exception."""
@@ -76,10 +75,6 @@ django.dispatch.dispatcher.connect(
 django.dispatch.dispatcher.disconnect(
     django.db._rollback_on_exception,
     django.core.signals.got_request_exception)
-
-# Add our own template library.
-if not django.template.libraries.get('library', None):
-  django.template.add_to_builtins('library')
 
 def real_main():
   """Main program."""

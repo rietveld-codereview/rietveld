@@ -50,12 +50,17 @@ from django import newforms as forms
 from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
+import django.template
 
 # Local imports
 import models
 import engine
 import library
 import patching
+
+# Add our own template library.
+if not django.template.libraries.get('rietveld.library', None):
+  django.template.add_to_builtins('rietveld.library')
 
 
 ### Constants ###

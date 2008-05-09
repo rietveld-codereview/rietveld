@@ -25,7 +25,7 @@
 |
 {%if must_choose_nickname%}
 <span style="color:red">Please choose your nickname with</span>{%endif%}
-<a class="novisit" href="{%url views.settings%}">Settings</a>
+<a class="novisit" href="{%url rietveld.views.settings%}">Settings</a>
 |
 {%endif%}
 {%if is_dev%}
@@ -51,16 +51,16 @@
 <div class="counter">({{counter}})</div>
 <div>
 {%if user%}
-<a class="novisit" href="{%url views.new%}">Create Issue</a>
+<a class="novisit" href="{%url rietveld.views.new%}">Create Issue</a>
 |
-<a class="novisit" href="{%url views.index%}">My Issues</a>
+<a class="novisit" href="{%url rietveld.views.index%}">My Issues</a>
 |
-<a class="novisit" href="{%url views.all%}">Recent Issues</a>
+<a class="novisit" href="{%url rietveld.views.all%}">Recent Issues</a>
 {%else%}
-<a class="novisit" href="{%url views.index%}">Recent Issues</a>
+<a class="novisit" href="{%url rietveld.views.index%}">Recent Issues</a>
 {%endif%}
 |
-<a class="novisit" href="{%url views.repos%}">Repositories</a>
+<a class="novisit" href="{%url rietveld.views.repos%}">Repositories</a>
 {%if not user%}
 |
 <a class="novisit" href="{{sign_in}}">Sign in</a>

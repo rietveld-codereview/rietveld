@@ -18,7 +18,7 @@
 from django.conf.urls.defaults import *
 
 urlpatterns = patterns(
-    'views',
+    'rietveld.views',
     (r'^$', 'index'),
     (r'^all$', 'all'),
     (r'^mine$', 'mine'),
