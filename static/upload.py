@@ -442,13 +442,13 @@ def GetContentType(filename):
   return mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
 
-def RunShell(command, args=()):
+def RunShell(command, args=(), silent_ok=False):
   logging.info("Running %s", command)
   stream = os.popen("%s %s" % (command, " ".join(args)), "r")
   data = stream.read()
   if stream.close():
     ErrorExit("Got error status from %s" % command)
-  if not data:
+  if not silent_ok and not data:
     ErrorExit("No output from %s" % command)
   return data
 
@@ -495,6 +495,7 @@ def RealMain(argv):
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
   base = GuessBase()
+  CheckForUnknownFiles()
   data = RunShell("svn diff", args)
   count = 0
   for line in data.splitlines():
@@ -522,6 +523,20 @@ def RealMain(argv):
   StatusUpdate(response_body)
   sys.exit(not response_body.startswith("Issue created."))
 
+def CheckForUnknownFiles():
+  status = RunShell("svn status --ignore-externals", silent_ok=True)
+  unknown_files = []
+  for line in status.split("\n"):
+    if line and line[0] == "?":
+      unknown_files.append(line)
+  if unknown_files:
+    print "The following files are not added to version control:"
+    for line in unknown_files:
+      print line
+    prompt = "Are you sure to continue?(y/N) "
+    answer = raw_input(prompt).strip()
+    if answer != "y":
+      ErrorExit("User aborted")
 
 def main():
   try:
