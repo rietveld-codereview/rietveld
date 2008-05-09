@@ -7,6 +7,10 @@
 
 <tr><td colspan="7"></td></tr>
 
+{%if not issues%}
+<tr><td colspan="7"><span class="disabled">(None)</td></tr>
+{%else%}
+
 <tr>
   <td colspan="7" align="right">
   {%if newest%}<a class="novisit" href="{{newest}}">&laquo; Newest</a>{%endif%}
@@ -49,6 +53,8 @@
   {%else%}<span style="color:gray">Older &raquo;</span>{%endif%}
   </td>
 </tr>
+
+{%endif%}
 
 </table>
 
