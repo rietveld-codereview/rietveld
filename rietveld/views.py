@@ -643,7 +643,7 @@ def edit(request):
     base = form.get_base()
 
   if not form.is_valid():
-    return respond(request, 'edit.html', {'patchset': patchset, 'form': form})
+    return respond(request, 'edit.html', {'issue': issue, 'form': form})
   cleaned_data = form.cleaned_data
 
   issue.subject = cleaned_data['subject']
