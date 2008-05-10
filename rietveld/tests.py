@@ -206,9 +206,10 @@ __test__ = {
 
     'views.index': r"""
 
-    >>> import os
     >>> from django.test.client import Client
     >>> c = Client()
+    >>> import __builtin__
+    >>> if '_' in __builtin__.__dict__: del __builtin__.__dict__['_']
     >>> r = c.get('/')
     >>> r.status_code
     200
