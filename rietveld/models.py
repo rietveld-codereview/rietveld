@@ -38,7 +38,7 @@ class Issue(BaseModel):
 
   subject = db.StringProperty(required=True)
   description = db.TextProperty()
-  base = db.URLProperty()
+  base = db.LinkProperty()
   owner = db.UserProperty(required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
@@ -97,7 +97,7 @@ class PatchSet(BaseModel):
   issue = db.ReferenceProperty(Issue)  # == parent
   message = db.StringProperty()
   data = db.BlobProperty()
-  url = db.URLProperty()
+  url = db.LinkProperty()
   owner = db.UserProperty(required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
@@ -289,6 +289,7 @@ class Comment(BaseModel):
   def complete(self, patch):
     """Set the shorttext and buckets attributes."""
     # TODO(guido): Turn these into caching proprties instead.
+    # TODO(guido): Why does this have a patch argument?  It's unused.
     # TODO(guido): Properly parse the text into quoted and unquoted buckets.
     self.shorttext = self.text.lstrip()[:50].rstrip()
     self.buckets = [Bucket(text=self.text)]
@@ -314,7 +315,7 @@ class Repository(BaseModel):
   """A specific Subversion repository."""
 
   name = db.StringProperty(required=True)
-  url = db.URLProperty(required=True)
+  url = db.LinkProperty(required=True)
   owner = db.UserProperty()
 
   def __str__(self):
@@ -328,7 +329,7 @@ class Branch(BaseModel):
   category = db.StringProperty(required=True,
                                choices=('*trunk*', 'branch', 'tag'))
   name = db.StringProperty(required=True)
-  url = db.URLProperty(required=True)
+  url = db.LinkProperty(required=True)
   owner = db.UserProperty()
 
 

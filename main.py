@@ -30,13 +30,6 @@ import logging
 # Log a message each time this module get loaded.
 logging.info('Loading %s', __name__)
 
-# Delete the preloaded copy of Django.
-for key in [key for key in sys.modules if key.startswith('django')]:
-  del sys.modules[key]
-
-# Force sys.path to have our own directory first, so we can import from it.
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-
 # Load and install the AppEngine helper.
 from appengine_django import InstallAppengineHelperForDjango
 InstallAppengineHelperForDjango()
