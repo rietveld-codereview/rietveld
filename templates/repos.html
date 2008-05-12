@@ -3,25 +3,25 @@
 <h2>Repositories and Branches</h2>
 
 {%if user%}
-<p>(<a href="{%url rietveld.views.repo_new%}">Add Repository</a>)</p>
+<p>(<a href="{%url codereview.views.repo_new%}">Add Repository</a>)</p>
 {%endif%}
 
 {%for br in branches%}
 {%ifchanged%}<h3>Repository: {{br.repo.name}}</h3>
 {%if user%}
-<p>(<a href="{%url rietveld.views.branch_new br.repo.key.id%}">add branch</a>)
+<p>(<a href="{%url codereview.views.branch_new br.repo.key.id%}">add branch</a>)
 {%endif%}
 {%endifchanged%}</p>
 {{br.category}} {{br.name}} {{br.url}}
 {%ifequal br.owner user%}
-&nbsp; (<a href="{%url rietveld.views.branch_edit br.key.id%}">edit</a>)
+&nbsp; (<a href="{%url codereview.views.branch_edit br.key.id%}">edit</a>)
 {%endifequal%}
 <br>
 {%endfor%}
 
 {%if is_admin%}
 <p>
-<a href="{%url rietveld.views.repo_init%}">Initialize Repositories</a> (admin only)
+<a href="{%url codereview.views.repo_init%}">Initialize Repositories</a> (admin only)
 </form>
 {%endif%}
 

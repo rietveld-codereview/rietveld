@@ -59,8 +59,9 @@ import library
 import patching
 
 # Add our own template library.
-if not django.template.libraries.get('rietveld.library', None):
-  django.template.add_to_builtins('rietveld.library')
+_library_name = __name__.rsplit('.', 1)[0] + '.library'
+if not django.template.libraries.get(_library_name, None):
+  django.template.add_to_builtins(_library_name)
 
 
 ### Constants ###
