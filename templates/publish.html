@@ -6,7 +6,6 @@
 <table>
 {%ifnotequal user issue.owner%}
 <tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
-<tr><th>Reviewers:</th><td>{{issue.reviewers|nicknames}}</td></tr>
 {%endifnotequal%}
 {{form}}
 <tr>
