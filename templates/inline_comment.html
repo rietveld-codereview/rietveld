@@ -33,7 +33,7 @@ class="{%if bucket.quoted%}comment-text-quoted{%else%}comment-text{%endif%}"
    href="javascript:M_restoreEditInlineComment({{forloop.counter0}}, {{lineno}}, '{{side}}')"><b>Undo cancel</b></a>
 <form id="comment-form-{{forloop.counter0}}-{{lineno}}-{{side}}"
       name="comment-form-{{forloop.counter0}}-{{lineno}}-{{side}}"
-      style="display:none" action="{%url rietveld.views.inline_draft%}" method = "POST">
+      style="display:none" action="{%url codereview.views.inline_draft%}" method = "POST">
 <div name="form-container">
 <input type="hidden" name="issue" value="{{issue.key.id}}">
 <input type="hidden" name="patchset" value="{{patchset.key.id}}">

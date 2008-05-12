@@ -59,8 +59,9 @@ import library
 import patching
 
 # Add our own template library.
-if not django.template.libraries.get('rietveld.library', None):
-  django.template.add_to_builtins('rietveld.library')
+_library_name = __name__.rsplit('.', 1)[0] + '.library'
+if not django.template.libraries.get(_library_name, None):
+  django.template.add_to_builtins(_library_name)
 
 
 ### Constants ###
@@ -186,6 +187,9 @@ class PublishForm(forms.Form):
 
 class MiniPublishForm(forms.Form):
 
+  reviewers = forms.CharField(required=False,
+                              max_length=1000,
+                              widget=forms.TextInput(attrs={'size': 60}))
   send_mail = forms.BooleanField()
   message = forms.CharField(required=False,
                             max_length=10000,
@@ -572,7 +576,7 @@ def _get_reviewers(form):
   if raw_reviewers:
     for reviewer in raw_reviewers.split(','):
       reviewer = reviewer.strip()
-      if reviewer:
+      if reviewer and reviewer not in reviewers:
         try:
           reviewer = db.Email(reviewer)
           if reviewer.count('@') != 1:
@@ -942,8 +946,12 @@ def publish(request):
   else:
     form_class = MiniPublishForm
   if request.method != 'POST':
+    reviewers = issue.reviewers[:]
+    if request.user != issue.owner and (request.user.email() 
+                                        not in issue.reviewers):
+      reviewers.append(request.user.email())
     form = form_class(initial={'subject': issue.subject,
-                               'reviewers': ', '.join(issue.reviewers),
+                               'reviewers': ', '.join(reviewers),
                                'send_mail': True,
                                })
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
@@ -960,6 +968,7 @@ def publish(request):
     issue.reviewers = reviewers
   else:
     subject = issue.subject
+    issue.reviewers = reviewers
   tbd.append(issue)  # To update the last modified time
   message = form.cleaned_data['message'].replace('\r\n', '\n')
   send_mail = form.cleaned_data['send_mail']
@@ -1002,7 +1011,7 @@ def publish(request):
     if len(addressees) > 1:  # Keep it if sending only to yourself
       addressees.remove(my_email)
   else:
-    everyone = addressees + [my_email]
+    everyone = addressees
   details = _get_draft_details(request, comments)
   text = ((message.strip() + '\n\n' + details.strip())).strip()
   msg = models.Message(issue=issue,

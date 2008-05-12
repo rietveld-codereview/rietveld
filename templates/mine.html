@@ -22,7 +22,7 @@
 <tr {%if issue.num_drafts%}style="color:red"{%endif%}>
   <td align="right"><div class="subject">{{issue.key.id}}</td>
   <td><div class="subject">
-  <a class="noul" href="{%url rietveld.views.show issue.key.id%}">{{issue.subject}}</a>
+  <a class="noul" href="{%url codereview.views.show issue.key.id%}">{{issue.subject}}</a>
   </div></td>
   <td><div class="users">{{issue.owner|nickname}}</div></td>
   <td><div class="users">{{issue.reviewers|nicknames}}</div></td>
@@ -51,7 +51,7 @@
 <tr {%if issue.num_drafts%}style="color:red"{%endif%}>
   <td align="right"><div class="subject">{{issue.key.id}}</td>
   <td><div class="subject">
-  <a class="noul" href="{%url rietveld.views.show issue.key.id%}">{{issue.subject}}</a>
+  <a class="noul" href="{%url codereview.views.show issue.key.id%}">{{issue.subject}}</a>
   </div></td>
   <td><div class="users">{{issue.owner|nickname}}</div></td>
   <td><div class="users">{{issue.reviewers|nicknames}}</div></td>

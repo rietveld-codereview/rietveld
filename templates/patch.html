@@ -13,7 +13,7 @@ document.onkeypress = keyPressIntermediary;
 
 <div>
   <b>Issue:</b>
-  <a id="upCL" href="{%url rietveld.views.show issue.key.id%}">{{issue.subject}}</a>
+  <a id="upCL" href="{%url codereview.views.show issue.key.id%}">{{issue.subject}}</a>
   ('u')
 </div>
 <div>
@@ -37,7 +37,7 @@ document.onkeypress = keyPressIntermediary;
 <p>
 {%comment%}
 For some reason,
-{%url rietveld.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}
+{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}
 doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {%endcomment%}
 {%if patch.prev%}
@@ -52,7 +52,7 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |
-<a href="{%url rietveld.views.diff issue.key.id,patchset.key.id,patch.key.id%}">
+<a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.key.id%}">
   View side-by-side diff with inline comments</a>
 </p>
 
