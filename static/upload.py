@@ -343,7 +343,8 @@ parser.add_option("--noisy", action="store_const", const=3,
                   dest="verbose", help="Print all logs.")
 parser.add_option("-s", "--server", action="store", dest="server",
                   default="codereview.appspot.com",
-                  metavar="SERVER", help="The server to upload to.")
+                  metavar="SERVER",
+                  help="The server to upload to. The format is host[:port].")
 parser.add_option("-e", "--email", action="store", dest="email",
                   metavar="EMAIL", default=None,
                   help="The username to use. Will prompt if omitted.")
