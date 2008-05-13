@@ -221,8 +221,10 @@ __test__ = {
     >>> r = c.get('/mine')
     >>> r.status_code
     302
-    >>> r._headers['location']
-    ('Location', 'http://testserver/_ah/login?continue=http%3A//localhost/mine')
+    >>> r._headers['location'][0]
+    'Location'
+    >>> r._headers['location'][1]
+    'http://testserver/_ah/login?continue=http%3A//localhost/mine'
     >>>
 
     """,
