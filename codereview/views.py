@@ -601,6 +601,8 @@ def show(request, form=AddForm()):
   issue.comment_count = 0
   for patchset in patchsets:
     patchset.patches = list(patchset.patch_set.order('filename'))
+    for patch in patchset.patches:
+      patch.patchset = patchset  # Prevent getting these over and over
     patchset.n_comments = 0
     for patch in patchset.patches:
       patchset.n_comments += patch.num_comments
