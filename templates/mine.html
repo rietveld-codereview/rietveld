@@ -62,6 +62,36 @@
 {%endfor%}
 {%endif%}
 
+
+<tr><td colspan="7"><h3>Issues Closed Recently</h3></td></tr>
+
+{%if not closed_issues%}
+<tr><td colspan="7"><span class="disabled">(None)</td></tr>
+{%else%}
+<tr align="left">
+  <th>Id</th>
+  <th>Subject</th>
+  <th>Owner</th>
+  <th>Reviewers</th>
+  <th>Comments</th>
+  <th>Drafts (mine)</th>
+  <th>Last updated</th>
+</tr>
+{%for issue in closed_issues%}
+<tr {%if issue.num_drafts%}style="color:red"{%endif%}>
+  <td align="right"><div class="subject">{{issue.key.id}}</td>
+  <td><div class="subject">
+  <a class="noul" href="{%url codereview.views.show issue.key.id%}">{{issue.subject}}</a>
+  </div></td>
+  <td><div class="users">{{issue.owner|nickname}}</div></td>
+  <td><div class="users">{{issue.reviewers|nicknames}}</div></td>
+  <td align="center">{%firstof issue.num_comments%}</td>
+  <td align="center"><b>{%firstof issue.num_drafts%}</b></td>
+  <td><div class="date">{{issue.modified|timesince}}</div></td>
+</tr>
+{%endfor%}
+{%endif%}
+
 </table>
 
 {%endblock%}

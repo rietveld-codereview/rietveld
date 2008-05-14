@@ -1,6 +1,6 @@
 {%extends "base.html"%}
 {%block body%}
-<h2>Issue: {{issue.subject}}</h2>
+<h2>Issue: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</h2>
 
 {%if issue.draft_count%}
 <div class="error">You have <b>{{issue.draft_count}} draft</b>
@@ -21,7 +21,7 @@ Publish+Mail Comments</a> to let others view them.
 <div><i>Reviewers:</i> {{issue.reviewers|nicknames}}</div>
 <div>
   {%ifequal issue.owner user %}
-  <a class="novisit" href="{%url codereview.views.edit issue.key.id%}">Edit/Delete
+  <a class="novisit" href="{%url codereview.views.edit issue.key.id%}">Edit
   Issue</a>
   {%else%}
   <span class="disabled">Can't Edit/Delete</span>

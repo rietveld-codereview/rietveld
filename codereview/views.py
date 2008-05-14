@@ -27,6 +27,7 @@ import cgi
 import random
 import logging
 import binascii
+import datetime
 
 # AppEngine imports
 from google.appengine.api import mail
@@ -155,7 +156,8 @@ class UploadForm(forms.Form):
 
 
 class EditForm(IssueBaseForm):
-  pass
+
+  closed = forms.BooleanField()
 
 
 class RepoForm(djangoforms.ModelForm):
@@ -341,7 +343,8 @@ def all(request):
       limit = max(1, min(limit, 100))
   else:
     limit = DEFAULT_LIMIT
-  query = db.GqlQuery('SELECT * FROM Issue ORDER BY modified DESC')
+  query = db.GqlQuery('SELECT * FROM Issue '
+                      'WHERE closed = FALSE ORDER BY modified DESC')
   # Fetch one more to see if there should be a 'next' link
   issues = query.fetch(limit+1, offset)
   more = bool(issues[limit:])
@@ -358,6 +361,7 @@ def all(request):
   newest = ''
   if offset > limit:
     newest = '/all?limit=%d' % limit
+ 
   return respond(request, 'all.html',
                  {'issues': issues, 'limit': limit,
                   'newest': newest, 'prev': prev, 'next': next,
@@ -383,13 +387,22 @@ def mine(request):
       else:
         return HttpResponseNotFound('No user found with nickname %r' % name)
   my_issues = list(db.GqlQuery(
-      'SELECT * FROM Issue WHERE owner = :1 ORDER BY modified DESC',
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC',
       user))
   review_issues = list(db.GqlQuery(
-      'SELECT * FROM Issue WHERE reviewers = :1 ORDER BY modified DESC',
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
       user.email()))
+  closed_issues = list(db.GqlQuery(
+      'SELECT * FROM Issue '
+      'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
+      'ORDER BY modified DESC',
+      datetime.datetime.now() - datetime.timedelta(days=7), user))
   return respond(request, 'mine.html',
-                 {'my_issues': my_issues, 'review_issues': review_issues})
+                 {'my_issues': my_issues,
+                  'review_issues': review_issues,
+                  'closed_issues': closed_issues})
 
 
 @login_required
@@ -635,7 +648,8 @@ def edit(request):
     form = EditForm(initial={'subject': issue.subject,
                              'description': issue.description,
                              'base': base,
-                             'reviewers': ', '.join(issue.reviewers)})
+                             'reviewers': ', '.join(issue.reviewers),
+                             'closed': issue.closed})
     form.set_branch_choices(base)
     return respond(request, 'edit.html', {'issue': issue, 'form': form})
 
@@ -654,6 +668,7 @@ def edit(request):
 
   issue.subject = cleaned_data['subject']
   issue.description = cleaned_data['description']
+  issue.closed = cleaned_data['closed']
   base_changed = (issue.base != base)
   issue.base = base
   issue.reviewers = reviewers

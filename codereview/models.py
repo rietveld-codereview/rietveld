@@ -67,6 +67,7 @@ class Issue(db.Model):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   reviewers = db.ListProperty(db.Email)
+  closed = db.BooleanProperty(default=False)
 
   _num_comments = None
 
