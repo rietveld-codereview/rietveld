@@ -26,6 +26,31 @@ import engine
 import patching
 
 
+### GQL query cache ###
+
+
+_query_cache = {}
+
+def gql(cls, clause, *args, **kwds):
+  """Return a query object, from the cache if possible.
+
+  Args:
+    cls: a db.Model subclass.
+    clause: a query clause, e.g. 'WHERE draft = TRUE'.
+    *args, **kwds: positional and keyword arguments to be bound to the query.
+
+  Returns:
+    A db.GqlQuery instance corresponding to the query with *args and
+    **kwds bound to the query.
+  """
+  query_string = 'SELECT * FROM %s %s' % (cls.kind(), clause)
+  query = _query_cache.get(query_string)
+  if query is None:
+    _query_cache[query_string] = query = db.GqlQuery(query_string)
+  query.bind(*args, **kwds)
+  return query
+
+
 ### Issues, PatchSets, Patches, Contents, Comments, Messages ###
 
 
@@ -52,11 +77,11 @@ class Issue(db.Model):
     The value is expensive to compute, so it is cached.
     """
     if self._num_comments is None:
-##       self._num_comments = Comment.gql(
+##       self._num_comments = gql(Comment,
 ##           'WHERE ANCESTOR IS :1 AND draft = FALSE',
 ##           self).count()
       # XXX Somehow the index broke, do without it
-      query = Comment.gql('WHERE ANCESTOR IS :1', self)
+      query = gql(Comment, 'WHERE ANCESTOR IS :1', self)
       self._num_comments = len([x for x in query if not x.draft])
       # XXX End
     return self._num_comments
@@ -74,13 +99,12 @@ class Issue(db.Model):
       if user is None:
         self._num_drafts = 0
       else:
-##         # XXX Somehow query.count() doesn't work here, so use len(list(query)).
-##         query = Comment.gql(
+##         query = gql(Comment,
 ##             'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
 ##             self, user)
-##         self._num_drafts = len(list(query))
+##         self._num_drafts = query.count()
         # XXX Somehow the index broke, do without it
-        query = Comment.gql('WHERE ANCESTOR IS :1', self)
+        query = gql(Comment, 'WHERE ANCESTOR IS :1', self)
         self._num_drafts = len([x for x in query
                                 if x.author == user and x.draft])
         # XXX End
@@ -178,7 +202,11 @@ class Patch(db.Model):
     The value is cached.
     """
     if self._num_chunks is None:
-      self._num_chunks = sum(line.startswith('@@') for line in self.lines)
+      num = 0
+      for line in self.lines:
+        if line.startswith('@@'):
+          num += 1
+      self._num_chunks = num
     return self._num_chunks
 
   _num_comments = None
@@ -190,8 +218,9 @@ class Patch(db.Model):
     The value is cached.
     """
     if self._num_comments is None:
-      self._num_comments = Comment.gql('WHERE patch = :1 AND draft = FALSE',
-                                       self).count()
+      self._num_comments = gql(Comment,
+                               'WHERE patch = :1 AND draft = FALSE',
+                               self).count()
     return self._num_comments
 
   _num_drafts = None
@@ -207,11 +236,10 @@ class Patch(db.Model):
       if user is None:
         self._num_drafts = 0
       else:
-        # XXX Somehow query.count() doesn't work here, so use len(list(query)).
-        query = Comment.gql(
-            'WHERE patch = :1 AND draft = TRUE AND author = :2',
-            self, user)
-        self._num_drafts = len(list(query))
+        query = gql(Comment,
+                    'WHERE patch = :1 AND draft = TRUE AND author = :2',
+                    self, user)
+        self._num_drafts = query.count()
     return self._num_drafts
 
   def get_content(self):
@@ -392,7 +420,7 @@ class Account(db.Model):
     """Get the list of Accounts that have this nickname."""
     assert nickname
     assert '@' not in nickname
-    return list(cls.gql('WHERE nickname = :1', nickname))
+    return list(gql(cls, 'WHERE nickname = :1', nickname))
 
   @classmethod
   def get_email_for_nickname(cls, nickname):
