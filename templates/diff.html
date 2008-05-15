@@ -40,6 +40,7 @@ login_warned = false;
 <div>
   <b>Issue:</b>
   <a id="upCL" href="{%url codereview.views.show issue.key.id%}">{{issue.subject}}</a>
+  {%if issue.closed %} (Closed) {%endif%}
   ('u')
 </div>
 <div>
