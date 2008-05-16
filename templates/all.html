@@ -11,12 +11,15 @@
   <td colspan="7" align="right">
   {%if newest%}<a class="novisit" href="{{newest}}">&laquo; Newest</a>{%endif%}
   {%if prev%}<a class="novisit" href="{{prev}}">&lsaquo; Newer</a>{%endif%}
-  <b>{{first}} - {{last}}</b>
+  <b>{{first}}{%if last%} - {{last}}{%endif%}</b>
   {%if next%}<a class="novisit" href="{{next}}">Older &rsaquo;</a>
   {%else%}<span style="color:gray">Older &raquo;</span>{%endif%}
   </td>
 </tr>
 
+{%if not issues%}
+<tr><td colspan="7"><span class="disabled">(None)</td></tr>
+{%else%}
 <tr align="left">
   <th>Id</th>
   <th>Subject</th>
@@ -44,11 +47,12 @@
   <td colspan="7" align="right">
   {%if newest%}<a class="novisit" href="{{newest}}">&laquo; Newest</a>{%endif%}
   {%if prev%}<a class="novisit" href="{{prev}}">&lsaquo; Newer</a>{%endif%}
-  <b>{{first}} - {{last}}</b>
+  <b>{{first}}{%if last%} - {{last}}{%endif%}</b>
   {%if next%}<a class="novisit" href="{{next}}">Older &rsaquo;</a>
   {%else%}<span style="color:gray">Older &raquo;</span>{%endif%}
   </td>
 </tr>
+{%endif%}
 
 </table>
 

@@ -365,7 +365,8 @@ def all(request):
   return respond(request, 'all.html',
                  {'issues': issues, 'limit': limit,
                   'newest': newest, 'prev': prev, 'next': next,
-                  'first': offset+1, 'last': offset+len(issues)})
+                  'first': offset+1,
+                  'last': len(issues) > 1 and offset+len(issues) or None})
 
 
 @login_required
@@ -1108,6 +1109,9 @@ def _get_draft_details(request, comments):
   if modified_patches:
     db.put(modified_patches)
   return '\n'.join(output)
+
+
+### Repositories and Branches ###
 
 
 def repos(request):
