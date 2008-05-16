@@ -6,7 +6,6 @@ If a user never logs in, someone else can grab their nickname
 Issues
 ------
 
-Close issues
 Star issues (per user)
 Archive issues (that's per user rather than per issue)
 Possibly deprecate the upload form (and repositories) and do it all
@@ -34,15 +33,13 @@ Commenting
 
 Add stars
 Add non-inline comments per file, per patchset, per issue
-Support inline comments in patch (unified diff) view?
+Support inline comments in patch (unified diff) view
 
 Mail
 ----
 
-Add message-id for better gmail threading (if supported)
-Add links to draft comments to Publish page
+Show links to draft comments on Publish page
 Use Django templates for mail bodies?
-Add nosy lists a la Roundup
 
 Diffs and Patches
 -----------------
@@ -57,11 +54,12 @@ Option to change threshold for suppressing long blocks of equal lines;
 Add line length option
 Support more diff formats (e.g. bzr; Thomas Wouters is working on this)
 Need a more powerful way to specify the URL for finding a revision
+Need to allow upload.py to upload the diff *and* the file
 
 User Experience
 ---------------
 
-Make Edit/Delete Issue show the form inline instead of opening a new page?
+Make Edit Issue show the form inline instead of opening a new page?
 Support more of the Mondrian functionality already in script.js, e.g. '?'
 Prettify UI (ask John Skidgel for help?)
 Fields "SVN Base" and "Base" have hard-to-guess names
@@ -70,6 +68,5 @@ Better UI for adding branches?  (Low priority now we have upload.py)
 Software Engineering
 --------------------
 
-Use http://code.google.com/p/google-app-engine-django
 Unittests
 Docstrings (module, class and file)

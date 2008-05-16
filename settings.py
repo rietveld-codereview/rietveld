@@ -27,7 +27,6 @@ MIDDLEWARE_CLASSES = (
     'codereview.middleware.AddUserToRequestMiddleware',
 )
 ROOT_URLCONF = 'codereview.urls'
-SETTINGS_MODULE = 'settings'
 TEMPLATE_CONTEXT_PROCESSORS = ()
 TEMPLATE_DEBUG = DEBUG
 TEMPLATE_DIRS = (
