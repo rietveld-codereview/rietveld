@@ -450,14 +450,14 @@ table.history div.triangle-open {
   padding-left: 15px;
   width: 11px;
   height: 11px;
-  background: url('/static/softopentriangle.gif') no-repeat scroll center;
+/*background: url('/static/softopentriangle.gif') no-repeat scroll center;*/
 }
 
 table.history div.triangle-closed {
   padding-left: 15px;
   width: 11px;
   height: 11px;
-  background: url('/static/softclosedtriangle.gif') no-repeat scroll center;
+/*background: url('/static/softclosedtriangle.gif') no-repeat scroll center;*/
 }
 
 /* Make the diff background colors slightly lighter for the table.*/
