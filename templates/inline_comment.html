@@ -6,7 +6,7 @@
 {{c.date|date:"Y/m/d H:i:s"}}
 <span id="inline-preview-{{forloop.counter0}}-{{lineno}}-{{side}}" 
   class="extra" name="inline-preview"
-  {%if c.draft%}style="visibility: hidden"{%endif%}>{{c.shorttext|safe}}</span>
+  {%if c.draft%}style="visibility: hidden"{%endif%}>{{c.shorttext}}</span>
 </div>
 <div id="inline-comment-{{forloop.counter0}}-{{lineno}}-{{side}}"
      class="inline-comment"
@@ -21,7 +21,7 @@
 id="comment-text-{{forloop.parentloop.counter0}}-{{lineno}}-{{side}}-{{forloop.counter0}}"
 class="{%if bucket.quoted%}comment-text-quoted{%else%}comment-text{%endif%}"
 {%if bucket.quoted%}style="display: none"{%endif%}
->{{bucket.text|safe|wordwrap:"80"|escape|urlize}}</div>
+>{{bucket.text|wordwrap:"80"|escape|urlize}}</div>
 {%endfor%}
 {%if c.draft%}
 <a name="comment-reply"
@@ -42,9 +42,9 @@ class="{%if bucket.quoted%}comment-text-quoted{%else%}comment-text{%endif%}"
 <input type="hidden" name="side" value="{{side}}">
 <input type="hidden" name="file" value="{{file.depot_path|escape}}">
 <input type="hidden" name="lineno" value="{{lineno}}">
-<input type="hidden" name="oldtext" value="{{c.text|escape}}">
+<input type="hidden" name="oldtext" value="{{c.text}}">
 {%if c.message_id%}<input type="hidden" name="message_id" value="{{c.message_id}}">{%endif%}
-<textarea name="text" cols="60" rows="5">{{c.text|escape}}</textarea><br>
+<textarea name="text" cols="60" rows="5">{{c.text}}</textarea><br>
 <input type="submit" name="save" value="Save" onclick="return M_submitInlineComment(this.form, {{forloop.counter0}}, {{lineno}}, '{{side}}')">
 <input type="reset" name="cancel" value="Cancel" onclick="M_resetAndHideInlineComment(this.form, {{forloop.counter0}}, {{lineno}}, '{{side}}')">
 <input type="submit" name="discard" value="Discard" onclick="return M_removeInlineComment(this.form, {{forloop.counter0}}, {{lineno}}, '{{side}}')">
