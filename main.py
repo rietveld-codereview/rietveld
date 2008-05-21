@@ -91,12 +91,16 @@ def profile_main():
   stream = StringIO.StringIO()
   stats = pstats.Stats(prof, stream=stream)
   # stats.strip_dirs()  # Don't; too many modules are named __init__.py.
-  stats.sort_stats('time')  # Or 'cumulative'
-  stats.print_stats(80)  # 80 = how many to print
+  stats.sort_stats('time')  # 'time', 'cumulative' or 'calls'
+  stats.print_stats()  # Optional arg: how many to print
   # The rest is optional.
   # stats.print_callees()
   # stats.print_callers()
-  logging.info('Profile data:\n%s', stream.getvalue())
+  print '\n<hr>'
+  print '<h1>Profile</h1>'
+  print '<pre>'
+  print stream.getvalue()[:1000000]
+  print '</pre>'
 
 # Set this to profile_main to enable profiling.
 main = real_main
