@@ -549,3 +549,12 @@ span.visualtab {
   font-size: 80%;
   color: gray;
 }
+
+/* Issue description. */
+.description {
+  background-color: #e5ecf9;
+  margin-top: 0;
+  padding: 3px;
+  overflow: auto;
+  -moz-border-radius: 9px;
+}
