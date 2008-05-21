@@ -62,7 +62,7 @@ class Issue(db.Model):
 
   subject = db.StringProperty(required=True)
   description = db.TextProperty()
-  base = db.URLProperty()
+  base = db.LinkProperty()
   owner = db.UserProperty(required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
@@ -121,7 +121,7 @@ class PatchSet(db.Model):
   issue = db.ReferenceProperty(Issue)  # == parent
   message = db.StringProperty()
   data = db.BlobProperty()
-  url = db.URLProperty()
+  url = db.LinkProperty()
   owner = db.UserProperty(required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
@@ -342,7 +342,7 @@ class Repository(db.Model):
   """A specific Subversion repository."""
 
   name = db.StringProperty(required=True)
-  url = db.URLProperty(required=True)
+  url = db.LinkProperty(required=True)
   owner = db.UserProperty()
 
   def __str__(self):
@@ -356,7 +356,7 @@ class Branch(db.Model):
   category = db.StringProperty(required=True,
                                choices=('*trunk*', 'branch', 'tag'))
   name = db.StringProperty(required=True)
-  url = db.URLProperty(required=True)
+  url = db.LinkProperty(required=True)
   owner = db.UserProperty()
 
 
