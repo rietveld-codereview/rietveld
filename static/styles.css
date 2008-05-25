@@ -187,6 +187,14 @@ a:visited.noulv {
   font-size: 100%;
 }
 
+/* Message above a side-by-side view */
+.info {
+  width: 250px;
+  text-align: center;
+  padding-bottom: 0.6em;
+  color: #777;
+}
+
 /* Header sections for moved regions */
 .moved_header {
   white-space: nowrap;

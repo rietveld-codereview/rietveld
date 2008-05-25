@@ -325,9 +325,20 @@ def _RenderDiffTableRows(request, old_lines, chunks, patch,
 def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                        new_patch, new_dict, new_max, new_snapshot,
                        triple_iterator, colwidth=80, debug=False):
-  """XXX
+  """Helper function to render side-by-side table rows.
 
-  Args: XXX
+  Args:
+    old_patch: First models.Patch instance.
+    old_dict: Dictionary with line numbers as keys and comments as values (left)
+    old_max: Line count of the patch on the left.
+    old_snapshot: A tag used in the comments form.
+    new_patch: Second models.Patch instance.
+    new_dict: Same as old_dict, but for the right side.
+    new_max: Line count of the patch on the right.
+    new_snapshot: A tag used in the comments form.
+    triple_iterator: Iterator that yields (tag, old, new) triples.
+    colwidth: Optional column width (default 80).
+    debug: Optional debugging flag (default False).
 
   Yields:
     Tuples (tag, row) where tag is an indication of the row type and
@@ -337,6 +348,23 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
   ndigits = 1 + max(len(str(old_max)), len(str(new_max)))
   indent = 1 + ndigits
   old_offset = new_offset = 0
+
+  # Render a row with a message if a side is empty or both sides are equal.
+  if old_patch == new_patch and (old_max == 0 or new_max == 0):
+    if old_max == 0:
+      msg_old = '(Empty)'
+    else:
+      msg_old = ''
+    if new_max == 0:
+      msg_new = '(Empty)'
+    else:
+      msg_new = ''
+    yield '', ('<tr><td class="info">%s</td>'
+               '<td class="info">%s</td></tr>' % (msg_old, msg_new))
+  elif old_patch != new_patch and old_patch.lines == new_patch.lines:
+    yield '', ('<tr><td class="info" colspan="2">'
+               '(Both sides are equal)</td></tr>')
+
   for tag, old, new in triple_iterator:
     if tag.startswith('error'):
       yield 'error', '<tr><td><h3>%s</h3></td></tr>\n' % cgi.escape(tag)
