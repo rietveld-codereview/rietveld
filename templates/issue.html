@@ -7,7 +7,7 @@
  comment{{issue.draft_count|pluralize}}.
 Drafts are not viewable by others; use
 <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">
-Publish+Mail Comments</a> to let others view them.
+Publish+Mail Comments</a> ('m') to let others view them.
 </div>
 {%endif%}
 
@@ -29,7 +29,7 @@ Publish+Mail Comments</a> to let others view them.
   |
   {%if user%}
   <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-  Comments</a>
+  Comments</a> ('m')
   {%else%}
   <span class="disabled">Can't Publish+Mail</span>
   {%endif%}

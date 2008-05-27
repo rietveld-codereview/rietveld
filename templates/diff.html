@@ -97,7 +97,7 @@ Toggle Intra-line Diffs</a> ('i')
 {%if user%}
 |
 <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-Comments</a>
+Comments</a> ('m')
 {%endif%}
 </p>
 
@@ -109,7 +109,7 @@ N/P to move between comments.
 Double-click a line to add a draft in-line comment.
 <br><span style="color:red">Draft comments are only viewable by you;</span>
 use <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-Comments</a> to let others view them.
+Comments</a> ('m') to let others view them.
 {%else%}
 Please <a class="novisit" href="{{sign_in}}">Sign in</a>
 to add in-line comments.
@@ -161,7 +161,7 @@ Toggle Comments</a> ('s')
 {%if user%}
 |
 <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-Comments</a>
+Comments</a> ('m')
 {%endif%}
 </p>
 

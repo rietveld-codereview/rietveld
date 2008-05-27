@@ -1933,6 +1933,8 @@ function M_keyPress(evt) {
       } else {
         M_upToChangelist();
       }
+    } else if (key == 'm') {
+      document.location.href = publish_link;
     } else if (key == 'u') {
       // up to CL
       M_upToChangelist();
@@ -1994,6 +1996,8 @@ function M_changelistKeyPress(evt) {
       if (dashboardState) dashboardState.gotoPrev();
     } else if (key == 'j') {
       if (dashboardState) dashboardState.gotoNext();
+    } else if (key == 'm') {
+      document.location.href = publish_link;
     } else if (key == 'u') {
       // back to dashboard
       document.location.href = '/';
