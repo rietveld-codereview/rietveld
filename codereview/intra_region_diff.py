@@ -237,6 +237,7 @@ def GetDiffParams(expr='b', min_match_ratio=0.6, min_match_size=2, dbg=False):
   assert min_match_ratio > 0.0 and min_match_ratio < 1.0
   return (expr, min_match_ratio, min_match_size, dbg)
 
+
 def CanDoIRDiff(old_lines, new_lines):
   """Tells if it would be worth computing the intra region diff.
 
@@ -257,6 +258,7 @@ def CanDoIRDiff(old_lines, new_lines):
   total_chars = (sum(len(line) for line in old_lines) +
                  sum(len(line) for line in new_lines))
   return total_chars <= MAX_TOTAL_LEN
+
 
 def WordDiff(line1, line2, diff_params):
   """Returns blocks with positions indiciating word level diffs.
@@ -656,7 +658,6 @@ def NormalizeBlocks(blocks, line):
   result.append(blocks[-1])
   assert len(result) == len(blocks)
   return result
-
 
 
 def RenderIntraRegionDiff(lines, diff_blocks, tag, ratio, limit=80, indent=5,

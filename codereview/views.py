@@ -308,6 +308,34 @@ def issue_owner_required(func):
   return issue_owner_wrapper
 
 
+def patchset_required(func):
+  """Decorator that processes the patchset_id argument."""
+  @issue_required
+  def patchset_wrapper(request, patchset_id, *args, **kwds):
+    patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
+    if patchset is None:
+      return HttpResponseNotFound('No patch set exists with that id (%s)' %
+                                  patchset_id)
+    patchset.issue = request.issue
+    request.patchset = patchset
+    return func(request, *args, **kwds)
+  return patchset_wrapper
+
+
+def patch_required(func):
+  """Decorator that processes the patch_id argument."""
+  @patchset_required
+  def patch_wrapper(request, patch_id, *args, **kwds):
+    patch = models.Patch.get_by_id(int(patch_id), parent=request.patchset)
+    if patch is None:
+      return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
+                                  (request.patchset.key().id(), patch_id))
+    patch.patchset = request.patchset
+    request.patch = patch
+    return func(request, *args, **kwds)
+  return patch_wrapper
+
+
 ### Request handlers ###
 
 
@@ -605,7 +633,6 @@ def _get_reviewers(form):
   return reviewers
 
 
-
 @issue_required
 def show(request, form=AddForm()):
   """/<issue> - Show an issue."""
@@ -722,70 +749,47 @@ def delete(request):
   return HttpResponseRedirect('/mine')
 
 
-@issue_required
-def download(request, patchset_id):
+@patchset_required
+def download(request):
   """/<issue>/download/<patchset> - Download a patch set."""
-  patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
-  if patchset is None:
-    return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                patchset_id)
-  return HttpResponse(patchset.data, content_type='text/plain')
+  return HttpResponse(request.patchset.data, content_type='text/plain')
 
 
-@issue_required
-def patch(request, patchset_id, patch_id):
+@patch_required
+def patch(request):
   """/<issue>/patch/<patchset>/<patch> - View a raw patch."""
-  patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
-  if patchset is None:
-    return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                patchset_id)
-  patch = models.Patch.get_by_id(int(patch_id), parent=patchset)
-  if patch is None:
-    return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
-                                (patchset_id, patch_id))
-  _add_next_prev(patchset, patch)
+  _add_next_prev(request.patchset, request.patch)
   return respond(request, 'patch.html',
-                 {'patch': patch,
-                  'patchset': patchset,
+                 {'patch': request.patch,
+                  'patchset': request.patchset,
                   'issue': request.issue})
 
 
-@issue_required
-def diff(request, patchset_id, patch_id):
+@patch_required
+def diff(request):
   """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff."""
-  patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
-  if patchset is None:
-    return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                patchset_id)
-  patchset.issue = request.issue
-  patch = models.Patch.get_by_id(int(patch_id), parent=patchset)
-  if patch is None:
-    return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
-                                (patchset_id, patch_id))
-  patch.patchset = patchset
-
-  chunks = patching.ParsePatch(patch.lines, patch.filename)
+  chunks = patching.ParsePatch(request.patch.lines, request.patch.filename)
   if chunks is None:
     return HttpResponseNotFound('Can\'t parse the patch')
 
   try:
-    content = patch.get_content()
+    content = request.patch.get_content()
   except engine.FetchError, err:
     return HttpResponseNotFound(str(err))
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
-                                         chunks, patch))
+                                         chunks, request.patch))
   if rows and rows[-1] is None:
     del rows[-1]
     # Get rid of content, which may be bad
     content.delete()
-    patch.content = None
-    patch.put()
+    request.patch.content = None
+    request.patch.put()
 
-  _add_next_prev(patchset, patch)
+  _add_next_prev(request.patchset, request.patch)
   return respond(request, 'diff.html',
-                 {'issue': request.issue, 'patchset': patchset,
-                  'patch': patch, 'rows': rows})
+                 {'issue': request.issue, 'patchset': request.patchset,
+                  'patch': request.patch, 'rows': rows})
 
 
 @issue_required
@@ -953,6 +957,7 @@ Sincerely,
 
   Your friendly code review daemon (%s).
 """
+
 
 @issue_required
 @login_required
@@ -1160,6 +1165,7 @@ BRANCHES = [
     ('branch', 'py3k', 'branches/py3k/'),
     ]
 
+
 @admin_required
 def repo_init(request):
   """/repo_init - Initialze the list of known Subversion repositories."""
@@ -1180,6 +1186,7 @@ def repo_init(request):
                          owner=request.user)
       br.put()
   return HttpResponseRedirect('/repos')
+
 
 @login_required
 def branch_new(request, repo_id):
@@ -1246,6 +1253,7 @@ def branch_delete(request, branch_id):
 
 
 ### User Profiles ###
+
 
 @login_required
 def settings(request):

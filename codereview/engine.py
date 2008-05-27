@@ -159,23 +159,8 @@ def RenderDiffTableRows(request, old_lines, chunks, patch,
     pair of lines of the side-by-side diff, possibly including comments.
     Each yielded string may consist of several <tr> elements.
   """
-  buffer = []
-  for tag, text in _RenderDiffTableRows(request, old_lines, chunks, patch,
-                                        colwidth, debug):
-    if tag == 'equal':
-      buffer.append(text)
-      continue
-    else:
-      for t in _ShortenBuffer(buffer):
-        yield t
-      buffer = []
-    yield text
-    if tag == 'error':
-      yield None
-      break
-  if buffer:
-    for t in _ShortenBuffer(buffer):
-      yield t
+  return _CleanupTableRows(_RenderDiffTableRows(request, old_lines, chunks, 
+                                                patch, colwidth, debug))
 
 
 def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
@@ -196,25 +181,9 @@ def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
     pair of lines of the side-by-side diff, possibly including comments.
     Each yielded string may consist of several <tr> elements.
   """
-  # TODO(guido): Refactor so that the code shared with
-  # RenderDiffTableRows() exists only once.
-  buffer = []
-  for tag, text in _RenderDiff2TableRows(request, old_lines, old_patch,
-                                        new_lines, new_patch, colwidth, debug):
-    if tag == 'equal':
-      buffer.append(text)
-      continue
-    else:
-      for t in _ShortenBuffer(buffer):
-        yield t
-      buffer = []
-    yield text
-    if tag == 'error':
-      yield None
-      break
-  if buffer:
-    for t in _ShortenBuffer(buffer):
-      yield t
+  return _CleanupTableRows(_RenderDiff2TableRows(request, old_lines, old_patch,
+                                                 new_lines, new_patch,
+                                                 colwidth, debug))
 
 
 THRESHOLD = 50
@@ -286,7 +255,6 @@ def _GenerateTriples(old_lines, new_lines):
   sm = difflib.SequenceMatcher(None, old_lines, new_lines)
   for tag, i1, i2, j1, j2 in sm.get_opcodes():
     yield tag, old_lines[i1:i2], new_lines[j1:j2]
-
 
 
 def _RenderDiffTableRows(request, old_lines, chunks, patch,
@@ -462,6 +430,34 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
       new_buff = []
 
 
+def _CleanupTableRows(rows):
+  """Cleanup rows returned by _TableRowGenerator.
+
+  Args:
+    rows: Sequence of (tag, text) tuples.
+
+  Yields:
+    Rows marked as 'equal' are possibly contracted using _ShortenBuffer().
+    Stops on rows marked as 'error'.
+  """
+  buffer = []
+  for tag, text in rows:
+    if tag == 'equal':
+      buffer.append(text)
+      continue
+    else:
+      for t in _ShortenBuffer(buffer):
+        yield t
+      buffer = []
+    yield text
+    if tag == 'error':
+      yield None
+      break
+  if buffer:
+    for t in _ShortenBuffer(buffer):
+      yield t
+
+
 def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
                         do_ir_diff, old_dict, new_dict,
                         old_patch, new_patch,
@@ -485,45 +481,14 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
 
     frags = frag_list[i]
     # Render left text column
-    if old_valid:
-      old_tag = 'old%s' % tag
-      if tag == 'equal':
-        lno = '%*d' % (ndigits, old_lineno)
-      else:
-        lno = _MarkupNumber(ndigits, old_lineno, 'u')
-      if tag == 'replace':
-        old_text = ('%s%s %s%s' % (obegin, lno, oend, old_intra_diff))
-        # If IR diff has been turned off or there is no matching new line at
-        # the end then switch to dark background CSS style.
-        if not do_ir_diff or not old_has_newline:
-          old_tag = old_tag + '1'
-      else:
-        old_text = '%s %s' % (lno, old_intra_diff)
-
-      frags.append('<td class="%s" id="oldcode%d">%s</td>' %
-                   (old_tag, old_lineno, old_text))
-    else:
-      frags.append('<td class="oldblank"></td>')
+    frags.append(_RenderDiffColumn(old_patch, old_valid, tag, ndigits, 
+                                   old_lineno, obegin, oend, old_intra_diff, 
+                                   do_ir_diff, old_has_newline, 'old'))
 
     # Render right text column
-    if new_valid:
-      new_tag = 'new%s' % tag
-      if tag == 'equal':
-        lno = '%*d' % (ndigits, new_lineno)
-      else:
-        lno = _MarkupNumber(ndigits, new_lineno, 'u')
-      if tag == 'replace':
-        new_text = ('%s%s %s%s' % (nbegin, lno, nend, new_intra_diff))
-        # If IR diff has been turned off or there is no matching new line at
-        # the end then switch to dark background CSS style.
-        if not do_ir_diff or not new_has_newline:
-          new_tag = new_tag + '1'
-      else:
-        new_text = '%s %s' % (lno, new_intra_diff)
-      frags.append('<td class="%s" id="newcode%d">%s</td>' %
-                   (new_tag, new_lineno, new_text))
-    else:
-      frags.append('<td class="newblank"></td>')
+    frags.append(_RenderDiffColumn(new_patch, new_valid, tag, ndigits,
+                                   new_lineno, nbegin, nend, new_intra_diff, 
+                                   do_ir_diff, new_has_newline, 'new'))
 
     # End rendering the first row
     frags.append('</tr>\n')
@@ -552,48 +517,73 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
         frags.append('<tr class="inline-comments">')
 
       # Render left inline comments
-      if old_valid:
-        frags.append('<td id="old-line-%s">' % old_lineno)
-        if old_lineno in old_dict:
-          frags.append(
-            _ExpandTemplate('inline_comment.html',
-                            user=user,
-                            patch=old_patch,
-                            patchset=old_patch.patchset,
-                            issue=old_patch.patchset.issue,
-                            snapshot=old_snapshot,
-                            side='a',
-                            comments=old_dict[old_lineno],
-                            lineno=old_lineno,
-                            ))
-        frags.append('</td>')
-      else:
-        frags.append('<td></td>')
+      frags.append(_RenderInlineComments(old_valid, old_lineno, old_dict,
+                                         user, old_patch, old_snapshot, 'old'))
 
       # Render right inline comments
-      if new_valid:
-        frags.append('<td id="new-line-%s">' % new_lineno)
-        if new_lineno in new_dict:
-          frags.append(
-            _ExpandTemplate('inline_comment.html',
-                            user=user,
-                            patch=new_patch,
-                            patchset=new_patch.patchset,
-                            issue=new_patch.patchset.issue,
-                            snapshot=new_snapshot,
-                            side='b',
-                            comments=new_dict[new_lineno],
-                            lineno=new_lineno,
-                            ))
-        frags.append('</td>')
-      else:
-        frags.append('<td></td>')
+      frags.append(_RenderInlineComments(new_valid, new_lineno, new_dict,
+                                         user, new_patch, new_snapshot, 'new'))
 
       # End rendering the second row
       frags.append('</tr>\n')
 
     # Yield the combined fragments
     yield tg, ''.join(frags)
+
+
+def _RenderDiffColumn(patch, line_valid, tag, ndigits, lineno, begin, end, 
+                      intra_diff, do_ir_diff, has_newline, prefix):
+  """Helper function for _RenderDiffInternal().
+
+  Returns:
+    A rendered column.
+  """
+  if line_valid:
+    cls_attr = '%s%s' % (prefix, tag)
+    if tag == 'equal':
+      lno = '%*d' % (ndigits, lineno)
+    else:
+      lno = _MarkupNumber(ndigits, lineno, 'u')
+    if tag == 'replace':
+      col_content = ('%s%s %s%s' % (begin, lno, end, intra_diff))
+      # If IR diff has been turned off or there is no matching new line at
+      # the end then switch to dark background CSS style.
+      if not do_ir_diff or not has_newline:
+        cls_attr = cls_attr + '1'
+    else:
+      col_content = '%s %s' % (lno, intra_diff)
+    return '<td class="%s" id="%scode%d">%s</td>' % (cls_attr, prefix, 
+                                                     lineno, col_content)
+  else:
+    return '<td class="%sblank"></td>' % prefix
+
+
+def _RenderInlineComments(line_valid, lineno, data, user, 
+                          patch, snapshot, prefix):
+  """Helper function for _RenderDiffInternal().
+
+  Returns:
+    Rendered comments.
+  """
+  comments = []
+  if line_valid:
+    comments.append('<td id="%s-line-%s">' % (prefix, lineno))
+    if lineno in data:
+      comments.append(
+        _ExpandTemplate('inline_comment.html',
+                        user=user,
+                        patch=patch,
+                        patchset=patch.patchset,
+                        issue=patch.patchset.issue,
+                        snapshot=snapshot,
+                        side='a' if prefix == 'old' else 'b',
+                        comments=data[lineno],
+                        lineno=lineno,
+                        ))
+    comments.append('</td>')
+  else:
+    comments.append('<td></td>')
+  return ''.join(comments)
 
 
 def _ComputeLineCounts(old_lines, chunks):
