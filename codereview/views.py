@@ -25,9 +25,12 @@ This requires Django 0.97.pre.
 import os
 import cgi
 import random
+import re
 import logging
 import binascii
 import datetime
+from xml.etree import ElementTree
+from cStringIO import StringIO
 
 # AppEngine imports
 from google.appengine.api import mail
@@ -52,6 +55,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
 import django.template
+from django.utils import simplejson
 
 # Local imports
 import models
@@ -198,9 +202,14 @@ class MiniPublishForm(forms.Form):
                             widget=forms.Textarea(attrs={'cols': 60}))
 
 
+FORM_CONTEXT_VALUES = [(x, "%d lines" % x) for x in models.CONTEXT_CHOICES]
+
+
 class SettingsForm(forms.Form):
 
   nickname = forms.CharField(max_length=30)
+  context = forms.IntegerField(widget=forms.Select(choices=FORM_CONTEXT_VALUES),
+                               label='Context')
 
 
 ### Helper functions ###
@@ -389,7 +398,7 @@ def all(request):
   newest = ''
   if offset > limit:
     newest = '/all?limit=%d' % limit
- 
+
   return respond(request, 'all.html',
                  {'issues': issues, 'limit': limit,
                   'newest': newest, 'prev': prev, 'next': next,
@@ -765,10 +774,46 @@ def patch(request):
                   'issue': request.issue})
 
 
+def _get_context_for_user(request):
+  """Returns the context setting for a user.
+
+  The value is validated against models.CONTEXT_CHOICES.
+  If an invalid value is found, the value is overwritten with
+  engine.DEFAULT_CONTEXT.
+  """
+  if request.user:
+    account = models.Account.get_account_for_user(request.user)
+    default_context = account.default_context
+  else:
+    default_context = engine.DEFAULT_CONTEXT
+  try:
+    context = int(request.GET.get("context", default_context))
+  except ValueError:
+    context = default_context
+  if context not in models.CONTEXT_CHOICES:
+    context = engine.DEFAULT_CONTEXT
+  return context
+
+
 @patch_required
 def diff(request):
   """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff."""
-  chunks = patching.ParsePatch(request.patch.lines, request.patch.filename)
+  patchset = request.patchset
+  patch = request.patch
+
+  context = _get_context_for_user(request)
+  rows = _get_diff_table_rows(request, patch, context)
+
+  _add_next_prev(patchset, patch)
+  return respond(request, 'diff.html',
+                 {'issue': request.issue, 'patchset': patchset,
+                  'patch': patch, 'rows': rows,
+                  'context': context, 'context_values': models.CONTEXT_CHOICES})
+
+
+def _get_diff_table_rows(request, patch, context):
+  """Helper function that returns rendered rows for a patch"""
+  chunks = patching.ParsePatch(patch.lines, patch.filename)
   if chunks is None:
     return HttpResponseNotFound('Can\'t parse the patch')
 
@@ -778,7 +823,8 @@ def diff(request):
     return HttpResponseNotFound(str(err))
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
-                                         chunks, request.patch))
+                                         chunks, patch,
+                                         context=context))
   if rows and rows[-1] is None:
     del rows[-1]
     # Get rid of content, which may be bad
@@ -786,15 +832,53 @@ def diff(request):
     request.patch.content = None
     request.patch.put()
 
-  _add_next_prev(request.patchset, request.patch)
-  return respond(request, 'diff.html',
-                 {'issue': request.issue, 'patchset': request.patchset,
-                  'patch': request.patch, 'rows': rows})
+  return rows
 
 
-@issue_required
-def diff2(request, ps_left_id, ps_right_id, patch_id):
-  """/<issue>/diff2/... - View the delta between two different patch sets."""
+@patch_required
+def diff_skipped_lines(request, id_before, id_after, where):
+  """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines"""
+  patchset = request.patchset
+  patch = request.patch
+
+  # TODO: allow context = None?
+  rows = _get_diff_table_rows(request, patch, 10000)
+  return _get_skipped_lines_response(rows, id_before, id_after, where)
+
+
+def _get_skipped_lines_response(rows, id_before, id_after, where):
+  """Helper function that creates a Response object for skipped lines"""
+  response_rows = []
+  id_before = int(id_before)
+  id_after = int(id_after)
+
+  if where == "b":
+    rows.reverse()
+
+  for row in rows:
+    m = re.match('^<tr( name="hook")? id="pair-(?P<rowcount>\d+)">', row)
+    if m:
+      curr_id = int(m.groupdict().get("rowcount"))
+      if curr_id < id_before or curr_id > id_after:
+        continue
+      if where  == "b" and curr_id <= id_after:
+        response_rows.append(row)
+      elif where == "t" and curr_id >= id_before:
+        response_rows.append(row)
+      if len(response_rows) >= 10:
+        break
+
+  # Create a usable structure for the JS part
+  response = []
+  dom = ElementTree.parse(StringIO('<div>%s</div>' % "".join(response_rows)))
+  for node in dom.getroot().getchildren():
+    content = "\n".join([ElementTree.tostring(x) for x in node.getchildren()])
+    response.append([node.items(), content])
+  return HttpResponse(simplejson.dumps(response))
+
+
+def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context):
+  """Helper function that returns objects for diff2 views"""
   ps_left = models.PatchSet.get_by_id(int(ps_left_id), parent=request.issue)
   if ps_left is None:
     return HttpResponseNotFound('No patch set exists with that id (%s)' %
@@ -825,17 +909,39 @@ def diff2(request, ps_left_id, ps_right_id, patch_id):
 
   rows = engine.RenderDiff2TableRows(request,
                                      new_content_left.lines, patch_left,
-                                     new_content_right.lines, patch_right)
+                                     new_content_right.lines, patch_right,
+                                     context=context)
   rows = list(rows)
   if rows and rows[-1] is None:
     del rows[-1]
 
-  _add_next_prev(ps_right, patch_right)
+  return dict(new_content_left=new_content_left, patch_left=patch_left,
+              new_conent_right=new_content_right, patch_right=patch_right,
+              ps_left=ps_left, ps_right=ps_right, rows=rows)
+
+
+@issue_required
+def diff2(request, ps_left_id, ps_right_id, patch_id):
+  """/<issue>/diff2/... - View the delta between two different patch sets."""
+  context = _get_context_for_user(request)
+  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context)
+
+  _add_next_prev(data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
                  {'issue': request.issue,
-                  'ps_left': ps_left, 'patch_left': patch_left,
-                  'ps_right': ps_right, 'patch_right': patch_right,
-                  'rows': rows})
+                  'ps_left': data["ps_left"], 'patch_left': data["patch_left"],
+                  'ps_right': data["ps_right"],
+                  'patch_right': data["patch_right"], 'rows': data["rows"],
+                  'patch_id': patch_id,
+                  'context': context, 'context_values': models.CONTEXT_CHOICES})
+
+
+@issue_required
+def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
+                        id_before, id_after, where):
+  """/<issue>/diff2/... - Returns a fragment of skipped lines"""
+  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, 10000)
+  return _get_skipped_lines_response(data["rows"], id_before, id_after, where)
 
 
 def _add_next_prev(patchset, patch):
@@ -970,7 +1076,7 @@ def publish(request):
     form_class = MiniPublishForm
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
-    if request.user != issue.owner and (request.user.email() 
+    if request.user != issue.owner and (request.user.email()
                                         not in issue.reviewers):
       reviewers.append(request.user.email())
     form = form_class(initial={'subject': issue.subject,
@@ -1260,7 +1366,9 @@ def settings(request):
   account = models.Account.get_account_for_user(request.user)
   if request.method != 'POST':
     nickname = account.nickname
-    form = SettingsForm(initial={'nickname': nickname})
+    default_context = account.default_context
+    form = SettingsForm(initial={'nickname': nickname,
+                                 'context': default_context})
     return respond(request, 'settings.html', {'form': form})
   form = SettingsForm(request.POST)
   if form.is_valid():
@@ -1277,6 +1385,7 @@ def settings(request):
         form.errors['nickname'] = ['This nickname is already in use.']
       else:
         account.nickname = nickname
+        account.default_context = form.cleaned_data.get("context")
         account.put()
   if not form.is_valid():
     return respond(request, 'settings.html', {'form': form})

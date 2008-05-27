@@ -108,18 +108,25 @@ Comments</a> ('m')
 
 <h3>Side by Side Diff</h3>
 
-<p><i>Use n/p to move between diff chunks;
-N/P to move between comments.
-{%if user%}
-Double-click a line to add a draft in-line comment.
-<br><span style="color:red">Draft comments are only viewable by you;</span>
-use <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-Comments</a> ('m') to let others view them.
-{%else%}
-Please <a class="novisit" href="{{sign_in}}">Sign in</a>
-to add in-line comments.
-{%endif%}
-</i></p>
+<div style="float: left;">
+  <p><i>Use n/p to move between diff chunks;
+  N/P to move between comments.
+  {%if user%}
+  Double-click a line to add a draft in-line comment.
+  <br><span style="color:red">Draft comments are only viewable by you;</span>
+  use <a class="novisit"
+         href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
+  Comments</a> ('m') to let others view them.
+  {%else%}
+  Please <a class="novisit" href="{{sign_in}}">Sign in</a>
+  to add in-line comments.
+  {%endif%}
+  </i></p>
+</div>
+<div style="float: right;">
+  {%include "context_select.html"%}
+</div>
+<div style="clear: both;"></div>
 
 <div style="position:relative" id="table-top">
 
@@ -172,6 +179,10 @@ var new_snapshot = "new";
 var intraLineDiff = new M_IntraLineDiff();
 var hookState = new M_HookState(window);
 hookState.updateHooks();
+
+var skipped_lines_url = ('/' + {{issue.key.id}} + '/diff2_skipped_lines/' +
+                         {{ps_left.key.id}} + ':' + {{ps_right.key.id}} + '/' +
+                         {{patch_id}} + '/');
 // -->
 </script>
 {%endblock%}

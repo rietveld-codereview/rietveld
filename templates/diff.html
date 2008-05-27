@@ -60,7 +60,6 @@ login_warned = false;
   {%ifnotequal patchset.owner issue.owner%}
   by <b>{{patchset.owner|nickname}}</b>{%endifnotequal%}
 </div>
-
 <p>
 {%comment%}
 For some reason,
@@ -69,13 +68,17 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {%endcomment%}
 {%if patch.prev%}
 <a id="prevFile" 
-   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.prev.key.id}}">
+   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{%spaceless%}
+   {{patch.prev.key.id}}{%if context%}?context={{context}}{%endif%}
+   {%endspaceless%}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
-   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.next.key.id}}">
+   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{%spaceless%}
+   {{patch.next.key.id}}{%if context %}?context={{context}}{%endif%}
+   {%endspaceless%}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |
@@ -103,18 +106,25 @@ Comments</a> ('m')
 
 <h3>Side by Side Diff</h3>
 
-<p><i>Use n/p to move between diff chunks;
-N/P to move between comments.
-{%if user%}
-Double-click a line to add a draft in-line comment.
-<br><span style="color:red">Draft comments are only viewable by you;</span>
-use <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-Comments</a> ('m') to let others view them.
-{%else%}
-Please <a class="novisit" href="{{sign_in}}">Sign in</a>
-to add in-line comments.
-{%endif%}
-</i></p>
+<div style="float: left;">
+  <p><i>Use n/p to move between diff chunks;
+  N/P to move between comments.
+  {%if user%}
+  Double-click a line to add a draft in-line comment.
+  <br><span style="color:red">Draft comments are only viewable by you;</span>
+  use <a class="novisit"
+         href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
+  Comments</a> ('m') to let others view them.
+  {%else%}
+  Please <a class="novisit" href="{{sign_in}}">Sign in</a>
+  to add in-line comments.
+  {%endif%}
+  </i></p>
+</div>
+<div style="float: right;">
+  {%include "context_select.html"%}
+</div>
+<div style="clear: both;"></div>
 
 <div style="position:relative" id="table-top">
 
@@ -172,6 +182,11 @@ var new_snapshot = "new";
 var intraLineDiff = new M_IntraLineDiff();
 var hookState = new M_HookState(window);
 hookState.updateHooks();
+
+var skipped_lines_url = ('/' + {{issue.key.id}} + '/diff_skipped_lines/' +
+                         {{patchset.key.id}} + '/' + {{patch.key.id}} + '/')
+;
+
 // -->
 </script>
 {%endblock%}

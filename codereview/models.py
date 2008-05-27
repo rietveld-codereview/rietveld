@@ -26,6 +26,9 @@ import engine
 import patching
 
 
+CONTEXT_CHOICES = (3, 10, 25, 50, 75, 100)
+
+
 ### GQL query cache ###
 
 
@@ -377,6 +380,8 @@ class Account(db.Model):
   user = db.UserProperty(required=True)
   email = db.EmailProperty(required=True)  # key == <email>
   nickname = db.StringProperty(required=True)
+  default_context = db.IntegerProperty(default=engine.DEFAULT_CONTEXT,
+                                       choices=CONTEXT_CHOICES)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
 
