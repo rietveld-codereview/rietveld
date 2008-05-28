@@ -803,6 +803,8 @@ def diff(request):
 
   context = _get_context_for_user(request)
   rows = _get_diff_table_rows(request, patch, context)
+  if isinstance(rows, HttpResponseNotFound):
+    return rows
 
   _add_next_prev(patchset, patch)
   return respond(request, 'diff.html',
@@ -843,6 +845,8 @@ def diff_skipped_lines(request, id_before, id_after, where):
 
   # TODO: allow context = None?
   rows = _get_diff_table_rows(request, patch, 10000)
+  if isinstance(rows, HttpResponseNotFound):
+    return rows
   return _get_skipped_lines_response(rows, id_before, id_after, where)
 
 
@@ -943,6 +947,8 @@ def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
                         id_before, id_after, where):
   """/<issue>/diff2/... - Returns a fragment of skipped lines"""
   data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, 10000)
+  if isinstance(data, HttpResponseNotFound):
+    return data
   return _get_skipped_lines_response(data["rows"], id_before, id_after, where)
 
 
