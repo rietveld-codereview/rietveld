@@ -925,6 +925,8 @@ def diff2(request, ps_left_id, ps_right_id, patch_id):
   """/<issue>/diff2/... - View the delta between two different patch sets."""
   context = _get_context_for_user(request)
   data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context)
+  if isinstance(data, HttpResponseNotFound):
+    return data
 
   _add_next_prev(data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
