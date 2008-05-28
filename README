@@ -65,3 +65,4 @@ complaining you don't have the right to administer this app.  If you
 forget step 3, everything will work fine, except the "Publish+Mail
 Comments" command will respond with a 500 server error, logging an
 InvalidSenderError exception.
+
