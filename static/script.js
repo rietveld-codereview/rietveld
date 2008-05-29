@@ -2368,6 +2368,10 @@ function M_dashboardKeyPress(evt) {
  * See _ShortenBuffer() in codereview/engine.py.
  */
 function M_expandSkipped(id_before, id_after, where, id_skip) {
+  links = document.getElementById('skiplinks-'+id_skip).childNodes;
+  for (var i=0; i<links.length; i++) {
+	links[i].href = '#skiplinks-'+id_skip;  
+  }
   tr = document.getElementById('skip-'+id_skip);
   var httpreq = M_getXMLHttpRequest();
   if (!httpreq) {
@@ -2416,9 +2420,12 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
             html += ','+new_after+',\'b\','+id_skip+');">Show 10 below</a> ';
           }
           document.getElementById('skiplinks-'+(id_skip)).innerHTML = html;
-        } else if ( new_count > 0 ) {
         } else {
           tr.parentNode.removeChild(tr);
+        }
+        if (hookState.hookPos != -2 &&
+            M_isElementVisible(window, hookState.indicator)) {
+          hookState.gotoHook(-1);
         }
       }
     }
