@@ -106,7 +106,14 @@ Patch Set {{forloop.counter}}:
   <td>
     {%for other in patchsets%}
       {%ifnotequal other patchset%}
-        <a href="/{{issue.key.id}}/diff2/{{other.key.id}}:{{patchset.key.id}}/{{patch.key.id}}">delta from patch set {{forloop.counter}}</a>
+      	{%for opatch in other.patch_set%}
+      	  {%ifequal opatch.filename patch.filename%}
+            {%ifnotequal opatch.text patch.text%}
+              <a href="/{{issue.key.id}}/diff2/{{other.key.id}}:{{patchset.key.id}}/{{patch.key.id}}">
+              delta from patch set {{forloop.parentloop.counter}}</a>
+            {%endifnotequal%}
+          {%endifequal%}
+        {%endfor%}
       {%endifnotequal%}
     {%endfor%}
   </td>
