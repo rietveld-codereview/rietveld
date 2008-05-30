@@ -1113,14 +1113,9 @@ def publish(request):
 
   # XXX Should request all drafts for this issue once, now we can.
   for patchset in issue.patchset_set.order('created'):
-##     ps_comments = list(models.Comment.gql(
-##         'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-##         patchset, request.user))
-    # XXX Somehow the index broke, do without it
-    ps_comments = [c for c in
-                   models.Comment.gql('WHERE ANCESTOR IS :1', patchset)
-                   if c.draft and c.author == request.user]
-    # XXX End
+    ps_comments = list(models.Comment.gql(
+        'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
+        patchset, request.user))
     if ps_comments:
       patches = dict((p.key(), p) for p in patchset.patch_set)
       for p in patches.itervalues():

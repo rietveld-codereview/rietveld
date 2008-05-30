@@ -81,13 +81,9 @@ class Issue(db.Model):
     The value is expensive to compute, so it is cached.
     """
     if self._num_comments is None:
-##       self._num_comments = gql(Comment,
-##           'WHERE ANCESTOR IS :1 AND draft = FALSE',
-##           self).count()
-      # XXX Somehow the index broke, do without it
-      query = gql(Comment, 'WHERE ANCESTOR IS :1', self)
-      self._num_comments = len([x for x in query if not x.draft])
-      # XXX End
+      self._num_comments = gql(Comment,
+          'WHERE ANCESTOR IS :1 AND draft = FALSE',
+          self).count()
     return self._num_comments
 
   _num_drafts = None
@@ -103,15 +99,10 @@ class Issue(db.Model):
       if user is None:
         self._num_drafts = 0
       else:
-##         query = gql(Comment,
-##             'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-##             self, user)
-##         self._num_drafts = query.count()
-        # XXX Somehow the index broke, do without it
-        query = gql(Comment, 'WHERE ANCESTOR IS :1', self)
-        self._num_drafts = len([x for x in query
-                                if x.author == user and x.draft])
-        # XXX End
+        query = gql(Comment,
+            'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
+            self, user)
+        self._num_drafts = query.count()
     return self._num_drafts
 
 
