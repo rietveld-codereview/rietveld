@@ -92,7 +92,7 @@ def PatchChunks(old_lines, chunks):
 def ParseRevision(lines):
   """Parse the revision number out of the raw lines of the patch.
 
-  Returns None if no revision number was found.
+  Returns 0 (new file) if no revision number was found.
   """
   for line in lines[:10]:
     if line.startswith('@'):
@@ -100,7 +100,7 @@ def ParseRevision(lines):
     m = re.match(r'---\s.*\(.*\s(\d+)\)\s*$', line)
     if m:
       return int(m.group(1))
-  return None
+  return 0
 
 
 _NO_NEWLINE_MESSAGE = " No newline at end of file\n"

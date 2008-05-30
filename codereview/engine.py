@@ -142,8 +142,10 @@ def _MakeUrl(base, filename, rev):
   return url
 
 
+DEFAULT_CONTEXT = 50
+
 def RenderDiffTableRows(request, old_lines, chunks, patch,
-                        colwidth=80, debug=False):
+                        colwidth=80, debug=False, context=DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff for a patch.
 
   Args:
@@ -153,33 +155,20 @@ def RenderDiffTableRows(request, old_lines, chunks, patch,
     patch: A models.Patch instance.
     colwidth: Optional column width (default 80).
     debug: Optional debugging flag (default False).
+    context: Maximum number of rows surrounding a change (default CONTEXT).
 
   Yields:
     Strings, each of which represents the text rendering one complete
     pair of lines of the side-by-side diff, possibly including comments.
     Each yielded string may consist of several <tr> elements.
   """
-  buffer = []
-  for tag, text in _RenderDiffTableRows(request, old_lines, chunks, patch,
-                                        colwidth, debug):
-    if tag == 'equal':
-      buffer.append(text)
-      continue
-    else:
-      for t in _ShortenBuffer(buffer):
-        yield t
-      buffer = []
-    yield text
-    if tag == 'error':
-      yield None
-      break
-  if buffer:
-    for t in _ShortenBuffer(buffer):
-      yield t
+  rows =  _RenderDiffTableRows(request, old_lines, chunks, patch,
+                               colwidth, debug)
+  return _CleanupTableRowsGenerator(rows, context)
 
 
 def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                         colwidth=80, debug=False):
+                         colwidth=80, debug=False, context=DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff between two patches.
 
   Args:
@@ -190,22 +179,36 @@ def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
     new_patch: The models.Patch instance corresponding to new_lines.
     colwidth: Optional column width (default 80).
     debug: Optional debugging flag (default False).
+    context: Maximum number of visible context lines (default DEFAULT_CONTEXT).
 
   Yields:
     Strings, each of which represents the text rendering one complete
     pair of lines of the side-by-side diff, possibly including comments.
     Each yielded string may consist of several <tr> elements.
   """
-  # TODO(guido): Refactor so that the code shared with
-  # RenderDiffTableRows() exists only once.
+  rows = _RenderDiff2TableRows(request, old_lines, old_patch,
+                               new_lines, new_patch, colwidth, debug)
+  return _CleanupTableRowsGenerator(rows, context)
+
+
+def _CleanupTableRowsGenerator(rows, context):
+  """Cleanup rows returned by _TableRowGenerator for output.
+
+  Args:
+    rows: List of tuples (tag, text)
+    context: Maximum number of visible context lines.
+
+  Yields:
+    Rows marked as 'equal' are possibly contracted using _ShortenBuffer().
+    Stops on rows marked as 'error'.
+  """
   buffer = []
-  for tag, text in _RenderDiff2TableRows(request, old_lines, old_patch,
-                                        new_lines, new_patch, colwidth, debug):
+  for tag, text in rows:
     if tag == 'equal':
       buffer.append(text)
       continue
     else:
-      for t in _ShortenBuffer(buffer):
+      for t in _ShortenBuffer(buffer, context):
         yield t
       buffer = []
     yield text
@@ -213,34 +216,52 @@ def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
       yield None
       break
   if buffer:
-    for t in _ShortenBuffer(buffer):
+    for t in _ShortenBuffer(buffer, context):
       yield t
 
 
-THRESHOLD = 50
-
-def _ShortenBuffer(buffer):
+def _ShortenBuffer(buffer, context):
   """Render a possibly contracted series of HTML table rows.
 
   Args:
     buffer: a list of strings representing HTML table rows.
+    context: Maximum number of visible context lines.
 
   Yields:
-    If the buffer has fewer than 3 times THRESHOLD items, yield all
-    the items.  Otherwise, yield the first THRESHOLD items, a single
-    table row representing the contraction, and the last THRESHOLD
+    If the buffer has fewer than 3 times context items, yield all
+    the items.  Otherwise, yield the first context items, a single
+    table row representing the contraction, and the last context
     items.
   """
-  if len(buffer) < 3*THRESHOLD:
+  if len(buffer) < 3*context:
     for t in buffer:
       yield t
   else:
-    for t in buffer[:THRESHOLD]:
+    last_id = None
+    for t in buffer[:context]:
+      m = re.match('^<tr( name="hook")? id="pair-(?P<rowcount>\d+)">', t)
+      if m:
+        last_id = int(m.groupdict().get("rowcount"))
       yield t
-    skip = len(buffer) - 2*THRESHOLD
-    yield ('<tr><td colspan="2" align="center" style="background:lightblue">'
-           '(...skipping %d matching lines...)</td></tr>\n' % skip)
-    for t in buffer[-THRESHOLD:]:
+    skip = len(buffer) - 2*context
+    if skip <= 10:
+      expand_link = ('<a href="javascript:M_expandSkipped(%(before)d, '
+                     '%(after)d, \'b\', %(skip)d)">Show</a>')
+    else:
+      expand_link = ('<a href="javascript:M_expandSkipped(%(before)d, '
+                     '%(after)d, \'t\', %(skip)d)">Show 10 above</a> '
+                     '<a href="javascript:M_expandSkipped(%(before)d, '
+                     '%(after)d, \'b\', %(skip)d)">Show 10 below</a> ')
+    expand_link = expand_link % {'before': last_id+1,
+                                 'after': last_id+skip,
+                                 'skip': last_id}
+    yield ('<tr id="skip-%d"><td colspan="2" align="center" '
+           'style="background:lightblue">'
+           '(...skipping <span id="skipcount-%d">%d</span> matching lines...) '
+           '<span id="skiplinks-%d">%s</span>'
+           '</td></tr>\n' % (last_id, last_id, skip,
+                             last_id, expand_link))
+    for t in buffer[-context:]:
       yield t
 
 
@@ -288,7 +309,6 @@ def _GenerateTriples(old_lines, new_lines):
     yield tag, old_lines[i1:i2], new_lines[j1:j2]
 
 
-
 def _RenderDiffTableRows(request, old_lines, chunks, patch,
                          colwidth=80, debug=False):
   """Internal version of RenderDiffTableRows().
@@ -325,9 +345,20 @@ def _RenderDiffTableRows(request, old_lines, chunks, patch,
 def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                        new_patch, new_dict, new_max, new_snapshot,
                        triple_iterator, colwidth=80, debug=False):
-  """XXX
+  """Helper function to render side-by-side table rows.
 
-  Args: XXX
+  Args:
+    old_patch: First models.Patch instance.
+    old_dict: Dictionary with line numbers as keys and comments as values (left)
+    old_max: Line count of the patch on the left.
+    old_snapshot: A tag used in the comments form.
+    new_patch: Second models.Patch instance.
+    new_dict: Same as old_dict, but for the right side.
+    new_max: Line count of the patch on the right.
+    new_snapshot: A tag used in the comments form.
+    triple_iterator: Iterator that yields (tag, old, new) triples.
+    colwidth: Optional column width (default 80).
+    debug: Optional debugging flag (default False).
 
   Yields:
     Tuples (tag, row) where tag is an indication of the row type and
@@ -337,6 +368,24 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
   ndigits = 1 + max(len(str(old_max)), len(str(new_max)))
   indent = 1 + ndigits
   old_offset = new_offset = 0
+  row_count = 0
+
+  # Render a row with a message if a side is empty or both sides are equal.
+  if old_patch == new_patch and (old_max == 0 or new_max == 0):
+    if old_max == 0:
+      msg_old = '(Empty)'
+    else:
+      msg_old = ''
+    if new_max == 0:
+      msg_new = '(Empty)'
+    else:
+      msg_new = ''
+    yield '', ('<tr><td class="info">%s</td>'
+               '<td class="info">%s</td></tr>' % (msg_old, msg_new))
+  elif old_patch != new_patch and old_patch.lines == new_patch.lines:
+    yield '', ('<tr><td class="info" colspan="2">'
+               '(Both sides are equal)</td></tr>')
+
   for tag, old, new in triple_iterator:
     if tag.startswith('error'):
       yield 'error', '<tr><td><h3>%s</h3></td></tr>\n' % cgi.escape(tag)
@@ -351,6 +400,7 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
     do_ir_diff = tag == 'replace' and intra_region_diff.CanDoIRDiff(old, new)
 
     for i in xrange(max(len(old), len(new))):
+      row_count += 1
       old_lineno = old1 + i + 1
       new_lineno = new1 + i + 1
       old_valid = old1+i < old2
@@ -363,7 +413,7 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
         frags.append('<tr name="hook"')
       else:
         frags.append('<tr')
-      frags.append('>')
+      frags.append(' id="pair-%d">' % row_count)
 
       old_intra_diff = ''
       new_intra_diff = ''
@@ -434,6 +484,34 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
       new_buff = []
 
 
+def _CleanupTableRows(rows):
+  """Cleanup rows returned by _TableRowGenerator.
+
+  Args:
+    rows: Sequence of (tag, text) tuples.
+
+  Yields:
+    Rows marked as 'equal' are possibly contracted using _ShortenBuffer().
+    Stops on rows marked as 'error'.
+  """
+  buffer = []
+  for tag, text in rows:
+    if tag == 'equal':
+      buffer.append(text)
+      continue
+    else:
+      for t in _ShortenBuffer(buffer):
+        yield t
+      buffer = []
+    yield text
+    if tag == 'error':
+      yield None
+      break
+  if buffer:
+    for t in _ShortenBuffer(buffer):
+      yield t
+
+
 def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
                         do_ir_diff, old_dict, new_dict,
                         old_patch, new_patch,
@@ -457,45 +535,14 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
 
     frags = frag_list[i]
     # Render left text column
-    if old_valid:
-      old_tag = 'old%s' % tag
-      if tag == 'equal':
-        lno = '%*d' % (ndigits, old_lineno)
-      else:
-        lno = _MarkupNumber(ndigits, old_lineno, 'u')
-      if tag == 'replace':
-        old_text = ('%s%s %s%s' % (obegin, lno, oend, old_intra_diff))
-        # If IR diff has been turned off or there is no matching new line at
-        # the end then switch to dark background CSS style.
-        if not do_ir_diff or not old_has_newline:
-          old_tag = old_tag + '1'
-      else:
-        old_text = '%s %s' % (lno, old_intra_diff)
-
-      frags.append('<td class="%s" id="oldcode%d">%s</td>' %
-                   (old_tag, old_lineno, old_text))
-    else:
-      frags.append('<td class="oldblank"></td>')
+    frags.append(_RenderDiffColumn(old_patch, old_valid, tag, ndigits,
+                                   old_lineno, obegin, oend, old_intra_diff,
+                                   do_ir_diff, old_has_newline, 'old'))
 
     # Render right text column
-    if new_valid:
-      new_tag = 'new%s' % tag
-      if tag == 'equal':
-        lno = '%*d' % (ndigits, new_lineno)
-      else:
-        lno = _MarkupNumber(ndigits, new_lineno, 'u')
-      if tag == 'replace':
-        new_text = ('%s%s %s%s' % (nbegin, lno, nend, new_intra_diff))
-        # If IR diff has been turned off or there is no matching new line at
-        # the end then switch to dark background CSS style.
-        if not do_ir_diff or not new_has_newline:
-          new_tag = new_tag + '1'
-      else:
-        new_text = '%s %s' % (lno, new_intra_diff)
-      frags.append('<td class="%s" id="newcode%d">%s</td>' %
-                   (new_tag, new_lineno, new_text))
-    else:
-      frags.append('<td class="newblank"></td>')
+    frags.append(_RenderDiffColumn(new_patch, new_valid, tag, ndigits,
+                                   new_lineno, nbegin, nend, new_intra_diff,
+                                   do_ir_diff, new_has_newline, 'new'))
 
     # End rendering the first row
     frags.append('</tr>\n')
@@ -524,48 +571,73 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
         frags.append('<tr class="inline-comments">')
 
       # Render left inline comments
-      if old_valid:
-        frags.append('<td id="old-line-%s">' % old_lineno)
-        if old_lineno in old_dict:
-          frags.append(
-            _ExpandTemplate('inline_comment.html',
-                            user=user,
-                            patch=old_patch,
-                            patchset=old_patch.patchset,
-                            issue=old_patch.patchset.issue,
-                            snapshot=old_snapshot,
-                            side='a',
-                            comments=old_dict[old_lineno],
-                            lineno=old_lineno,
-                            ))
-        frags.append('</td>')
-      else:
-        frags.append('<td></td>')
+      frags.append(_RenderInlineComments(old_valid, old_lineno, old_dict,
+                                         user, old_patch, old_snapshot, 'old'))
 
       # Render right inline comments
-      if new_valid:
-        frags.append('<td id="new-line-%s">' % new_lineno)
-        if new_lineno in new_dict:
-          frags.append(
-            _ExpandTemplate('inline_comment.html',
-                            user=user,
-                            patch=new_patch,
-                            patchset=new_patch.patchset,
-                            issue=new_patch.patchset.issue,
-                            snapshot=new_snapshot,
-                            side='b',
-                            comments=new_dict[new_lineno],
-                            lineno=new_lineno,
-                            ))
-        frags.append('</td>')
-      else:
-        frags.append('<td></td>')
+      frags.append(_RenderInlineComments(new_valid, new_lineno, new_dict,
+                                         user, new_patch, new_snapshot, 'new'))
 
       # End rendering the second row
       frags.append('</tr>\n')
 
     # Yield the combined fragments
     yield tg, ''.join(frags)
+
+
+def _RenderDiffColumn(patch, line_valid, tag, ndigits, lineno, begin, end,
+                      intra_diff, do_ir_diff, has_newline, prefix):
+  """Helper function for _RenderDiffInternal().
+
+  Returns:
+    A rendered column.
+  """
+  if line_valid:
+    cls_attr = '%s%s' % (prefix, tag)
+    if tag == 'equal':
+      lno = '%*d' % (ndigits, lineno)
+    else:
+      lno = _MarkupNumber(ndigits, lineno, 'u')
+    if tag == 'replace':
+      col_content = ('%s%s %s%s' % (begin, lno, end, intra_diff))
+      # If IR diff has been turned off or there is no matching new line at
+      # the end then switch to dark background CSS style.
+      if not do_ir_diff or not has_newline:
+        cls_attr = cls_attr + '1'
+    else:
+      col_content = '%s %s' % (lno, intra_diff)
+    return '<td class="%s" id="%scode%d">%s</td>' % (cls_attr, prefix,
+                                                     lineno, col_content)
+  else:
+    return '<td class="%sblank"></td>' % prefix
+
+
+def _RenderInlineComments(line_valid, lineno, data, user,
+                          patch, snapshot, prefix):
+  """Helper function for _RenderDiffInternal().
+
+  Returns:
+    Rendered comments.
+  """
+  comments = []
+  if line_valid:
+    comments.append('<td id="%s-line-%s">' % (prefix, lineno))
+    if lineno in data:
+      comments.append(
+        _ExpandTemplate('inline_comment.html',
+                        user=user,
+                        patch=patch,
+                        patchset=patch.patchset,
+                        issue=patch.patchset.issue,
+                        snapshot=snapshot,
+                        side='a' if prefix == 'old' else 'b',
+                        comments=data[lineno],
+                        lineno=lineno,
+                        ))
+    comments.append('</td>')
+  else:
+    comments.append('<td></td>')
+  return ''.join(comments)
 
 
 def _ComputeLineCounts(old_lines, chunks):

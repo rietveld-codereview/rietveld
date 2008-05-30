@@ -1933,6 +1933,8 @@ function M_keyPress(evt) {
       } else {
         M_upToChangelist();
       }
+    } else if (key == 'm') {
+      document.location.href = publish_link;
     } else if (key == 'u') {
       // up to CL
       M_upToChangelist();
@@ -1994,6 +1996,8 @@ function M_changelistKeyPress(evt) {
       if (dashboardState) dashboardState.gotoPrev();
     } else if (key == 'j') {
       if (dashboardState) dashboardState.gotoNext();
+    } else if (key == 'm') {
+      document.location.href = publish_link;
     } else if (key == 'u') {
       // back to dashboard
       document.location.href = '/';
@@ -2357,4 +2361,77 @@ function M_dashboardKeyPress(evt) {
     }
     return false;
   });
+}
+
+/*
+ * Function to request more context between diff chunks.
+ * See _ShortenBuffer() in codereview/engine.py.
+ */
+function M_expandSkipped(id_before, id_after, where, id_skip) {
+  links = document.getElementById('skiplinks-'+id_skip).childNodes;
+  for (var i=0; i<links.length; i++) {
+	links[i].href = '#skiplinks-'+id_skip;  
+  }
+  tr = document.getElementById('skip-'+id_skip);
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    html = '<td colspan="2" style="text-align: center;">';
+    html = html + 'Failed to retrieve additional lines. ';
+    html = html + 'Please update your context settings.';
+    html = html + '</td>';
+    tr.innerHTML = html;
+  }
+  aborted = false;
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4 && !aborted) {
+      if (httpreq.status == 200) {
+        response = eval('('+httpreq.responseText+')');
+        for (var i=0; i<response.length; i++) {
+          var data = response[i];
+          var row = document.createElement("tr");
+          for (var j=0; j<data[0].length; j++) {
+            row.setAttribute(data[0][j][0], data[0][j][1]);
+          }
+          if ( where == 't' ) {
+            tr.parentNode.insertBefore(row, tr);
+          } else {
+            tr.parentNode.insertBefore(row, tr.nextSibling);
+          }
+          row.innerHTML = data[1];
+        }
+        var curr = document.getElementById('skipcount-'+id_skip);
+        var new_count = parseInt(curr.innerHTML)-response.length/2;
+        if ( new_count > 0 ) {
+          if ( where == 'b' ) {
+            var new_before = id_before;
+            var new_after = id_after-response.length/2;
+          } else {
+            var new_before = id_before+response.length/2;
+            var new_after = id_after;
+          }
+          curr.innerHTML = new_count;
+          if ( new_count <= 10 ) {
+  	    html = '<a href="javascript:M_expandSkipped('+new_before;
+            html += ','+new_after+',\'b\','+id_skip+');">Show</a>  ';
+          } else {
+            var html = '<a href="javascript:M_expandSkipped('+new_before;
+            html += ','+new_after+',\'t\', '+id_skip+');">Show 10 above</a> ';
+            html += '<a href="javascript:M_expandSkipped('+new_before;
+            html += ','+new_after+',\'b\','+id_skip+');">Show 10 below</a> ';
+          }
+          document.getElementById('skiplinks-'+(id_skip)).innerHTML = html;
+        } else {
+          tr.parentNode.removeChild(tr);
+        }
+        if (hookState.hookPos != -2 &&
+            M_isElementVisible(window, hookState.indicator)) {
+          hookState.gotoHook(-1);
+        }
+      }
+    }
+  }
+  
+  url = skipped_lines_url+id_before+'/'+id_after+'/'+where;
+  httpreq.open('GET', url, true);
+  httpreq.send('');
 }

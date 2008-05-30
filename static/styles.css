@@ -187,6 +187,14 @@ a:visited.noulv {
   font-size: 100%;
 }
 
+/* Message above a side-by-side view */
+.info {
+  width: 250px;
+  text-align: center;
+  padding-bottom: 0.6em;
+  color: #777;
+}
+
 /* Header sections for moved regions */
 .moved_header {
   white-space: nowrap;
@@ -450,14 +458,14 @@ table.history div.triangle-open {
   padding-left: 15px;
   width: 11px;
   height: 11px;
-  background: url('/static/softopentriangle.gif') no-repeat scroll center;
+/*background: url('/static/softopentriangle.gif') no-repeat scroll center;*/
 }
 
 table.history div.triangle-closed {
   padding-left: 15px;
   width: 11px;
   height: 11px;
-  background: url('/static/softclosedtriangle.gif') no-repeat scroll center;
+/*background: url('/static/softclosedtriangle.gif') no-repeat scroll center;*/
 }
 
 /* Make the diff background colors slightly lighter for the table.*/
@@ -548,4 +556,13 @@ span.visualtab {
   float: right;
   font-size: 80%;
   color: gray;
+}
+
+/* Issue description. */
+.description {
+  background-color: #e5ecf9;
+  margin-top: 0;
+  padding: 3px;
+  overflow: auto;
+  -moz-border-radius: 9px;
 }

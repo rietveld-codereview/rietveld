@@ -25,8 +25,12 @@ This requires Django 0.97.pre.
 import os
 import cgi
 import random
+import re
 import logging
 import binascii
+import datetime
+from xml.etree import ElementTree
+from cStringIO import StringIO
 
 # AppEngine imports
 from google.appengine.api import mail
@@ -51,6 +55,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
 import django.template
+from django.utils import simplejson
 
 # Local imports
 import models
@@ -155,7 +160,8 @@ class UploadForm(forms.Form):
 
 
 class EditForm(IssueBaseForm):
-  pass
+
+  closed = forms.BooleanField()
 
 
 class RepoForm(djangoforms.ModelForm):
@@ -196,9 +202,14 @@ class MiniPublishForm(forms.Form):
                             widget=forms.Textarea(attrs={'cols': 60}))
 
 
+FORM_CONTEXT_VALUES = [(x, "%d lines" % x) for x in models.CONTEXT_CHOICES]
+
+
 class SettingsForm(forms.Form):
 
   nickname = forms.CharField(max_length=30)
+  context = forms.IntegerField(widget=forms.Select(choices=FORM_CONTEXT_VALUES),
+                               label='Context')
 
 
 ### Helper functions ###
@@ -306,6 +317,34 @@ def issue_owner_required(func):
   return issue_owner_wrapper
 
 
+def patchset_required(func):
+  """Decorator that processes the patchset_id argument."""
+  @issue_required
+  def patchset_wrapper(request, patchset_id, *args, **kwds):
+    patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
+    if patchset is None:
+      return HttpResponseNotFound('No patch set exists with that id (%s)' %
+                                  patchset_id)
+    patchset.issue = request.issue
+    request.patchset = patchset
+    return func(request, *args, **kwds)
+  return patchset_wrapper
+
+
+def patch_required(func):
+  """Decorator that processes the patch_id argument."""
+  @patchset_required
+  def patch_wrapper(request, patch_id, *args, **kwds):
+    patch = models.Patch.get_by_id(int(patch_id), parent=request.patchset)
+    if patch is None:
+      return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
+                                  (request.patchset.key().id(), patch_id))
+    patch.patchset = request.patchset
+    request.patch = patch
+    return func(request, *args, **kwds)
+  return patch_wrapper
+
+
 ### Request handlers ###
 
 
@@ -341,7 +380,8 @@ def all(request):
       limit = max(1, min(limit, 100))
   else:
     limit = DEFAULT_LIMIT
-  query = db.GqlQuery('SELECT * FROM Issue ORDER BY modified DESC')
+  query = db.GqlQuery('SELECT * FROM Issue '
+                      'WHERE closed = FALSE ORDER BY modified DESC')
   # Fetch one more to see if there should be a 'next' link
   issues = query.fetch(limit+1, offset)
   more = bool(issues[limit:])
@@ -358,10 +398,12 @@ def all(request):
   newest = ''
   if offset > limit:
     newest = '/all?limit=%d' % limit
+
   return respond(request, 'all.html',
                  {'issues': issues, 'limit': limit,
                   'newest': newest, 'prev': prev, 'next': next,
-                  'first': offset+1, 'last': offset+len(issues)})
+                  'first': offset+1,
+                  'last': len(issues) > 1 and offset+len(issues) or None})
 
 
 @login_required
@@ -383,13 +425,22 @@ def mine(request):
       else:
         return HttpResponseNotFound('No user found with nickname %r' % name)
   my_issues = list(db.GqlQuery(
-      'SELECT * FROM Issue WHERE owner = :1 ORDER BY modified DESC',
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC',
       user))
   review_issues = list(db.GqlQuery(
-      'SELECT * FROM Issue WHERE reviewers = :1 ORDER BY modified DESC',
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
       user.email()))
+  closed_issues = list(db.GqlQuery(
+      'SELECT * FROM Issue '
+      'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
+      'ORDER BY modified DESC',
+      datetime.datetime.now() - datetime.timedelta(days=7), user))
   return respond(request, 'mine.html',
-                 {'my_issues': my_issues, 'review_issues': review_issues})
+                 {'my_issues': my_issues,
+                  'review_issues': review_issues,
+                  'closed_issues': closed_issues})
 
 
 @login_required
@@ -591,7 +642,6 @@ def _get_reviewers(form):
   return reviewers
 
 
-
 @issue_required
 def show(request, form=AddForm()):
   """/<issue> - Show an issue."""
@@ -601,6 +651,8 @@ def show(request, form=AddForm()):
   issue.comment_count = 0
   for patchset in patchsets:
     patchset.patches = list(patchset.patch_set.order('filename'))
+    for patch in patchset.patches:
+      patch.patchset = patchset  # Prevent getting these over and over
     patchset.n_comments = 0
     for patch in patchset.patches:
       patchset.n_comments += patch.num_comments
@@ -633,7 +685,8 @@ def edit(request):
     form = EditForm(initial={'subject': issue.subject,
                              'description': issue.description,
                              'base': base,
-                             'reviewers': ', '.join(issue.reviewers)})
+                             'reviewers': ', '.join(issue.reviewers),
+                             'closed': issue.closed})
     form.set_branch_choices(base)
     return respond(request, 'edit.html', {'issue': issue, 'form': form})
 
@@ -652,6 +705,7 @@ def edit(request):
 
   issue.subject = cleaned_data['subject']
   issue.description = cleaned_data['description']
+  issue.closed = cleaned_data['closed']
   base_changed = (issue.base != base)
   issue.base = base
   issue.reviewers = reviewers
@@ -704,75 +758,131 @@ def delete(request):
   return HttpResponseRedirect('/mine')
 
 
-@issue_required
-def download(request, patchset_id):
+@patchset_required
+def download(request):
   """/<issue>/download/<patchset> - Download a patch set."""
-  patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
-  if patchset is None:
-    return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                patchset_id)
-  return HttpResponse(patchset.data, content_type='text/plain')
+  return HttpResponse(request.patchset.data, content_type='text/plain')
 
 
-@issue_required
-def patch(request, patchset_id, patch_id):
+@patch_required
+def patch(request):
   """/<issue>/patch/<patchset>/<patch> - View a raw patch."""
-  patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
-  if patchset is None:
-    return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                patchset_id)
-  patch = models.Patch.get_by_id(int(patch_id), parent=patchset)
-  if patch is None:
-    return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
-                                (patchset_id, patch_id))
-  _add_next_prev(patchset, patch)
+  _add_next_prev(request.patchset, request.patch)
   return respond(request, 'patch.html',
-                 {'patch': patch,
-                  'patchset': patchset,
+                 {'patch': request.patch,
+                  'patchset': request.patchset,
                   'issue': request.issue})
 
 
-@issue_required
-def diff(request, patchset_id, patch_id):
-  """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff."""
-  patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
-  if patchset is None:
-    return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                patchset_id)
-  patchset.issue = request.issue
-  patch = models.Patch.get_by_id(int(patch_id), parent=patchset)
-  if patch is None:
-    return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
-                                (patchset_id, patch_id))
-  patch.patchset = patchset
+def _get_context_for_user(request):
+  """Returns the context setting for a user.
 
+  The value is validated against models.CONTEXT_CHOICES.
+  If an invalid value is found, the value is overwritten with
+  engine.DEFAULT_CONTEXT.
+  """
+  if request.user:
+    account = models.Account.get_account_for_user(request.user)
+    default_context = account.default_context
+  else:
+    default_context = engine.DEFAULT_CONTEXT
+  try:
+    context = int(request.GET.get("context", default_context))
+  except ValueError:
+    context = default_context
+  if context not in models.CONTEXT_CHOICES:
+    context = engine.DEFAULT_CONTEXT
+  return context
+
+
+@patch_required
+def diff(request):
+  """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff."""
+  patchset = request.patchset
+  patch = request.patch
+
+  context = _get_context_for_user(request)
+  rows = _get_diff_table_rows(request, patch, context)
+  if isinstance(rows, HttpResponseNotFound):
+    return rows
+
+  _add_next_prev(patchset, patch)
+  return respond(request, 'diff.html',
+                 {'issue': request.issue, 'patchset': patchset,
+                  'patch': patch, 'rows': rows,
+                  'context': context, 'context_values': models.CONTEXT_CHOICES})
+
+
+def _get_diff_table_rows(request, patch, context):
+  """Helper function that returns rendered rows for a patch"""
   chunks = patching.ParsePatch(patch.lines, patch.filename)
   if chunks is None:
     return HttpResponseNotFound('Can\'t parse the patch')
 
   try:
-    content = patch.get_content()
+    content = request.patch.get_content()
   except engine.FetchError, err:
     return HttpResponseNotFound(str(err))
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
-                                         chunks, patch))
+                                         chunks, patch,
+                                         context=context))
   if rows and rows[-1] is None:
     del rows[-1]
     # Get rid of content, which may be bad
     content.delete()
-    patch.content = None
-    patch.put()
+    request.patch.content = None
+    request.patch.put()
 
-  _add_next_prev(patchset, patch)
-  return respond(request, 'diff.html',
-                 {'issue': request.issue, 'patchset': patchset,
-                  'patch': patch, 'rows': rows})
+  return rows
 
 
-@issue_required
-def diff2(request, ps_left_id, ps_right_id, patch_id):
-  """/<issue>/diff2/... - View the delta between two different patch sets."""
+@patch_required
+def diff_skipped_lines(request, id_before, id_after, where):
+  """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines"""
+  patchset = request.patchset
+  patch = request.patch
+
+  # TODO: allow context = None?
+  rows = _get_diff_table_rows(request, patch, 10000)
+  if isinstance(rows, HttpResponseNotFound):
+    return rows
+  return _get_skipped_lines_response(rows, id_before, id_after, where)
+
+
+def _get_skipped_lines_response(rows, id_before, id_after, where):
+  """Helper function that creates a Response object for skipped lines"""
+  response_rows = []
+  id_before = int(id_before)
+  id_after = int(id_after)
+
+  if where == "b":
+    rows.reverse()
+
+  for row in rows:
+    m = re.match('^<tr( name="hook")? id="pair-(?P<rowcount>\d+)">', row)
+    if m:
+      curr_id = int(m.groupdict().get("rowcount"))
+      if curr_id < id_before or curr_id > id_after:
+        continue
+      if where  == "b" and curr_id <= id_after:
+        response_rows.append(row)
+      elif where == "t" and curr_id >= id_before:
+        response_rows.append(row)
+      if len(response_rows) >= 10:
+        break
+
+  # Create a usable structure for the JS part
+  response = []
+  dom = ElementTree.parse(StringIO('<div>%s</div>' % "".join(response_rows)))
+  for node in dom.getroot().getchildren():
+    content = "\n".join([ElementTree.tostring(x) for x in node.getchildren()])
+    response.append([node.items(), content])
+  return HttpResponse(simplejson.dumps(response))
+
+
+def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context):
+  """Helper function that returns objects for diff2 views"""
   ps_left = models.PatchSet.get_by_id(int(ps_left_id), parent=request.issue)
   if ps_left is None:
     return HttpResponseNotFound('No patch set exists with that id (%s)' %
@@ -803,17 +913,43 @@ def diff2(request, ps_left_id, ps_right_id, patch_id):
 
   rows = engine.RenderDiff2TableRows(request,
                                      new_content_left.lines, patch_left,
-                                     new_content_right.lines, patch_right)
+                                     new_content_right.lines, patch_right,
+                                     context=context)
   rows = list(rows)
   if rows and rows[-1] is None:
     del rows[-1]
 
-  _add_next_prev(ps_right, patch_right)
+  return dict(new_content_left=new_content_left, patch_left=patch_left,
+              new_conent_right=new_content_right, patch_right=patch_right,
+              ps_left=ps_left, ps_right=ps_right, rows=rows)
+
+
+@issue_required
+def diff2(request, ps_left_id, ps_right_id, patch_id):
+  """/<issue>/diff2/... - View the delta between two different patch sets."""
+  context = _get_context_for_user(request)
+  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context)
+  if isinstance(data, HttpResponseNotFound):
+    return data
+
+  _add_next_prev(data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
                  {'issue': request.issue,
-                  'ps_left': ps_left, 'patch_left': patch_left,
-                  'ps_right': ps_right, 'patch_right': patch_right,
-                  'rows': rows})
+                  'ps_left': data["ps_left"], 'patch_left': data["patch_left"],
+                  'ps_right': data["ps_right"],
+                  'patch_right': data["patch_right"], 'rows': data["rows"],
+                  'patch_id': patch_id,
+                  'context': context, 'context_values': models.CONTEXT_CHOICES})
+
+
+@issue_required
+def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
+                        id_before, id_after, where):
+  """/<issue>/diff2/... - Returns a fragment of skipped lines"""
+  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, 10000)
+  if isinstance(data, HttpResponseNotFound):
+    return data
+  return _get_skipped_lines_response(data["rows"], id_before, id_after, where)
 
 
 def _add_next_prev(patchset, patch):
@@ -936,6 +1072,7 @@ Sincerely,
   Your friendly code review daemon (%s).
 """
 
+
 @issue_required
 @login_required
 def publish(request):
@@ -947,7 +1084,7 @@ def publish(request):
     form_class = MiniPublishForm
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
-    if request.user != issue.owner and (request.user.email() 
+    if request.user != issue.owner and (request.user.email()
                                         not in issue.reviewers):
       reviewers.append(request.user.email())
     form = form_class(initial={'subject': issue.subject,
@@ -976,14 +1113,9 @@ def publish(request):
 
   # XXX Should request all drafts for this issue once, now we can.
   for patchset in issue.patchset_set.order('created'):
-##     ps_comments = list(models.Comment.gql(
-##         'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-##         patchset, request.user))
-    # XXX Somehow the index broke, do without it
-    ps_comments = [c for c in
-                   models.Comment.gql('WHERE ANCESTOR IS :1', patchset)
-                   if c.draft and c.author == request.user]
-    # XXX End
+    ps_comments = list(models.Comment.gql(
+        'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
+        patchset, request.user))
     if ps_comments:
       patches = dict((p.key(), p) for p in patchset.patch_set)
       for p in patches.itervalues():
@@ -1093,6 +1225,9 @@ def _get_draft_details(request, comments):
   return '\n'.join(output)
 
 
+### Repositories and Branches ###
+
+
 def repos(request):
   """/repos - Show the list of known Subversion repositories."""
   # Clean up garbage created by buggy edits
@@ -1139,6 +1274,7 @@ BRANCHES = [
     ('branch', 'py3k', 'branches/py3k/'),
     ]
 
+
 @admin_required
 def repo_init(request):
   """/repo_init - Initialze the list of known Subversion repositories."""
@@ -1159,6 +1295,7 @@ def repo_init(request):
                          owner=request.user)
       br.put()
   return HttpResponseRedirect('/repos')
+
 
 @login_required
 def branch_new(request, repo_id):
@@ -1226,12 +1363,15 @@ def branch_delete(request, branch_id):
 
 ### User Profiles ###
 
+
 @login_required
 def settings(request):
   account = models.Account.get_account_for_user(request.user)
   if request.method != 'POST':
     nickname = account.nickname
-    form = SettingsForm(initial={'nickname': nickname})
+    default_context = account.default_context
+    form = SettingsForm(initial={'nickname': nickname,
+                                 'context': default_context})
     return respond(request, 'settings.html', {'form': form})
   form = SettingsForm(request.POST)
   if form.is_valid():
@@ -1248,6 +1388,7 @@ def settings(request):
         form.errors['nickname'] = ['This nickname is already in use.']
       else:
         account.nickname = nickname
+        account.default_context = form.cleaned_data.get("context")
         account.put()
   if not form.is_valid():
     return respond(request, 'settings.html', {'form': form})
