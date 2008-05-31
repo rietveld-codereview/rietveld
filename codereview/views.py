@@ -1087,18 +1087,20 @@ def publish(request):
     if request.user != issue.owner and (request.user.email()
                                         not in issue.reviewers):
       reviewers.append(request.user.email())
+    tbd, comments = _get_draft_comments(request, issue, True)
+    preview = _get_draft_details(request, comments)
     form = form_class(initial={'subject': issue.subject,
                                'reviewers': ', '.join(reviewers),
                                'send_mail': True,
                                })
-    return respond(request, 'publish.html', {'form': form, 'issue': issue})
+    return respond(request, 'publish.html', {'form': form, 'issue': issue,
+                                             'preview' : preview})
 
   form = form_class(request.POST)
   if form.is_valid():
     reviewers = _get_reviewers(form)
   if not form.is_valid():
     return respond(request, 'publish.html',  {'form': form, 'issue': issue})
-  tbd = []  # List of things to put() after all is said and done
   if request.user == issue.owner:
     subject = form.cleaned_data['subject']
     issue.subject = subject
@@ -1106,32 +1108,10 @@ def publish(request):
   else:
     subject = issue.subject
     issue.reviewers = reviewers
-  tbd.append(issue)  # To update the last modified time
   message = form.cleaned_data['message'].replace('\r\n', '\n')
   send_mail = form.cleaned_data['send_mail']
-  comments = []
-
-  # XXX Should request all drafts for this issue once, now we can.
-  for patchset in issue.patchset_set.order('created'):
-    ps_comments = list(models.Comment.gql(
-        'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-        patchset, request.user))
-    if ps_comments:
-      patches = dict((p.key(), p) for p in patchset.patch_set)
-      for p in patches.itervalues():
-        p.patchset = patchset
-      for c in ps_comments:
-        c.draft = False
-        # XXX Using internal knowledge about db package: the key for
-        # reference property foo is stored as _foo.
-        pkey = getattr(c, '_patch', None)
-        if pkey in patches:
-          patch = patches[pkey]
-          c.patch = patch
-      tbd.append(ps_comments)
-      ps_comments.sort(key=lambda c: (c.patch.filename, not c.left,
-                                      c.lineno, c.date))
-      comments += ps_comments
+  tbd, comments = _get_draft_comments(request, issue)
+  tbd.append(issue)  # To update the last modified time
 
   if comments:
     logging.warn('Publishing %d comments', len(comments))
@@ -1183,6 +1163,47 @@ def _encode_safely(s):
   if isinstance(s, unicode):
     s = s.encode('utf-8')
   return s
+
+
+def _get_draft_comments(request, issue, preview=False):
+  """Helper to return objects to put() and a list of draft comments.
+
+  If preview is True, the list of objects to put() is empty to avoid changes
+  to the datastore.
+
+  Args:
+    request: Django Request object.
+    issue: Issue instance.
+    preview: Preview flag (default: False).
+
+  Returns:
+    2-tuple (put_objects, comments).
+  """
+  comments = []
+  tbd = []
+  # XXX Should request all drafts for this issue once, now we can.
+  for patchset in issue.patchset_set.order('created'):
+    ps_comments = list(models.Comment.gql(
+        'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
+        patchset, request.user))
+    if ps_comments:
+      patches = dict((p.key(), p) for p in patchset.patch_set)
+      for p in patches.itervalues():
+        p.patchset = patchset
+      for c in ps_comments:
+        c.draft = False
+        # XXX Using internal knowledge about db package: the key for
+        # reference property foo is stored as _foo.
+        pkey = getattr(c, '_patch', None)
+        if pkey in patches:
+          patch = patches[pkey]
+          c.patch = patch
+      if not preview:
+        tbd.append(ps_comments)
+      ps_comments.sort(key=lambda c: (c.patch.filename, not c.left,
+                                      c.lineno, c.date))
+      comments += ps_comments
+  return tbd, comments
 
 
 def _get_draft_details(request, comments):

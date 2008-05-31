@@ -2,17 +2,32 @@
 {%block body%}
 <h2>Publish + Mail Draft Comments</h2>
 
-<form action="{%url codereview.views.publish%}" method="post">
-<table>
-{%ifnotequal user issue.owner%}
-<tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
-{%endifnotequal%}
-{{form}}
-<tr>
-  <td><input type="submit" value="Publish All My Drafts"></td>
-  <td><i>The message will be included in the email sent (if any).</i></td>
-</tr>
-</table>
-</form>
+<div style="float: left; padding-right: 1em;">
+  <form action="{%url codereview.views.publish%}" method="post">
+  <table>
+  {%ifnotequal user issue.owner%}
+  <tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
+  {%endifnotequal%}
+  {{form}}
+  <tr>
+    <td></td>
+    <td><i>The message will be included in the email sent (if any).</i></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>
+      <input type="submit" value="Publish All My Drafts">
+     </td>
+  </tr>
+  </table>
+  </form>
+</div>
+{%if preview%}
+<div style="float: left;">
+  <i>Unpublished Drafts:</i>
+  <pre class="description">{{preview|wordwrap:"80"|urlize}}</pre>
+</div>
+{%endif%}
+<div style="clear:both"></div>
 
 {%endblock%}
