@@ -8,8 +8,6 @@ Issues
 
 Star issues (per user)
 Archive issues (that's per user rather than per issue)
-Possibly deprecate the upload form (and repositories) and do it all
-   with upload.py?
 
 Patch Sets
 ----------
@@ -27,6 +25,7 @@ Searching, Organizing
 ---------------------
 
 View all open issues by base, or by repository, or by user
+View all closed issues (issue 15 in the tracker)
 
 Commenting
 ----------
@@ -38,21 +37,19 @@ Support inline comments in patch (unified diff) view
 Mail
 ----
 
-Show links to draft comments on Publish page
 Use Django templates for mail bodies?
 
 Diffs and Patches
 -----------------
 
+Deprecate the upload form (and repositories) and do it all with upload.py
 Improve UI for selecting patch set deltas; handle missing files better
 Colorize unified diffs
 Record revision and show in UI; indicate action (add/edit/delete)
 Handle propsets?
 Handle binary files?!
-Option to change threshold for suppressing long blocks of equal lines;
-   and/or a JS UI to fetch the missing lines somehow
 Add line length option
-Support more diff formats (e.g. bzr; Thomas Wouters is working on this)
+Support more diff formats
 Need a more powerful way to specify the URL for finding a revision
 Need to allow upload.py to upload the diff *and* the file
 
@@ -60,7 +57,8 @@ User Experience
 ---------------
 
 Make Edit Issue show the form inline instead of opening a new page?
-Support more of the Mondrian functionality already in script.js, e.g. '?'
+Support more of the Mondrian functionality already in script.js,
+  e.g. j / k with arrow to select an issue
 Prettify UI (ask John Skidgel for help?)
 Fields "SVN Base" and "Base" have hard-to-guess names
 Better UI for adding branches?  (Low priority now we have upload.py)
@@ -69,4 +67,3 @@ Software Engineering
 --------------------
 
 Unittests
-Docstrings (module, class and file)
