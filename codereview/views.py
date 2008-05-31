@@ -647,6 +647,14 @@ def show(request, form=AddForm()):
   """/<issue> - Show an issue."""
   issue = request.issue
   patchsets = list(issue.patchset_set.order('created'))
+  if request.user:
+    drafts = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = TRUE'
+                                     '  AND author = :2',
+                                     issue, request.user))
+  else:
+    drafts = []
+  comments = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE',
+                                     issue))
   issue.draft_count = 0
   issue.comment_count = 0
   for patchset in patchsets:
@@ -655,11 +663,15 @@ def show(request, form=AddForm()):
       patch.patchset = patchset  # Prevent getting these over and over
     patchset.n_comments = 0
     for patch in patchset.patches:
+      pkey = patch.key()
+      patch._num_comments = sum(c.parent_key() == pkey for c in comments)
       patchset.n_comments += patch.num_comments
     issue.comment_count += patchset.n_comments
     patchset.n_drafts = 0
     if request.user:
       for patch in patchset.patches:
+        pkey = patch.key()
+        patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
         patchset.n_drafts += patch.num_drafts
       issue.draft_count += patchset.n_drafts
   last_patchset = first_patch = None
