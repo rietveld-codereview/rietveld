@@ -935,11 +935,15 @@ def diff2(request, ps_left_id, ps_right_id, patch_id):
   _add_next_prev(data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
                  {'issue': request.issue,
-                  'ps_left': data["ps_left"], 'patch_left': data["patch_left"],
+                  'ps_left': data["ps_left"],
+                  'patch_left': data["patch_left"],
                   'ps_right': data["ps_right"],
-                  'patch_right': data["patch_right"], 'rows': data["rows"],
+                  'patch_right': data["patch_right"],
+                  'rows': data["rows"],
                   'patch_id': patch_id,
-                  'context': context, 'context_values': models.CONTEXT_CHOICES})
+                  'context': context,
+                  'context_values': models.CONTEXT_CHOICES,
+                  })
 
 
 @issue_required
@@ -996,10 +1000,12 @@ def _inline_draft(request):
   issue_id = int(request.POST['issue'])
   issue = models.Issue.get_by_id(issue_id)
   assert issue  # XXX
-  patchset_id = int(request.POST.get('patchset') or request.POST[side == 'a' and 'ps_left' or 'ps_right'])
+  patchset_id = int(request.POST.get('patchset') or
+                    request.POST[side == 'a' and 'ps_left' or 'ps_right'])
   patchset = models.PatchSet.get_by_id(int(patchset_id), parent=issue)
   assert patchset  # XXX
-  patch_id = int(request.POST.get('patch') or request.POST[side == 'a' and 'patch_left' or 'patch_right'])
+  patch_id = int(request.POST.get('patch') or
+                 request.POST[side == 'a' and 'patch_left' or 'patch_right'])
   patch = models.Patch.get_by_id(int(patch_id), parent=patchset)
   assert patch  # XXX
   text = request.POST.get('text')
