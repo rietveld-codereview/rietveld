@@ -361,6 +361,9 @@ parser.add_option("-m", "--message", action="store", dest="message",
 parser.add_option("-i", "--issue", type="int", action="store",
                   metavar="ISSUE", default=None,
                   help="Issue number to which to add. Defaults to new issue.")
+parser.add_option("-y", "--assume_yes", action="store_true",
+                  dest="assume_yes", default=False,
+                  help="Assume that the answer to yes/no questions is 'yes'.")
 
 
 def GetRpcServer(options):
@@ -496,7 +499,8 @@ def RealMain(argv):
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
   base = GuessBase()
-  CheckForUnknownFiles()
+  if not options.assume_yes:
+    CheckForUnknownFiles()
   data = RunShell("svn diff", args)
   count = 0
   for line in data.splitlines():
