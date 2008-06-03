@@ -100,16 +100,7 @@ def FetchBase(base, patch):
     msg = 'Error fetching %s: HTTP status %s' % (url, result.status_code)
     logging.error(msg)
     raise FetchError(msg)
-  lines = result.content.splitlines(True)
-  # TODO(guido): Handle non-ASCII text better.
-  for i, line in enumerate(lines):
-    try:
-      line.decode('ascii')
-    except UnicodeError, err:
-      logging.warn('Line %d: %r is not ASCII', i+1, line)
-      uni = line.decode('ascii', 'replace')
-      lines[i] = uni.encode('ascii', 'replace')
-  return models.Content(text=_ToText(lines), parent=patch)
+  return models.Content(text=_ToText([result.content]), parent=patch)
 
 
 def _MakeUrl(base, filename, rev):
@@ -696,4 +687,8 @@ def _ToText(lines):
   Returns:
     A db.Text instance.
   """
-  return db.Text(''.join(lines), encoding='utf-8')
+  text = ''.join(lines)
+  try:
+    return db.Text(text, encoding='utf-8')
+  except UnicodeDecodeError:
+    return db.Text(text, encoding='latin-1')
