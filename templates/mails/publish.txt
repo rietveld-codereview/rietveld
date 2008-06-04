@@ -1,0 +1,4 @@
+{%extends "mails/base.txt"%}
+
+{%block content%}New code review comments by {{my_nickname}} have been published.
+Please go to {{url}} to read them.{%endblock%}

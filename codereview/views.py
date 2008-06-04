@@ -1071,26 +1071,6 @@ def _inline_draft(request):
                              'side': side})
 
 
-PUBLISH_MAIL_TEMPLATE = """Dear %s,
-
-New code review comments by %s have been published.
-Please go to %s to read them.
-
-Message:
-%s
-
-Details:
-%s
-
-Issue Description:
-%s
-
-Sincerely,
-
-  Your friendly code review daemon (%s).
-"""
-
-
 @issue_required
 @login_required
 def publish(request):
@@ -1120,56 +1100,18 @@ def publish(request):
   if not form.is_valid():
     return respond(request, 'publish.html',  {'form': form, 'issue': issue})
   if request.user == issue.owner:
-    subject = form.cleaned_data['subject']
-    issue.subject = subject
-    issue.reviewers = reviewers
-  else:
-    subject = issue.subject
-    issue.reviewers = reviewers
-  message = form.cleaned_data['message'].replace('\r\n', '\n')
-  send_mail = form.cleaned_data['send_mail']
+    issue.subject = form.cleaned_data['subject']
+  issue.reviewers = reviewers
   tbd, comments = _get_draft_comments(request, issue)
-  tbd.append(issue)  # To update the last modified time
+  tbd.append(issue)
 
   if comments:
     logging.warn('Publishing %d comments', len(comments))
-  # Decide who should receive mail
-  my_email = db.Email(request.user.email())
-  addressees = [db.Email(issue.owner.email())] + issue.reviewers
-  if my_email in addressees:
-    everyone = addressees[:]
-    if len(addressees) > 1:  # Keep it if sending only to yourself
-      addressees.remove(my_email)
-  else:
-    everyone = addressees
-  details = _get_draft_details(request, comments)
-  text = ((message.strip() + '\n\n' + details.strip())).strip()
-  msg = models.Message(issue=issue,
-                       subject=issue.subject,
-                       sender=my_email,
-                       recipients=everyone,
-                       text=db.Text(text),
-                       parent=issue)
+  msg = _make_message('mails/publish.txt', request, issue,
+                      form.cleaned_data['message'],
+                      comments, 
+                      form.cleaned_data['send_mail'])
   tbd.append(msg)
-
-  if send_mail:
-    url = request.build_absolute_uri('/%s' % issue.key().id())
-    addressees_nicknames = ", ".join(library.nickname(addressee, True)
-                                     for addressee in addressees)
-    my_nickname = library.nickname(request.user, True)
-    addressees = ', '.join(addressees)
-    description = (issue.description or '').replace('\r\n', '\n')
-    home = request.build_absolute_uri('/')
-    body = PUBLISH_MAIL_TEMPLATE % (addressees_nicknames, my_nickname,
-                                    url, message,
-                                    details, description, home)
-    logging.warn('Mail: to=%s; cc=%s', addressees, my_email)
-    mail.send_mail(sender=SENDER,
-                   to=_encode_safely(addressees),
-                   subject=_encode_safely('Re: ' + subject),
-                   body=_encode_safely(body),
-                   cc=_encode_safely(my_email),
-                   reply_to=_encode_safely(', '.join(everyone)))
 
   for obj in tbd:
     db.put(obj)
@@ -1262,6 +1204,57 @@ def _get_draft_details(request, comments):
   if modified_patches:
     db.put(modified_patches)
   return '\n'.join(output)
+
+
+def _make_message(template, request, issue, message, comments=None,
+                  send_mail=False, context=None):
+  """Helper to create a Message instance and optionally send an email."""
+  if context is None:
+    context = {}
+  # Decide who should receive mail
+  my_email = db.Email(request.user.email())
+  addressees = [db.Email(issue.owner.email())] + issue.reviewers
+  if my_email in addressees:
+    everyone = addressees[:]
+    if len(addressees) > 1:  # Keep it if sending only to yourself
+      addressees.remove(my_email)
+  else:
+    everyone = addressees
+  if comments:
+    details = _get_draft_details(request, comments)
+  else:
+    details = ''
+  message = message.replace('\r\n', '\n')
+  text = ((message.strip() + '\n\n' + details.strip())).strip()
+  msg = models.Message(issue=issue,
+                       subject=issue.subject,
+                       sender=my_email,
+                       recipients=everyone,
+                       text=db.Text(text),
+                       parent=issue)
+
+  if send_mail:
+    url = request.build_absolute_uri('/%s' % issue.key().id())
+    addressees_nicknames = ', '.join(library.nickname(addressee, True)
+                                     for addressee in addressees)
+    my_nickname = library.nickname(request.user, True)
+    addressees = ', '.join(addressees)
+    description = (issue.description or '').replace('\r\n', '\n')
+    home = request.build_absolute_uri('/')
+    context.update({'nicknames': addressees_nicknames,
+                    'my_nickname': my_nickname, 'url': url,
+                    'message': message, 'details': details,
+                    'description': description, 'home': home})
+    body = django.template.loader.render_to_string(template, context)
+    logging.warn('Mail: to=%s; cc=%s', addressees, my_email)
+    mail.send_mail(sender=SENDER,
+                   to=_encode_safely(addressees),
+                   subject=_encode_safely('Re: ' + issue.subject),
+                   body=_encode_safely(body),
+                   cc=_encode_safely(my_email),
+                   reply_to=_encode_safely(', '.join(everyone)))
+
+  return msg
 
 
 ### Repositories and Branches ###

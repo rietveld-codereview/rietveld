@@ -1,0 +1,16 @@
+{%autoescape off%}Dear {{nicknames}},
+
+{%block content%}{%endblock%}{%if message%}
+
+Message:
+{{message|wordwrap:"80"}}{%endif%}{%if details%}
+
+Details:
+{{details|wordwrap:"80"}}{%endif%}{%if description%}
+
+Issue Description:
+{{description|wordwrap:"80"}}{%endif%}
+
+Sincerely,
+
+  Your friendly code review daemon ({{home}}).{%endautoescape%}
