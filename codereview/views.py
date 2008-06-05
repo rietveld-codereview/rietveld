@@ -1414,6 +1414,9 @@ def settings(request):
       form.errors['nickname'] = ['Your nickname cannot contain "@".']
     elif ',' in nickname:
       form.errors['nickname'] = ['Your nickname cannot contain ",".']
+    elif nickname == 'me':
+      form.errors['nickname'] = ['Of course, you are what you are. '
+                                 'But \'me\' is for everyone.']
     else:
       accounts = models.Account.get_accounts_for_nickname(nickname)
       if nickname != account.nickname and accounts:
