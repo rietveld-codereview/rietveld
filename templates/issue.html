@@ -14,11 +14,11 @@ Publish+Mail Comments</a> ('m') to let others view them.
 <div style="float: left; padding-right: 1em">
 <div>
   <i>Created:</i> {{issue.created|timesince}} ago by
-  <b>{{issue.owner|nickname}}</b>;
+  <b>{{issue.owner|show_user}}</b>;
   <i>Last updated:</i> {{issue.modified|timesince}} ago
 </div>
 <div><i>SVN Base:</i> {{issue.base}}</div>
-<div><i>Reviewers:</i> {{issue.reviewers|nicknames}}</div>
+<div><i>Reviewers:</i> {{issue.reviewers|show_users}}</div>
 <div>
   {%ifequal issue.owner user %}
   <a class="novisit" href="{%url codereview.views.edit issue.key.id%}">Edit

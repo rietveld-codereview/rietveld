@@ -306,6 +306,19 @@ def issue_required(func):
   return issue_wrapper
 
 
+def user_key_required(func):
+  """Decorator that processes the user handler argument."""
+  def user_key_wrapper(request, user_key, *args, **kwds):
+    if '%40' in user_key or '@' in user_key:
+      email = user_key.replace('%40', '@')
+      request.user_to_show = users.User(email)
+    else:
+      accounts = models.Account.get_accounts_for_nickname(user_key)
+      request.user_to_show = accounts[0].user
+    return func(request, *args, **kwds)
+  return user_key_wrapper
+
+
 def issue_owner_required(func):
   """Decorator that processes the issue_id argument and insists you own it."""
   @issue_required
@@ -405,25 +418,21 @@ def all(request):
                   'first': offset+1,
                   'last': len(issues) > 1 and offset+len(issues) or None})
 
-
 @login_required
 def mine(request):
   """/mine - Show a list of issues created by the current user."""
-  user = request.user
-  if 'user' in request.GET:
-    name = request.GET['user']
-    if '@' in name:
-      account = models.Account.get_account_for_email(name)
-      if account is not None:
-        user = account.user
-      else:
-        user = users.User(email=name)
-    elif name != 'me':
-      accounts = models.Account.get_accounts_for_nickname(name)
-      if accounts:
-        user = accounts[0].user
-      else:
-        return HttpResponseNotFound('No user found with nickname %r' % name)
+  request.user_to_show = request.user
+  return _show_user(request)
+
+
+@user_key_required
+def show_user(request):
+  """/user - Show the user's dashboard"""
+  return _show_user(request)
+
+
+def _show_user(request):
+  user = request.user_to_show
   my_issues = list(db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC',
@@ -437,8 +446,9 @@ def mine(request):
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
       'ORDER BY modified DESC',
       datetime.datetime.now() - datetime.timedelta(days=7), user))
-  return respond(request, 'mine.html',
-                 {'my_issues': my_issues,
+  return respond(request, 'user.html',
+                 {'email':user.email(),
+                  'my_issues': my_issues,
                   'review_issues': review_issues,
                   'closed_issues': closed_issues})
 

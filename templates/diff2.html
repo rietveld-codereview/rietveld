@@ -45,11 +45,11 @@ login_warned = false;
   ('u')
 </div>
 <div>
-  <i>Created:</i> {{issue.created|timesince}} ago by <b>{{issue.owner|nickname}}</b>;
+  <i>Created:</i> {{issue.created|timesince}} ago by <b>{{issue.owner|show_user}}</b>;
   <i>Last updated:</i> {{issue.modified|timesince}} ago
 </div>
 <div><i>SVN Base:</i> {{issue.base}}</div>
-<div><i>Reviewers:</i> {{issue.reviewers|nicknames}}</div>
+<div><i>Reviewers:</i> {{issue.reviewers|show_users}}</div>
 <div><b>Left Patch Set: {%firstof ps_left.message%}</b></div>
 <div><a href="{%url codereview.views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}">View regular side-by-side diff</a></div>
 {%if ps_left.url%}
@@ -58,7 +58,7 @@ login_warned = false;
 <div>
   <i>Created:</i> {{ps_left.created|timesince}} ago
   {%ifnotequal ps_left.owner issue.owner%}
-  by <b>{{ps_left.owner|nickname}}</b>{%endifnotequal%}
+  by <b>{{ps_left.owner|show_user}}</b>{%endifnotequal%}
 </div>
 <div><b>Right Patch Set: {%firstof ps_right.message%}</b></div>
 <div><a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}">View regular side-by-side diff</a></div>
@@ -68,7 +68,7 @@ login_warned = false;
 <div>
   <i>Created:</i> {{ps_right.created|timesince}} ago
   {%ifnotequal ps_right.owner issue.owner%}
-  by <b>{{ps_right.owner|nickname}}</b>{%endifnotequal%}
+  by <b>{{ps_right.owner|show_user}}</b>{%endifnotequal%}
 </div>
 
 <p>

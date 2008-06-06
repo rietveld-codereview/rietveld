@@ -1,0 +1,12 @@
+<tr {%if issue.num_drafts%}style="color:red"{%endif%}>
+  <td align="right"><div class="subject">{{issue.key.id}}</td>
+  <td><div class="subject">
+  <a class="noul" href="{%url codereview.views.show issue.key.id%}">
+    {{issue.subject}}</a>
+  </div></td>
+  <td><div class="users">{{issue.owner|show_user}}</div></td>
+  <td><div class="users">{{issue.reviewers|show_users}}</div></td>
+  <td align="center">{%firstof issue.num_comments%}</td>
+  <td align="center"><b>{%firstof issue.num_drafts%}</b></td>
+  <td><div class="date">{{issue.modified|timesince}}</div></td>
+</tr>
