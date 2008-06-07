@@ -29,6 +29,7 @@ import re
 import logging
 import binascii
 import datetime
+import urllib
 from xml.etree import ElementTree
 from cStringIO import StringIO
 
@@ -309,9 +310,9 @@ def issue_required(func):
 def user_key_required(func):
   """Decorator that processes the user handler argument."""
   def user_key_wrapper(request, user_key, *args, **kwds):
-    if '%40' in user_key or '@' in user_key:
-      email = user_key.replace('%40', '@')
-      request.user_to_show = users.User(email)
+    user_key = urllib.unquote(user_key)
+    if '@' in user_key:
+      request.user_to_show = users.User(user_key)
     else:
       accounts = models.Account.get_accounts_for_nickname(user_key)
       request.user_to_show = accounts[0].user
