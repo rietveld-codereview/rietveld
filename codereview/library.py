@@ -52,6 +52,8 @@ def nicknames(email_list, arg=None):
 def show_user(email, arg=None, autoescape=None):
   """Render a link to the user's dashboard, with text being the nickname."""
   # TODO(jiayao): Here seems to be a hotspot of queries, use memcache?
+  if isinstance(email, users.User):
+    email = email.email()
   nick = nickname(email, arg)
   if nick == 'me':
     return nick  
