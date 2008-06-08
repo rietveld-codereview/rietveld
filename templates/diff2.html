@@ -15,6 +15,7 @@ login_warned = false;
 // -->
 </script>
 
+{%if user%}
 <!-- Form used by in-line comment JS; XXX filled in by JS code -->
 <form id="dainlineform" style="display: none;"
       action="{%url codereview.views.inline_draft%}" method="post">
@@ -36,6 +37,7 @@ login_warned = false;
   <div class="comment-border" style="padding: 0pt;"></div>
 </form>
 <a id="resizer" style="display:none;cursor:pointer"><img src="/static/zippyplus.gif"></a>
+{%endif%}
 
 <h2>Delta Between Two Patch Sets: {{patch_right.filename}}</h2>
 
