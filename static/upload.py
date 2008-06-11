@@ -501,7 +501,7 @@ def RealMain(argv):
   base = GuessBase()
   if not options.assume_yes:
     CheckForUnknownFiles()
-  data = RunShell("svn diff", args)
+  data = RunShell("svn diff --diff-cmd=diff", args)
   count = 0
   for line in data.splitlines():
     if line.startswith("Index:"):
