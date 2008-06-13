@@ -59,7 +59,7 @@ User Experience
 Make Edit Issue show the form inline instead of opening a new page?
 Support more of the Mondrian functionality already in script.js,
   e.g. j / k with arrow to select an issue
-Prettify UI (ask John Skidgel for help?)
+Prettify UI
 Fields "SVN Base" and "Base" have hard-to-guess names
 Better UI for adding branches?  (Low priority now we have upload.py)
 
