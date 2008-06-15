@@ -754,11 +754,17 @@ function M_assignToSave_(form, cid, lineno, side) {
  */
 function M_createInlineComment(lineno, side) {
   // The first field of the suffix is typically the cid, but we choose '-1'
-  // here since the backend hasn't assigned the new comment a cid yet.
+  // here since the backend has not assigned the new comment a cid yet.
   var suffix = "-1-" + lineno + "-" + side;
   var form = document.getElementById("comment-form-" + suffix);
   if (!form) {
     form = document.getElementById("dainlineform").cloneNode(true);
+    if (typeof form.save == "undefined") {
+      // For Opera form elements of the cloned form aren't accessible
+      // by name but using innerHTML works.
+      form = document.createElement("form");
+      form.innerHTML= document.getElementById("dainlineform").innerHTML;
+    }
     form.name = form.id = "comment-form-" + suffix;
     M_assignToCancel_(form, M_removeTempInlineComment);
     M_createResizer_(form, suffix);
