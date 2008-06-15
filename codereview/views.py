@@ -1013,8 +1013,10 @@ def inline_draft(request):
 def _inline_draft(request):
   """Helper to submit an in-line draft comment."""
   # TODO(guido): turn asserts marked with XXX into errors
-  # Don't use @login_required, since the JS doesn't understand redirects
-  assert request.user  # XXX
+  # Don't use @login_required, since the JS doesn't understand redirects.
+  if not request.user:
+    # Don't log this, spammers have started abusing this.
+    return HttpResponse('Not logged in')
   snapshot = request.POST.get('snapshot')
   assert snapshot in ('old', 'new'), repr(snapshot)
   left = (snapshot == 'old')
