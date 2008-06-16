@@ -315,6 +315,9 @@ def user_key_required(func):
       request.user_to_show = users.User(user_key)
     else:
       accounts = models.Account.get_accounts_for_nickname(user_key)
+      if not accounts:
+        return HttpResponseNotFound('No user found with that key (%s)' %
+                                    user_key)
       request.user_to_show = accounts[0].user
     return func(request, *args, **kwds)
   return user_key_wrapper
