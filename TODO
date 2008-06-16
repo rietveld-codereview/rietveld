@@ -24,7 +24,7 @@ Automatically add Repository entries when a new project uploads stuff?
 Searching, Organizing
 ---------------------
 
-View all open issues by base, or by repository, or by user
+View all open issues by base, or by repository
 View all closed issues (issue 15 in the tracker)
 
 Commenting
@@ -34,23 +34,18 @@ Add stars
 Add non-inline comments per file, per patchset, per issue
 Support inline comments in patch (unified diff) view
 
-Mail
-----
-
-Use Django templates for mail bodies?
-
 Diffs and Patches
 -----------------
 
 Deprecate the upload form (and repositories) and do it all with upload.py
 Improve UI for selecting patch set deltas; handle missing files better
-Colorize unified diffs
+Syntax colorization
 Record revision and show in UI; indicate action (add/edit/delete)
 Handle propsets?
 Handle binary files?!
 Add line length option
 Support more diff formats
-Need a more powerful way to specify the URL for finding a revision
+Need a more powerful way to specify the URL for finding a revision (?)
 Need to allow upload.py to upload the diff *and* the file
 
 User Experience
