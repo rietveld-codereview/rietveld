@@ -763,7 +763,7 @@ function M_createInlineComment(lineno, side) {
       // For Opera form elements of the cloned form aren't accessible
       // by name but using innerHTML works.
       form = document.createElement("form");
-      form.innerHTML= document.getElementById("dainlineform").innerHTML;
+      form.innerHTML = document.getElementById("dainlineform").innerHTML;
     }
     form.name = form.id = "comment-form-" + suffix;
     M_assignToCancel_(form, M_removeTempInlineComment);
