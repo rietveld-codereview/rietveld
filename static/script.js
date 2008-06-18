@@ -610,6 +610,36 @@ function M_replyToComment(author, written_time, ccs, cid, prefix, opt_lineno,
   form.text.focus();
 }
 
+
+/**
+/* TODO(andi): docstring
+ */
+function M_replyToMessage(message_id, written_time, author) {
+  var form = document.getElementById('message-reply-form');
+  form = form.cloneNode(true);
+  if (typeof form.message == 'undefined') {
+    var form_template = document.getElementById('message-reply-form');
+    form = document.createElement('form');
+    form.setAttribute('method', 'POST');
+    form.setAttribute('action', form_template.getAttribute('action'));
+    form.innerHTML = form_template.innerHTML;
+  }
+  container = document.getElementById('message-reply-'+message_id);
+  container.appendChild(form);
+  container.style.display = '';
+  form.discard.onclick = function () {
+    document.getElementById('message-reply-href-'+message_id).style.display = "";
+    document.getElementById('message-reply-'+message_id).innerHTML = "";
+  }
+  form.message.value = "On " + written_time + ", " + author + " wrote:\n";
+  var divs = document.getElementsByName("cl-message-" + message_id);
+  M_setValueFromDivs(divs, form.message);
+  form.message.value += "\n";
+  form.message.focus();
+  document.getElementById('message-reply-href-'+message_id).style.display = "none";
+}
+
+
 /**
  * Edits a non-inline draft comment.
  * @param {Integer} cid The number of the comment to be edited
@@ -2440,4 +2470,44 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
   url = skipped_lines_url+id_before+'/'+id_after+'/'+where;
   httpreq.open('GET', url, true);
   httpreq.send('');
+}
+
+/**
+ * TODO(jiayao,andi): docstring
+ */
+function M_getElementPosition(obj) {
+  var curleft = curtop = 0;
+  if (obj.offsetParent) {
+    do {
+      curleft += obj.offsetLeft;
+      curtop += obj.offsetTop;
+    } while (obj = obj.offsetParent);
+  }
+  return [curleft,curtop];
+}
+/**
+ * TODO(jiayao,andi): docstring
+ */
+function M_showPopUp(obj, id) {
+  var popup = document.getElementById(id);
+  var pos = M_getElementPosition(obj);
+  popup.style.left = pos[0]+'px';
+  popup.style.top = pos[1]+20+'px';
+  popup.style.visibility = 'visible';
+  obj.onmouseout = function() {
+    popup.style.visibility = 'hidden';
+    obj.onmouseout = null;
+  }
+}
+
+/**
+ * TODO(andi): docstring
+ */
+function M_jumpToPatch(select, issue, patchset, unified) {
+  if ( unified ) {
+    part = 'patch'; 
+  } else {
+    part = 'diff';
+  }
+  document.location.href = '/'+issue+'/'+part+'/'+patchset+'/'+select.value;
 }

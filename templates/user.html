@@ -1,13 +1,13 @@
-{%extends "base.html"%}
+{%extends "issue_base.html"%}
 {%block body%}
 <h2>Issues for {{email|nickname}}</h2>
-
+<div class="issue-list">
 <table id="queues">
 
-<tr><td colspan="7"><h3>Issues Created by {{email|nickname}}</h3></td></tr>
+<tr><td colspan="7" class="header"><h3>Issues Created by {{email|nickname}} ({{my_issues|length}})</h3></td></tr>
 
 {%if not my_issues%}
-<tr><td colspan="7"><span class="disabled">(None)</td></tr>
+<tr><td colspan="7" class="first last"><span class="disabled">(None)</span></td></tr>
 {%else%}
 {%include "issue_heading.html"%}
 {%for issue in my_issues%}
@@ -15,10 +15,10 @@
 {%endfor%}
 {%endif%}
 
-<tr><td colspan="7"><h3>Issues Reviewable by {{email|nickname}}</h3></td></tr>
+<tr><td colspan="7" class="header"><h3>Issues Reviewable by {{email|nickname}} ({{review_issues|length}})</h3></td></tr>
 
 {%if not review_issues%}
-<tr><td colspan="7"><span class="disabled">(None)</td></tr>
+<tr><td colspan="7" class="first last"><span class="disabled">(None)</span></td></tr>
 {%else%}
 {%include "issue_heading.html"%}
 {%for issue in review_issues%}
@@ -27,10 +27,10 @@
 {%endif%}
 
 
-<tr><td colspan="7"><h3>Issues Closed Recently</h3></td></tr>
+<tr><td colspan="7" class="header"><h3>Issues Closed Recently ({{closed_issues|length}})</h3></td></tr>
 
 {%if not closed_issues%}
-<tr><td colspan="7"><span class="disabled">(None)</td></tr>
+<tr><td colspan="7" class="first last"><span class="disabled">(None)</span></td></tr>
 {%else%}
 {%include "issue_heading.html"%}
 {%for issue in closed_issues%}
@@ -39,5 +39,6 @@
 {%endif%}
 
 </table>
+</div>
 
 {%endblock%}

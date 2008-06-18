@@ -1,4 +1,4 @@
-{%extends "base.html"%}
+{%extends "issue_base.html"%}
 {%block body%}
 
 <script language="JavaScript" type="text/javascript"><!--
@@ -39,41 +39,72 @@ login_warned = false;
 <a id="resizer" style="display:none;cursor:pointer"><img src="/static/zippyplus.gif"></a>
 {%endif%}
 
-<h2>Delta Between Two Patch Sets: {{patch_right.filename}}</h2>
+<div style="float: left;">
+  <h2 style="margin-bottom: 0em; margin-top: 0em;">Delta Between Two Patch Sets: {{patch_right.filename}}</h2>
+  <div style="margin-top: .2em;"><b>Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');">{{issue.key.id}}</a>:</b>
+  {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}
+  {%if issue.base%}<span class="extra">SVN Base: {{issue.base}}</span>{%endif%}</div>
+  <div style="margin-top: .4em;">
+    <b>Left Patch Set: {%if ps_left.message%}{{ps_left.message}}{%endif%}</b>
+    <span class="extra">
+    Created {{ps_left.created|timesince}} ago
+    {%ifnotequal ps_left.owner issue.owner%}
+    by <b>{{ps_left.owner|show_user}}</b>{%endifnotequal%}
+    {%if ps_left.url%},
+    Downloaded from: <a href="{{ps_left.url}}">{{ps_left.url}}</a>
+    {%endif%}
+    </span>
+  </div>
+  <div style="margin-top: .4em;">
+    <b>Right Patch Set: {%if ps_right.message%}{{ps_right.message}}{%endif%}</b>
+    <span class="extra">
+    Created {{ps_right.created|timesince}} ago
+    {%ifnotequal ps_right.owner issue.owner%}
+    by <b>{{ps_right.owner|show_user}}</b>{%endifnotequal%}
+    {%if ps_right.url%},
+    Downloaded from: <a href="{{ps_right.url}}">{{ps_right.url}}</a>
+    {%endif%}
+    </span>
+  </div>
+  <div style="margin-top: .4em;" class="help">
+    Use n/p to move between diff chunks;
+    N/P to move between comments.
+    {%if user%}
+    Double-click a line to add a draft in-line comment.
+    <br><span style="color:red">Draft comments are only viewable by you;</span>
+    use <a href="{%url codereview.views.publish issue.key.id%}" class="novisit">Publish+Mail Comments</a> ('m') to let others view them.
+    {%else%}
+    Please Sign in to add in-line comments.
+    {%endif%}
+  </div>
+</div>
+<div style="float: right; color: #333333; background-color: #eeeeec; border: 1px solid lightgray; -moz-border-radius: 5px 5px 5px 5px; padding: 5px;">
+  <div>{%include "context_select.html"%}</div>
+  <div>
+    Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{patchset.key.id}});">
+      {% for jump_patch in ps_right.patches %}
+        <option value="{{jump_patch.key.id}}"
+         {%ifequal jump_patch.key.id patch.key.id%} selected="selected"{%endifequal%}>{{jump_patch.filename}}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    Left: <a href="{%url codereview.views.patch issue.key.id,ps_left.key.id,patch_left.key.id%}">
+    View regular side by side diff</a><br/>
+    Right: <a href="{%url codereview.views.patch issue.key.id,ps_right.key.id,patch_right.key.id%}">
+    View regular side by side diff</a>
+    {%if user%}
+    <br/>
+    <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
+    Comments</a> ('m')
+    {%endif%}
+  </div>
+</div>
+<div style="clear: both;"></div>
 
-<div>
-  <b>Issue:</b>
-  <a id="upCL" href="{%url codereview.views.show issue.key.id%}">{{issue.subject}}</a>
-  ('u')
-</div>
-<div>
-  <i>Created:</i> {{issue.created|timesince}} ago by <b>{{issue.owner|show_user}}</b>;
-  <i>Last updated:</i> {{issue.modified|timesince}} ago
-</div>
-<div><i>SVN Base:</i> {{issue.base}}</div>
-<div><i>Reviewers:</i> {{issue.reviewers|show_users}}</div>
-<div><b>Left Patch Set: {%firstof ps_left.message%}</b></div>
-<div><a href="{%url codereview.views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}">View regular side-by-side diff</a></div>
-{%if ps_left.url%}
-<div><i>Downloaded from:</i> <a href="{{ps_left.url}}">{{ps_left.url}}</a></div>
-{%endif%}
-<div>
-  <i>Created:</i> {{ps_left.created|timesince}} ago
-  {%ifnotequal ps_left.owner issue.owner%}
-  by <b>{{ps_left.owner|show_user}}</b>{%endifnotequal%}
-</div>
-<div><b>Right Patch Set: {%firstof ps_right.message%}</b></div>
-<div><a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}">View regular side-by-side diff</a></div>
-{%if ps_right.url%}
-<div><i>Downloaded from:</i> <a href="{{ps_right.url}}">{{ps_right.url}}</a></div>
-{%endif%}
-<div>
-  <i>Created:</i> {{ps_right.created|timesince}} ago
-  {%ifnotequal ps_right.owner issue.owner%}
-  by <b>{{ps_right.owner|show_user}}</b>{%endifnotequal%}
-</div>
 
-<p>
+<div class="code" style="margin-top: 1.3em; display: table; margin-left: auto; margin-right: auto;">
+<div class="codenav">
 {%comment%}
 For some reason,
 {%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}
@@ -103,33 +134,7 @@ Toggle Intra-line Diffs</a> ('i')
    href="javascript:M_showAllInlineComments()">Show Comments</a>
 <a id="hide-all-inline"
    href="javascript:M_hideAllInlineComments()">Hide Comments</a> ('s')
-|
-<a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-Comments</a> ('m')
-</p>
-
-<h3>Side by Side Diff</h3>
-
-<div style="float: left;">
-  <p><i>Use n/p to move between diff chunks;
-  N/P to move between comments.
-  {%if user%}
-  Double-click a line to add a draft in-line comment.
-  <br><span style="color:red">Draft comments are only viewable by you;</span>
-  use <a class="novisit"
-         href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-  Comments</a> ('m') to let others view them.
-  {%else%}
-  Please <a class="novisit" href="{{sign_in}}">Sign in</a>
-  to add in-line comments.
-  {%endif%}
-  </i></p>
 </div>
-<div style="float: right;">
-  {%include "context_select.html"%}
-</div>
-<div style="clear: both;"></div>
-
 <div style="position:relative" id="table-top">
 
 <span id="hook-sel" style="display:none;"></span>
@@ -147,7 +152,7 @@ Comments</a> ('m')
 
 </div>
 
-<p>
+<div class="codenav">
 {%if patch_right.prev%}
 <a id="prevFile"
    href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.prev.key.id}}">
@@ -169,11 +174,17 @@ Toggle Intra-line Diffs</a> ('i')
 |
 <a href="javascript:M_toggleAllInlineComments()">
 Toggle Comments</a> ('s')
-|
-<a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-Comments</a> ('m')
-</p>
+</div>
 
+</div>
+<div class="popup" id="popup-issue">
+  <b>Issue {{issue.key.id}}: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</b><br/>
+  Created {{issue.created|timesince}} ago by {{issue.owner|nickname}}.<br/>
+  Modified {{issue.modified|timesince}} ago.<br/>
+  Reviewers: {{issue.reviewers|nicknames}}<br/>
+  SVN Base: {{issue.base}}<br/>
+  Comments: {{issue.num_comments}}{%if issue.num_drafts%} <span style="color: red;">+ {{issue.num_drafts}} drafts</span>{%endif%}
+</div>
 </script>
 <script language="JavaScript" type="text/javascript"><!--
 var old_snapshot = "new";

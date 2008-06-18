@@ -25,8 +25,9 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 // -->
 </script>
 <div id="help" style="display: none;">
+{%block help%}{%endblock%}
 <div style="font-size: medium; text-align: center;">Keyboard Shortcuts</div>
-<hr></hr>
+<hr />
 <table width="100%">
 
   <tr valign="top">
@@ -61,7 +62,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
         </tr>
         <tr>
           <td class="shortcut"><span class="letter">n</span> / <span class="letter">p</span> <b>:</b></td><td>next / previous diff chunk or comment</td>
-        </td>
+        </tr>
         <tr>
           <td class="shortcut"><span class="letter">N</span> / <span class="letter">P</span> <b>:</b></td><td>next / previous comment</td>
         </tr>
@@ -140,28 +141,17 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 <a class="novisit" href="{{sign_in}}">Sign in</a>
 {%endif%}
 </div>
-<hr />
+
 <div class="counter">({{counter}})</div>
-<div>
-{%if user%}
-<a class="novisit" href="{%url codereview.views.new%}">Create Issue</a>
-|
-<a class="novisit" href="{%url codereview.views.index%}">My Issues</a>
-|
-<a class="novisit" href="{%url codereview.views.all%}">Recent Issues</a>
-{%else%}
-<a class="novisit" href="{%url codereview.views.index%}">Recent Issues</a>
-{%endif%}
-|
-<a class="novisit" href="{%url codereview.views.repos%}">Repositories</a>
-{%if not user%}
-|
-<a class="novisit" href="{{sign_in}}">Sign in</a>
-with your <a href="https://www.google.com/accounts/NewAccount">Google
-Account</a> to create issues and add comments
-{%endif%}
+<div class="mainmenu">
+  {%block mainmenu%}
+  <a href="{%url codereview.views.index%}" class="active">Issues</a>
+  <a href="{%url codereview.views.repos %}" class="active">Repositories</a>
+  {%endblock%}
 </div>
-<hr />
+<div class="mainmenu2">
+  {%block mainmenu2%}{%endblock%}
+</div>
 
 <div>
 {%block body%}BODY GOES HERE{%endblock%}

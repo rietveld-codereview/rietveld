@@ -190,6 +190,8 @@ class PublishForm(forms.Form):
   message = forms.CharField(required=False,
                             max_length=10000,
                             widget=forms.Textarea(attrs={'cols': 60}))
+  message_only = forms.BooleanField(required=False,
+                                    widget=forms.HiddenInput())
 
 
 class MiniPublishForm(forms.Form):
@@ -201,6 +203,8 @@ class MiniPublishForm(forms.Form):
   message = forms.CharField(required=False,
                             max_length=10000,
                             widget=forms.Textarea(attrs={'cols': 60}))
+  message_only = forms.BooleanField(required=False,
+                                    widget=forms.HiddenInput())
 
 
 FORM_CONTEXT_VALUES = [(x, "%d lines" % x) for x in models.CONTEXT_CHOICES]
@@ -987,6 +991,7 @@ def _add_next_prev(patchset, patch):
   patch.prev = patch.next = None
   patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
                                   patchset))
+  patchset.patches = patches  # Required to render the jump to select.
   last = None
   for p in patches:
     if last is not None:
@@ -1111,14 +1116,20 @@ def publish(request):
                                              'preview' : preview})
 
   form = form_class(request.POST)
-  if form.is_valid():
+  if form.is_valid() and not form.cleaned_data.get('message_only', False):
     reviewers = _get_reviewers(form)
+  else:
+    reviewers = issue.reviewers
   if not form.is_valid():
     return respond(request, 'publish.html',  {'form': form, 'issue': issue})
   if request.user == issue.owner:
     issue.subject = form.cleaned_data['subject']
   issue.reviewers = reviewers
-  tbd, comments = _get_draft_comments(request, issue)
+  if not form.cleaned_data.get('message_only', False):
+    tbd, comments = _get_draft_comments(request, issue)
+  else:
+    tbd = []
+    comments = None
   tbd.append(issue)
 
   if comments:

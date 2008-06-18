@@ -28,7 +28,7 @@ body {
 }
 
 tt, code, pre {
-  font-size: 120%;
+  font-size: 12px;
 }
 
 /* Looks like a no-op, but inputs don't inherit font-size otherwise. */
@@ -61,8 +61,12 @@ ul {
   background-color: #ccf;
 }
 
+a {
+  color: #4182fa;
+}
+
 a.novisit {
-  color: blue;
+  color: #2a55a3;
 }
 
 a.redlink {
@@ -71,7 +75,7 @@ a.redlink {
 }
 
 a.noul, a.noulv {
-  color: blue;
+  color: #4182fa; /* #93b7fa; */
   text-decoration: none;
 }
 
@@ -79,8 +83,8 @@ a:hover.noul, a:hover.noulv {
   text-decoration: underline;
 }
 
-a:visited.noulv {
-  color: purple;
+a:visited.noul, a:visited.noulv {
+  color: #a32a91; /* #2a55a3; */
 }
 
 .filegone, .filegone a, .filegone a:visited {
@@ -96,7 +100,7 @@ a:visited.noulv {
 .udiffadd, .udiffremove, .udiff, .debug-info {
   white-space: pre;
   font-family: monospace;
-  font-size: 120%;
+  font-size: 12px;
   vertical-align: top;
 }
 
@@ -252,7 +256,6 @@ span.dump {
 h2, h3 {
   margin-top: 0.5em;
   margin-bottom: 0.5em;
-  background-color: #e5ecf9;
 }
 
 /* Make h1, h2 headers lighter */
@@ -285,7 +288,7 @@ div.comment-draft-title {
 /* Equivalent of pre */
 div.comment {
   font-family: monospace;
-  font-size: 120%;
+  font-size: 12px;
 }
 
 div.comment-text {
@@ -331,7 +334,7 @@ div.inline-comment-title {
 /* Equivalent of pre */
 div.inline-comment {
   font-family: monospace;
-  font-size: 120%;
+  font-size: 12px;
 }
 
 #hook-sel {
@@ -345,7 +348,7 @@ div.inline-comment {
 span.moved_body {
   white-space: pre;
   font-family: monospace;
-  font-size: 120%;
+  font-size: 12px;
   vertical-align: top;
   background-color: #fa6;
 }
@@ -382,6 +385,9 @@ span.moved_body {
   text-decoration: none;
   color: black;
 }
+.opentriangle {
+  background-image: url('/static/opentriangle.gif');
+}
 
 .fat-button {
   height: 2em;
@@ -391,6 +397,7 @@ span.moved_body {
   color: red;
   border: 1px solid red;
   margin: 1em;
+  margin-top: 0px;
   padding: 0.5em;
   font-size: 110%;
 }
@@ -565,4 +572,157 @@ span.visualtab {
   padding: 3px;
   overflow: auto;
   -moz-border-radius: 9px;
+}
+
+/* Main menu */
+.mainmenu {
+  margin-top: 1em;
+}
+.mainmenu a {
+  margin-right: .2em;
+  background-color: #eeeeec;
+  border-bottom: none;
+  -moz-border-radius: 5px 5px 0px 0px;
+  padding-left: .8em;
+  padding-right: .8em;
+  padding-top: 3px;
+  text-decoration: none;
+  color: black;
+  font-weight: bold;
+}
+.mainmenu a.active {
+  background-color: #e9f2df;
+  border-bottom: none;
+}
+.mainmenu2 {
+  background-color: #e9f2df;
+  padding: 5px;
+  padding-left: .8em;
+  margin-bottom: 1.3em;
+  -moz-border-radius: 0px 5px 5px 5px;
+}
+.mainmenu2 a {
+  color: black;
+}
+.mainmenu2 a.active {
+  text-decoration: none;
+  color: black;
+  font-weight: bold;
+}
+
+
+/* Issue lists */
+.issue-list {
+  background-color: #E5ECF9;
+  border: 1px solid  #93b7fa;
+  border-bottom: 2px solid #93b7fa;
+  padding: 3px;
+  -moz-border-radius: 5px 5px 0px 0px;
+}
+.issue-list .header {
+  background-color: #E5ECF9;
+}
+.issue-list .header h3 {
+  font-size: 1.1em;
+  margin: 0px;
+  padding: 3px;
+  padding-left: 0px;
+  
+}
+
+.issue-list .pagination {
+  text-align: right;
+  padding: 3px;
+}
+.issue-list table{
+  background-color: white;
+}
+.issue-list table th {
+  background-color: #eeeeec;
+  border-right: 1px solid lightgray;
+  border-top: 1px solid lightgray;
+}
+
+.issue-list table td.last {
+  border-right: 1px solid lightgray;
+}
+
+.issue-list table .first {
+  border-left: 1px solid lightgray;
+}
+
+
+.issue_details_sidebar div {
+  margin-top: .8em;
+}
+
+
+/* Issue details */
+.issue-header .h2 {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.issue-details .meta {
+  border-right: 2px solid #b7d993;
+  padding: 5px;
+}
+
+
+/* Messages */
+.message .header {
+  border: 1px solid lightgray;
+  border-bottom: none;
+  -moz-border-radius: 8px 8px 0px 0px;
+  cursor: pointer;
+}
+.message-body {
+  border-left: 1px solid lightgray;
+  border-right: 1px solid lightgray;
+}
+.message-body pre {
+  margin: 0px;
+  margin-left: 5px;
+  margin-right: 5px;
+}
+.message-actions {
+  background-color: #dddddd;
+  font-size: .8em;
+  padding: 3px;
+  padding-left: 5px;
+  -moz-border-radius: 0px 0px 8px 8px;
+  margin-bottom: .8em;
+}
+
+.popup {
+  visibility: hidden;
+  background-color: #cdf2a5;
+  padding: 8px;
+  border: 1px solid #2e3436;
+  -moz-border-radius: 5px 5px 5px 5px;
+  opacity: 0.95;
+  filter: alpha(opacity=95);
+  position: absolute;
+}
+
+.code {
+  background-color: #eeeeec;
+  padding: 3px;
+  border: 1px solid lightgray;
+  margin-top: .8em;
+}
+
+#table-top {
+  background-color: white;
+  -moz-border-radius: 5px 5px 5px 5px;
+  border: 1px solid lightgray;
+}
+
+.codenav {
+  text-align:center;
+  padding: 3px;
+}
+
+.help {
+  font-size: .9em;
 }

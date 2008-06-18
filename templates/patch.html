@@ -1,4 +1,4 @@
-{%extends "base.html"%}
+{%extends "issue_base.html"%}
 {%block body%}
 
 <script language="JavaScript" type="text/javascript"><!--
@@ -8,34 +8,49 @@ function keyPressIntermediary(evt) {
 document.onkeypress = keyPressIntermediary;
 // -->
 </script>
+<div style="float: left;">
+  <h2 style="margin-bottom: 0em; margin-top: 0em;">Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');" id="upCL">{{issue.key.id}}</a>:
+  {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</h2>
+  <div class="popup" id="popup-issue">
+    <b>Issue {{issue.key.id}}: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</b><br/>
+    Created {{issue.created|timesince}} ago by {{issue.owner|show_user}}.<br/>
+    Modified {{issue.modified|timesince}} ago.<br/>
+    Reviewers: {{issue.reviewers|show_users}}<br/>
+    SVN Base: {{issue.base}}<br/>
+    Comments: {{issue.num_comments}}{%if issue.num_drafts%} <span style="color: red;">+ {{issue.num_drafts}} drafts</span>{%endif%}
+  </div>
+  <h3>Unified Diff</h3>
+  <div style=""><b>File: {{patch.filename}}</b></div>
+  <div style="margin-top: .4em;">
+    <b>Patch Set: {%if patchset.message%}{{patchset.message}}{%endif%}</b>
+    <span class="extra">
+    Created {{patchset.created|timesince}} ago
+    {%ifnotequal patchset.owner issue.owner%}
+    by <b>{{patchset.owner|show_user}}</b>{%endifnotequal%}
+    {%if patchset.url%},
+    Downloaded from: <a href="{{patchset.url}}">{{patchset.url}}</a>
+    {%endif%}
+    </span>
+  </div>
+</div>
+<div style="float: right; color: #333333; background-color: #eeeeec; border: 1px solid lightgray; -moz-border-radius: 5px 5px 5px 5px; padding: 5px;">
+  <div>
+    Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{patchset.key.id}}, true);">
+      {% for jump_patch in patchset.patch_set %}
+        <option value="{{jump_patch.key.id}}"
+         {%ifequal jump_patch.key.id patch.key.id%} selected="selected"{%endifequal%}>{{jump_patch.filename}}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.key.id%}">
+    View side by-side-diff with in line comments</a>
+  </div>
+</div>
+<div style="clear: both;"></div>
 
-<h2>File: {{patch.filename}}</h2>
-
-<div>
-  <b>Issue:</b>
-  <a id="upCL" href="{%url codereview.views.show issue.key.id%}">{{issue.subject}}</a>
-  {%if issue.closed %} (Closed) {%endif%}
-  ('u')
-</div>
-<div>
-  <i>Created:</i> {{issue.created|timesince}} ago by <b>{{issue.owner|show_user}}</b>;
-  <i>Last updated:</i> {{issue.modified|timesince}} ago
-</div>
-<div><i>SVN Base:</i> {{issue.base}}</div>
-<div><i>Reviewers:</i> {{issue.reviewers|show_users}}</div>
-<div>
-  <b>Patch Set: {%if patchset.message%}{{patchset.message}}{%endif%}</b>
-</div>
-{%if patchset.url%}
-<div><i>Downloaded from:</i> <a href="{{patchset.url}}">{{patchset.url}}</a></div>
-{%endif%}
-<div>
-  <i>Created:</i> {{patchset.created|timesince}} ago
-  {%ifnotequal patchset.owner issue.owner%}
-  by <b>{{patchset.owner|show_user}}</b>{%endifnotequal%}
-</div>
-
-<p>
+<div class="code" style="margin-top: .8em; display: table; margin-left: auto; margin-right: auto;">
+<div class="codenav">
 {%comment%}
 For some reason,
 {%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}
@@ -52,14 +67,25 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
    href="/{{issue.key.id}}/patch/{{patchset.key.id}}/{{patch.next.key.id}}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
-|
-<a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.key.id%}">
-  View side-by-side diff with inline comments</a>
-</p>
+</div>
 
-<h3>Unified Diff</h3>
 
-<pre>
+<pre style="background-color: white; border: 1px solid lightgray; -moz-border-radius: 5px 5px 5px 5px; padding: 5px;">
 {%for line in patch.lines%}{{line}}{%endfor%}
 </pre>
+
+<div class="codenav">
+{%if patch.prev%}
+<a id="prevFile"
+   href="/{{issue.key.id}}/patch/{{patchset.key.id}}/{{patch.prev.key.id}}">
+&laquo; {{patch.prev.filename}}</a> ('k'){%else%}
+<span class="disabled">&laquo; no previous file</span>{%endif%}
+|
+{%if patch.next%}
+<a id="nextFile"
+   href="/{{issue.key.id}}/patch/{{patchset.key.id}}/{{patch.next.key.id}}">
+{{patch.next.filename}} &raquo;</a> ('j'){%else%}
+<span class="disabled">no next file &raquo;</span>{%endif%}
+</div>
+</div>
 {%endblock%}

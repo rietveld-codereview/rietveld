@@ -1,8 +1,8 @@
-{%extends "base.html"%}
-{%block body%}
+{%extends "issue_base.html"%}
+{%block issue_body%}
 <h2>Publish + Mail Draft Comments</h2>
 
-<div style="float: left; padding-right: 1em;">
+<div>
   <form action="{%url codereview.views.publish%}" method="post">
   <table>
   {%ifnotequal user issue.owner%}
@@ -23,8 +23,8 @@
   </form>
 </div>
 {%if preview%}
-<div style="float: left;">
-  <i>Unpublished Drafts:</i>
+<div style="margin-top: 3em;">
+  <h3>Unpublished Drafts:</h3>
   <pre class="description">{{preview|wordwrap:"80"|urlize}}</pre>
 </div>
 {%endif%}

@@ -1,7 +1,5 @@
-{%extends "base.html"%}
-{%block body%}
-<h2>Issue: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</h2>
-
+{%extends "issue_base.html"%}
+{%block issue_body%}
 {%if issue.draft_count%}
 <div class="error">You have <b>{{issue.draft_count}} draft</b>
  comment{{issue.draft_count|pluralize}}.
@@ -11,50 +9,52 @@ Publish+Mail Comments</a> ('m') to let others view them.
 </div>
 {%endif%}
 
-<div style="float: left; padding-right: 1em">
-<div>
-  <i>Created:</i> {{issue.created|timesince}} ago by
-  <b>{{issue.owner|show_user}}</b>;
-  <i>Last updated:</i> {{issue.modified|timesince}} ago
-</div>
-<div><i>SVN Base:</i> {{issue.base}}</div>
-<div><i>Reviewers:</i> {{issue.reviewers|show_users}}</div>
-<div>
-  {%ifequal issue.owner user %}
-  <a class="novisit" href="{%url codereview.views.edit issue.key.id%}">Edit
-  Issue</a>
-  {%else%}
-  <span class="disabled">Can't Edit</span>
-  {%endifequal%}
-  |
-  {%if user%}
-  <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-  Comments</a> ('m')
-  {%else%}
-  <span class="disabled">Can't Publish+Mail</span>
+
+
+<h3>
+<a id="issue_details-pointer"
+   href="javascript:M_toggleSection('issue_details')"
+   class="toggled-section">
+Issue Details</a></h3>
+<div id="issue_details" style="display: none;">
+<table border="0" cellspacing="5">
+  <tr>
+    <td><b>Created:</b></td>
+    <td>{{issue.created|timesince}} ago by {{issue.owner|show_user}}</td>
+  </tr>
+  <tr>
+    <td><b>Modified:</b></td>
+    <td>{{issue.modified|timesince}} ago</td>
+  </tr>
+  <tr>
+    <td><b>Reviewers:</b></td>
+    <td>{{issue.reviewers|show_users}}</td>
+  </tr>
+  <tr>
+    <td><b>SVN Base:</b></td>
+    <td>{{issue.base}}</td>
+  </tr>
+  {%if issue.description%}
+  <tr valign="top">
+    <td><b>Description:</b></td>
+    <td><pre>{{issue.description|wordwrap:80|urlize}}</pre></td>
+  </tr>
   {%endif%}
-  {%if last_patchset and first_patch%}
-  |
-  <a class="novisit"
-     href="{%url codereview.views.diff issue.key.id,last_patchset.key.id,first_patch.key.id%}">
-  <b>Start Review</b></a>
-  {%endif%}
-</div>
+</table>
 </div>
 
-{%if issue.description%}
-<div style="float: left"><i>Description:</i>
-<pre class="description">
-{{issue.description|wordwrap:"80"|urlize}}</pre>
+<div style="float: left; padding-right: 1em">
+
 </div>
-{%endif%}
+ 
+
 <div style="clear:both"></div>
 
 {%for patchset in patchsets%}
 <h3>
 <a id="ps-{{patchset.key.id}}-pointer"
    href="javascript:M_toggleSection('ps-{{patchset.key.id}}')"
-   class="toggled-section">
+   class="toggled-section {%if forloop.last or patchset.n_drafts%}opentriangle{%endif%}">
 Patch Set {{forloop.counter}}:
 {%if patchset.message%}{{patchset.message}}{%endif%}</a></h3>
 {%if patchset.n_comments or patchset.n_drafts%}
@@ -71,19 +71,24 @@ Patch Set {{forloop.counter}}:
 {%if patchset.url%}
 <div>Downloaded from: <a href="{{patchset.url}}">{{patchset.url}}</a></div>
 {%endif%}
-<div>
-  <i>Created:</i> {{patchset.created|timesince}} ago
-  {%ifnotequal patchset.owner issue.owner%}
-  by <b>{{patchset.owner|nickname}}</b>{%endifnotequal%}
+<div class="issue-list">
+<div class="pagination">
+  <div style="float: left;">
+    <i>Created:</i> {{patchset.created|timesince}} ago
+    {%ifnotequal patchset.owner issue.owner%}
+    by <b>{{patchset.owner|nickname}}</b>{%endifnotequal%}
+  </div>
+  <div style="float: right;">
+    <a href="{%url codereview.views.download issue.key.id,patchset.key.id%}">Download raw patch set</a>
+  </div>
+  <div style="clear:both;"></div>
 </div>
-<div>
-  <a href="{%url codereview.views.download issue.key.id,patchset.key.id%}">Download raw patch set</a>
-</div>
-<table id="queues">
-<tr>
+<table id="queues" style="clear:both;">
+<tr align="left">
   <th>Raw unified diffs</th>
   <th colspan="2">Stats</th>
   <th>Side-by-side diffs with inline comments</th>
+  <th>Delta from patch set</th>
 {%for patch in patchset.patches%}
 <tr>
   <td>
@@ -110,7 +115,7 @@ Patch Set {{forloop.counter}}:
       	  {%ifequal opatch.filename patch.filename%}
             {%ifnotequal opatch.text patch.text%}
               <a href="/{{issue.key.id}}/diff2/{{other.key.id}}:{{patchset.key.id}}/{{patch.key.id}}">
-              delta from patch set {{forloop.parentloop.counter}}</a>
+              {{forloop.parentloop.counter}}</a>
             {%endifnotequal%}
           {%endifequal%}
         {%endfor%}
@@ -119,7 +124,7 @@ Patch Set {{forloop.counter}}:
   </td>
 </tr>
 {%endfor%}
-</table>
+</table></div>
 </div>
 {%endfor%}
 
@@ -148,31 +153,56 @@ Add Another Patch Set</a>
 {%endifequal%}
 
 {%if messages%}
-<h2>Messages</h2>
-
+<h3><a id="messages-pointer"
+   href="javascript:M_toggleSection('messages')"
+   class="toggled-section opentriangle">
+Messages</a></h3>
+{%if messages%}<div><i>Total messages: {{messages|length}}</i></div>{%endif%}
+<div id="messages">
+<div style="margin-bottom: .5em;">
 <a href="javascript:M_showAllComments('cl', {{messages|length}})">
 Expand All Comments</a>
 |
 <a href="javascript:M_hideAllComments('cl', {{messages|length}})">
 Collapse All Comments</a>
+</div>
 
 {%for message in messages%}
-<div class="comment_title"
-     onclick="M_switchChangelistComment({{forloop.counter0}})">
-  From: {{message.sender|nickname}}
-  <span id="cl-preview-{{forloop.counter0}}" class="extra">
-    {{message.date|timesince}} ago
-  </span>
-</div>
-<div id="cl-comment-{{forloop.counter0}}" style="display: none;">
-  <div>Subject: {{message.subject}}</div>
-  <div>To: {{message.recipients|nicknames}}</div>
-  <div>Date: {{message.date|timesince}} ago</div>
-  <pre>{{message.text|wordwrap:"80"|urlize}}</pre>
+<div class="message">
+  <div class="header">
+    <table border="0" width="100%" cellspacing="0" cellpadding="0">
+      <tr class="comment_title"
+          onclick="M_switchChangelistComment({{forloop.counter0}})">
+        <td style="padding-left: 5px;"><b>{{message.sender|nickname}}</b></td>
+        <td width="100%">
+          <table style="table-layout:fixed; white-space: nowrap;" width="100%">
+            <tr><td>
+              <div style="white-space: nowrap; overflow: hidden;{%if forloop.last%} visibility: hidden;{%endif%}"
+                   class="extra"
+                   id="cl-preview-{{forloop.counter0}}">
+                   {{message.text|truncatewords:15}}</div>
+            </td></tr>
+          </table>
+        </td>
+        <td style="white-space: nowrap; padding-right: 5px;">{{message.date|timesince}} ago</td>
+      </tr>
+    </table>
+  </div>
+  <div id="cl-comment-{{forloop.counter0}}"
+  {%if forloop.last%}{%else%}style="display: none;"{%endif%}>
+    <div class="message-body"><pre name="cl-message-{{forloop.counter0}}">{{message.text|wordwrap:80|urlize}}</pre></div>
+    <div class="message-actions">
+      {%if user%}
+        <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{{message.sender|nickname:"x"}}')" id="message-reply-href-{{forloop.counter0}}">Reply</a>
+        <div id="message-reply-{{forloop.counter0}}" style="display:none;"></div>
+      {%else%}
+        <a href="{{sign_in}}">Sign in</a> to reply to this message.
+      {%endif%}
+    </div>
+  </div>
 </div>
 {%endfor%}
 
-<div style="border-top: thin solid;"></div>
 
 <a href="javascript:M_showAllComments('cl', {{messages|length}})">
 Expand All Comments</a>
@@ -180,10 +210,28 @@ Expand All Comments</a>
 <a href="javascript:M_hideAllComments('cl', {{messages|length}})">
 Collapse All Comments</a>
 {%endif%}
+</div>
 
 <script language="JavaScript" type="text/javascript"><!--
 document.onkeypress = function(evt) { return M_changelistKeyPress(evt); }
 // -->
 </script>
+
+{%if user%}
+<div style="display:none;">
+<form method="POST" action="{%url codereview.views.publish issue.key.id%}" id="message-reply-form">
+<div>
+<textarea rows="7" cols="70" name="message"></textarea>
+</div>
+<input type="hidden" name="subject" value="{{issue.subject}}" />
+<input type="hidden" name="send_mail" value="1" />
+<input type="hidden" name="reviewers" value="{%for reviewer in issue.reviewers%}{{reviewer}}, {%endfor%}{{request.user.email}}" />
+<input type="hidden" name="message_only" value="1" />
+<input type="submit" value="Send Message" />
+<input type="button" value="Discard" name="discard" />
+</form>
+</div>
+<a id="resizer" style="display:none;cursor:pointer"><img src="/static/zippyplus.gif"></a>
+{%endif%}
 
 {%endblock%}

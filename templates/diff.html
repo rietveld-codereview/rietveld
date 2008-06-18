@@ -1,4 +1,4 @@
-{%extends "base.html"%}
+{%extends "issue_base.html"%}
 {%block body%}
 
 <script language="JavaScript" type="text/javascript"><!--
@@ -37,104 +37,65 @@ login_warned = false;
 <a id="resizer" style="display:none;cursor:pointer"><img src="/static/zippyplus.gif"></a>
 {%endif%}
 
-<h2>File: {{patch.filename}}</h2>
-
-<div>
-  <b>Issue:</b>
-  <a id="upCL" href="{%url codereview.views.show issue.key.id%}">{{issue.subject}}</a>
-  {%if issue.closed %} (Closed) {%endif%}
-  ('u')
-</div>
-<div>
-  <i>Created:</i> {{issue.created|timesince}} ago by <b>{{issue.owner|show_user}}</b>;
-  <i>Last updated:</i> {{issue.modified|timesince}} ago
-</div>
-<div><i>SVN Base:</i> {{issue.base}}</div>
-<div><i>Reviewers:</i> {{issue.reviewers|show_users}}</div>
-<div>
-  <b>Patch Set: {%if patchset.message%}{{patchset.message}}{%endif%}</b>
-</div>
-{%if patchset.url%}
-<div><i>Downloaded from:</i> <a href="{{patchset.url}}">{{patchset.url}}</a></div>
-{%endif%}
-<div>
-  <i>Created:</i> {{patchset.created|timesince}} ago
-  {%ifnotequal patchset.owner issue.owner%}
-  by <b>{{patchset.owner|show_user}}</b>{%endifnotequal%}
-</div>
-<p>
-{%comment%}
-For some reason,
-{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}
-doesn't work.  Go figure.  Bleah.  So use absolute URLs.
-{%endcomment%}
-{%if patch.prev%}
-<a id="prevFile" 
-   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{%spaceless%}
-   {{patch.prev.key.id}}{%if context%}?context={{context}}{%endif%}
-   {%endspaceless%}">
-&laquo; {{patch.prev.filename}}</a> ('k'){%else%}
-<span class="disabled">&laquo; no previous file</span>{%endif%}
-|
-{%if patch.next%}
-<a id="nextFile"
-   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{%spaceless%}
-   {{patch.next.key.id}}{%if context %}?context={{context}}{%endif%}
-   {%endspaceless%}">
-{{patch.next.filename}} &raquo;</a> ('j'){%else%}
-<span class="disabled">no next file &raquo;</span>{%endif%}
-|
-<a href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}">
-View unified diff</a>
-|
-<a href="javascript:if (intraLineDiff) intraLineDiff.toggle()">
-Toggle Intra-line Diffs</a> ('i')
-|
-<a href="javascript:M_expandAllInlineComments()">Expand Comments</a> ('e')
-|
-<a href="javascript:M_collapseAllInlineComments()">Collapse Comments</a> ('c')
-|
-<a id="show-all-inline"
-   style="display:none"
-   href="javascript:M_showAllInlineComments()">Show Comments</a>
-<a id="hide-all-inline"
-   href="javascript:M_hideAllInlineComments()">Hide Comments</a> ('s')
-{%if user%}
-|
-<a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-Comments</a> ('m')
-{%endif%}
-</p>
-
-<h3>Side by Side Diff</h3>
-
 <div style="float: left;">
-  <p><i>Use n/p to move between diff chunks;
-  N/P to move between comments.
-  {%if user%}
-  Double-click a line to add a draft in-line comment.
-  <br><span style="color:red">Draft comments are only viewable by you;</span>
-  use <a class="novisit"
-         href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-  Comments</a> ('m') to let others view them.
-  {%else%}
-  Please <a class="novisit" href="{{sign_in}}">Sign in</a>
-  to add in-line comments.
-  {%endif%}
-  </i></p>
+  <h2 style="margin-bottom: 0em; margin-top: 0em;">Side by Side Diff: {{patch.filename}}</h2>
+  <div style="margin-top: .2em;"><b>Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');">{{issue.key.id}}</a>:</b>
+  {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}
+  {%if issue.base%}<span class="extra">SVN Base: {{issue.base}}</span>{%endif%}</div>
+  <div style="margin-top: .4em;">
+    <b>Patch Set: {%if patchset.message%}{{patchset.message}}{%endif%}</b>
+    <span class="extra">
+    Created {{patchset.created|timesince}} ago
+    {%ifnotequal patchset.owner issue.owner%}
+    by <b>{{patchset.owner|show_user}}</b>{%endifnotequal%}
+    {%if patchset.url%},
+    Downloaded from: <a href="{{patchset.url}}">{{patchset.url}}</a>
+    {%endif%}
+    </span>
+  </div>
+  <div style="margin-top: .4em;" class="help">
+    Use n/p to move between diff chunks;
+    N/P to move between comments.
+    {%if user%}
+    Double-click a line to add a draft in-line comment.
+    <br><span style="color:red">Draft comments are only viewable by you;</span>
+    use <a href="{%url codereview.views.publish issue.key.id%}" class="novisit">Publish+Mail Comments</a> ('m') to let others view them.
+    {%else%}
+    Please Sign in to add in-line comments.
+    {%endif%}
+  </div>
 </div>
-<div style="float: right;">
-  {%include "context_select.html"%}
+<div style="float: right; color: #333333; background-color: #eeeeec; border: 1px solid lightgray; -moz-border-radius: 5px 5px 5px 5px; padding: 5px;">
+  <div>{%include "context_select.html"%}</div>
+  <div style="margin-top: 5px;">
+    Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{patchset.key.id}});">
+      {% for jump_patch in patchset.patches %}
+        <option value="{{jump_patch.key.id}}"
+         {%ifequal jump_patch.key.id patch.key.id%} selected="selected"{%endifequal%}>{{jump_patch.filename}}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <a href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}">
+    View unified diff</a>
+    {%if user%}
+    |
+    <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
+    Comments</a> ('m')
+    {%endif%}
+  </div>
 </div>
 <div style="clear: both;"></div>
 
-<div style="position:relative" id="table-top">
+<div class="code" style="margin-top: 1.3em; display: table; margin-left: auto; margin-right: auto;">
+{%include "diff_navigation.html"%}
+
+<div style="position:relative;" id="table-top">
 
 <span id="hook-sel" style="display:none;"></span>
 
 <table border="0" cellpadding="0" cellspacing="0" id="thecode"
        ondblclick="M_handleTableDblClick(event)">
-
 <tr><th>OLD</th><th>NEW</th></tr>
 
 {%for row in rows%}{{row|safe}}{%endfor%}
@@ -144,38 +105,8 @@ Comments</a> ('m')
 </table>
 
 </div>
-
-<p>
-{%if patch.prev%}
-<a id="prevFile"
-   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.prev.key.id}}">
-&laquo; {{patch.prev.filename}}</a> ('k'){%else%}
-<span class="disabled">&laquo; no previous file</span>{%endif%}
-|
-{%if patch.next%}
-<a id="nextFile"
-   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.next.key.id}}">
-{{patch.next.filename}} &raquo;</a> ('j'){%else%}
-<span class="disabled">no next file &raquo;</span>{%endif%}
-|
-<a href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}">
-View unified diff</a>
-|
-<a href="javascript:if (intraLineDiff) intraLineDiff.toggle()">
-Toggle Intra-line Diffs</a> ('i')
-|
-<a href="javascript:M_expandAllInlineComments()">Expand Comments</a> ('e')
-|
-<a href="javascript:M_collapseAllInlineComments()">Collapse Comments</a> ('c')
-|
-<a href="javascript:M_toggleAllInlineComments()">
-Toggle Comments</a> ('s')
-{%if user%}
-|
-<a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
-Comments</a> ('m')
-{%endif%}
-</p>
+{%include "diff_navigation.html"%}
+</div>
 
 </script>
 <script language="JavaScript" type="text/javascript"><!--
@@ -191,4 +122,29 @@ var skipped_lines_url = ('/' + {{issue.key.id}} + '/diff_skipped_lines/' +
 
 // -->
 </script>
+
+<div class="popup" id="popup-issue">
+  <b>Issue {{issue.key.id}}: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</b><br/>
+  Created {{issue.created|timesince}} ago by {{issue.owner|nickname}}.<br/>
+  Modified {{issue.modified|timesince}} ago.<br/>
+  Reviewers: {{issue.reviewers|nicknames}}<br/>
+  SVN Base: {{issue.base}}<br/>
+  Comments: {{issue.num_comments}}{%if issue.num_drafts%} <span style="color: red;">+ {{issue.num_drafts}} drafts</span>{%endif%}
+</div>
+{%endblock%}
+
+{%block help%}
+<div style="font-size: medium; text-align: center;">Side by Side Diff</div>
+<hr/>
+<div style="text-align: center; margin-bottom: .8em;">
+  Use n/p to move between diff chunks;
+  N/P to move between comments.
+  {%if user%}
+  Double-click a line to add a draft in-line comment.
+  <br><span style="color:red">Draft comments are only viewable by you;</span>
+  use <b>Publish+Mail Comments</b> ('m') to let others view them.
+  {%else%}
+  Please <a href="{{sign_in}}">Sign in</a> to add in-line comments.
+  {%endif%}
+</div>
 {%endblock%}

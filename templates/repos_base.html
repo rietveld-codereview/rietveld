@@ -1,0 +1,23 @@
+{%extends "base.html"%}
+{%block mainmenu%}
+<a href="{%url codereview.views.index%}">Issues</a>
+<a href="{%url codereview.views.repos%}" class="active">Repositories</a>
+{%endblock%}
+
+{%block mainmenu2%}
+  <a href="{%url codereview.views.repos%}">Repositories and Branches</a>
+  |
+  {%if user%}
+    <a href="{%url codereview.views.repo_new%}">Add Repository</a>
+  {%else%}
+    <a class="novisit" href="{{sign_in}}">Sign in</a>
+    with your <a href="https://www.google.com/accounts/NewAccount">Google
+    Account</a> to add repositories.
+  {%endif%}
+  {%if is_admin%}
+    |
+    <a href="{%url codereview.views.repo_init%}">Initialize Repositories</a>
+  {%endif%}
+{%endblock%}
+
+{%block body%}BODY GOES HERE{%endblock%}
