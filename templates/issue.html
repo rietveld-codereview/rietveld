@@ -108,7 +108,7 @@ Patch Set {{forloop.counter}}:
   </a>
   {%if patch.num_comments or patch.num_drafts%}</b>{%endif%}
   </td>
-  <td>
+  <td>{%spaceless%}
     {%for other in patchsets%}
       {%ifnotequal other patchset%}
       	{%for opatch in other.patches%}
@@ -121,7 +121,7 @@ Patch Set {{forloop.counter}}:
         {%endfor%}
       {%endifnotequal%}
     {%endfor%}
-  </td>
+  {%endspaceless%}</td>
 </tr>
 {%endfor%}
 </table></div>
