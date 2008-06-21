@@ -631,6 +631,9 @@ function M_replyToMessage(message_id, written_time, author) {
     document.getElementById('message-reply-href-'+message_id).style.display = "";
     document.getElementById('message-reply-'+message_id).innerHTML = "";
   }
+  form.send_mail.id = 'message-reply-send-mail-'+message_id;
+  var lbl = document.getElementById(form.send_mail.id).nextSibling.nextSibling;
+  lbl.setAttribute('for', form.send_mail.id);
   form.message.value = "On " + written_time + ", " + author + " wrote:\n";
   var divs = document.getElementsByName("cl-message-" + message_id);
   M_setValueFromDivs(divs, form.message);

@@ -114,7 +114,8 @@ Patch Set {{forloop.counter}}:
       	{%for opatch in other.patches%}
       	  {%ifequal opatch.filename patch.filename%}
             {%ifnotequal opatch.text patch.text%}
-              <a href="/{{issue.key.id}}/diff2/{{other.key.id}}:{{patchset.key.id}}/{{patch.key.id}}">
+              <a href="/{{issue.key.id}}/diff2/{{other.key.id}}:{{patchset.key.id}}/{{patch.key.id}}"
+              title="Delta from patch set {{forloop.parentloop.counter}}">
               {{forloop.parentloop.counter}}</a>
             {%endifnotequal%}
           {%endifequal%}
@@ -224,11 +225,13 @@ document.onkeypress = function(evt) { return M_changelistKeyPress(evt); }
 <textarea rows="7" cols="70" name="message"></textarea>
 </div>
 <input type="hidden" name="subject" value="{{issue.subject}}" />
-<input type="hidden" name="send_mail" value="1" />
 <input type="hidden" name="reviewers" value="{%for reviewer in issue.reviewers%}{{reviewer}}, {%endfor%}{{request.user.email}}" />
 <input type="hidden" name="message_only" value="1" />
 <input type="submit" value="Send Message" />
 <input type="button" value="Discard" name="discard" />
+<input type="checkbox" name="send_mail" value="1" 
+  id="message-reply-send-mail" checked="checked" />
+  <label>Send mail to reviewers</label>
 </form>
 </div>
 <a id="resizer" style="display:none;cursor:pointer"><img src="/static/zippyplus.gif"></a>
