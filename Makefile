@@ -24,7 +24,11 @@ serve_remote_email:
 	$(DEV_APPSERVER) --enable_sendmail --address 0.0.0.0 .
 
 update:
+	@echo -n "This is Rietveld r" > templates/live_revision.html
+	@svn info | grep '^Revision' | sed -e 's/Revision: *//' >> \
+		templates/live_revision.html
 	$(APPCFG) update .
+	@svn revert templates/live_revision.html
 
 upload: update
 

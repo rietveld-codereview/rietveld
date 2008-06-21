@@ -158,9 +158,14 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 </div>
 
 <p />
-<a target="_blank" href="http://code.google.com/appengine/"><img border="0"
- src="http://code.google.com/appengine/images/appengine-noborder-120x30.gif"
- alt="Powered by Google App Engine" /></a>
+<div style="float: left;">
+  <a target="_blank" href="http://code.google.com/appengine/"><img border="0"
+   src="http://code.google.com/appengine/images/appengine-noborder-120x30.gif"
+   alt="Powered by Google App Engine" /></a>
+</div>
+<div class="extra" style="font-size: 9pt; float: right;">
+  {%include "live_revision.html"%}
+</div>
 
 </body>
 </html>
