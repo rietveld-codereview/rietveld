@@ -10,38 +10,16 @@ Publish+Mail Comments</a> ('m') to let others view them.
 {%endif%}
 
 
-
+{%if issue.description%}
 <h3>
-<a id="issue_details-pointer"
-   href="javascript:M_toggleSection('issue_details')"
-   class="toggled-section">
-Issue Details</a></h3>
-<div id="issue_details" style="display: none;">
-<table border="0" cellspacing="5">
-  <tr>
-    <td><b>Created:</b></td>
-    <td>{{issue.created|timesince}} ago by {{issue.owner|show_user}}</td>
-  </tr>
-  <tr>
-    <td><b>Modified:</b></td>
-    <td>{{issue.modified|timesince}} ago</td>
-  </tr>
-  <tr>
-    <td><b>Reviewers:</b></td>
-    <td>{{issue.reviewers|show_users}}</td>
-  </tr>
-  <tr>
-    <td><b>SVN Base:</b></td>
-    <td>{{issue.base}}</td>
-  </tr>
-  {%if issue.description%}
-  <tr valign="top">
-    <td><b>Description:</b></td>
-    <td><pre>{{issue.description|wordwrap:80|urlize}}</pre></td>
-  </tr>
-  {%endif%}
-</table>
+<a id="issue-description-pointer"
+   href="javascript:M_toggleSection('issue-description')"
+   class="toggled-section opentriangle">
+Description</a></h3>
+<div id="issue-description" style="margin-left:15px;">
+  <pre>{{issue.description|wordwrap:80|urlize}}</pre>
 </div>
+{%endif%}
 
 <div style="float: left; padding-right: 1em">
 
