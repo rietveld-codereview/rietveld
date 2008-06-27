@@ -108,6 +108,7 @@ Patch Set {{forloop.counter}}:
 {%endfor%}
 
 {%ifequal user issue.owner%}
+{%if not issue.local_base%}
 <h3>
 <a id="add-pointer"
    href="javascript:M_toggleSection('add')"
@@ -129,6 +130,7 @@ Add Another Patch Set</a>
 </tr>
 </table>
 </form>
+{%endif%}
 {%endifequal%}
 
 {%if messages%}

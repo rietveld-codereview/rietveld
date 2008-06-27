@@ -30,6 +30,7 @@ import logging
 import binascii
 import datetime
 import urllib
+import md5
 from xml.etree import ElementTree
 from cStringIO import StringIO
 
@@ -152,17 +153,62 @@ class UploadForm(forms.Form):
 
   subject = forms.CharField(max_length=100)
   description = forms.CharField(max_length=10000, required=False)
-  base = forms.CharField(max_length=2000)
+  content_upload = forms.BooleanField()
+  base = forms.CharField(max_length=2000, required=False)
   data = forms.FileField()
   issue = forms.IntegerField(required=False)
+
+  def clean_base(self):
+    base = self.cleaned_data.get('base')
+    if not base and not self.cleaned_data.get('content_upload', False):
+      raise forms.ValidationError, 'SVN base is required.'
+    elif base:
+      try:
+        db.Link(base)
+      except db.BadValueError:
+        raise forms.ValidationError, 'Invalid URL'
+    return self.cleaned_data.get('base')
 
   def get_base(self):
     return self.cleaned_data.get('base')
 
 
+class UploadContentForm(forms.Form):
+  filename = forms.CharField(max_length=255)
+  num_parts = forms.IntegerField()
+  checksum = forms.CharField(max_length=32)
+  current_part = forms.IntegerField()
+  current_checksum = forms.CharField(max_length=32)
+
+  def clean(self):
+    # Check presence of 'data'. We cannot use FileField because
+    # it disallows empty files.
+    super(UploadContentForm, self).clean()
+    if not self.files and not self.files.has_key('data'):
+      raise forms.ValidationError, 'No content uploaded.'
+    return self.cleaned_data
+
+  def get_uploaded_content(self):
+    return self.files['data']['content']
+
+
 class EditForm(IssueBaseForm):
 
   closed = forms.BooleanField()
+
+class EditLocalBaseForm(forms.Form):
+  subject = forms.CharField(max_length=100,
+                            widget=forms.TextInput(attrs={'size': 60}))
+  description = forms.CharField(required=False,
+                                max_length=10000,
+                                widget=forms.Textarea(attrs={'cols': 60}))
+  reviewers = forms.CharField(required=False,
+                              max_length=1000,
+                              widget=forms.TextInput(attrs={'size': 60}))
+  closed = forms.BooleanField()
+
+  def get_base(self):
+    return None
 
 
 class RepoForm(djangoforms.ModelForm):
@@ -493,6 +539,7 @@ def upload(request):
       return HttpResponse('Login required', status=401)
   form = UploadForm(request.POST, request.FILES)
   issue = None
+  patchset = None
   if form.is_valid():
     issue_id = form.cleaned_data['issue']
     if issue_id:
@@ -501,24 +548,105 @@ def upload(request):
       if issue is None:
         form.errors['issue'] = ['No issue exists with that id (%s)' %
                                 issue_id]
+      elif issue.local_base and not form.cleaned_data.get('content_upload'):
+        form.errors['issue'] = ['Base files upload required for that issue.']
+        issue = None
       else:
         if request.user != issue.owner:
           form.errors['user'] = ['You (%s) don\'t own this issue (%s)' %
                                  (request.user, issue_id)]
           issue = None
         else:
-          if not add_patchset_from_form(request, issue, form, 'subject'):
+          patchset = add_patchset_from_form(request, issue, form, 'subject') 
+          if not patchset:
             issue = None
     else:
       action = 'created'
       issue = _make_new(request, form)
+      patchset = issue.patchset
   if issue is None:
     msg = 'Issue creation errors:\n%s' % repr(form.errors)
   else:
     msg = ('Issue %s. URL: %s' %
            (action,
             request.build_absolute_uri('/%s' % issue.key().id())))
+    if form.cleaned_data.get('content_upload'):
+      # Extend the response message: 2nd line is patchset id, additional lines
+      # are the expected filenames.
+      issue.local_base = True
+      issue.base = None
+      issue.put()
+      msg +="\n%d" % patchset.key().id()
+      for patch in patchset.patch_set:
+        content = models.Content(text=db.Text(''), is_uploaded=True,
+                                 is_complete=False, parent=patch)
+        content.put()
+        patch.content = content
+        patch.put()
+        msg += "\n%d %s" % (patch.key().id(), patch.filename)
   return HttpResponse(msg, content_type='text/plain')
+
+
+@patch_required
+def upload_content(request):
+  """/<issue>/upload_content/<patchset>/<patch> - Upload base file contents.
+
+  Used by upload.py to upload base files."""
+  if request.method != 'POST':
+    return HttpResponse('Method not allowed.', status=405)
+  form = UploadContentForm(request.POST, request.FILES)
+  if not form.is_valid():
+    return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
+                        content_type='text/plain')
+  patch = request.patch
+  try:
+    content = patch.get_partial_content()
+  except engine.FetchError, err:
+    return HttpResponse('ERROR: %s' % err, content_type='text/plain')
+  if request.user is None:
+    if IS_DEV:
+      request.user = users.User(request.POST.get('user', 'test@example.com'))
+    else:
+      return HttpResponse('Error: Login required', status=401)
+  if request.user != request.issue.owner:
+    return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
+                        (request.user, request.issue.key().id()))
+  current_part = form.cleaned_data['current_part']
+  # Reset Content instance when we've got part 0. Enables retry from upload.py.
+  if current_part == 0:
+    content.num_parts = form.cleaned_data['num_parts']
+    content.last_part = -1
+    content.is_bad = False
+    content.text = db.Text('')
+  if current_part != content.last_part+1:
+    msg = ('ERROR: Expected part %d of %d. '
+           'Got part %d instead.' % (content.last_part+2, content.num_parts,
+                                     current_part+1))
+    return HttpResponse(msg, content_type='text/plain')
+  data = form.get_uploaded_content()
+  if not md5.new(data).hexdigest() == form.cleaned_data['current_checksum']:
+    content.is_bad = True
+    content.text = db.Text('')
+    content.last_part = -1
+    content.put()
+    return HttpResponse('ERROR: Checksum mismatch.', content_type='text/plain')
+  if not content.text:
+    content.text = engine._ToText(data.splitlines(True))
+  else:
+    content.text += engine._ToText(data.splitlines(True))
+  content.last_part = current_part
+  if current_part+1 == content.num_parts:
+    content.is_complete = True
+    checksum = md5.new(content.text.encode('utf-8')).hexdigest()
+    if checksum != request.POST.get('checksum'):
+      content.is_bad = True
+      content.text = db.Text('')
+      content.last_part = -1
+      content.put()
+      return HttpResponse('ERROR: Checksum mismatch.',
+                          content_type='text/plain')
+  content.put()
+  return HttpResponse('OK', content_type='text/plain')
 
 
 class EmptyPatchSet(Exception):
@@ -557,6 +685,7 @@ def _make_new(request, form):
     patchset = models.PatchSet(issue=issue, data=data, url=url,
                                base=base, owner=request.user, parent=issue)
     patchset.put()
+    issue.patchset = patchset
 
     patches = engine.ParsePatchSet(patchset)
     if not patches:
@@ -620,7 +749,7 @@ def add_patchset_from_form(request, issue, form, message_key='message'):
   if form.is_valid():
     data_url = _get_data_url(form)
   if not form.is_valid():
-    return False
+    return None
   data, url = data_url
   message = form.cleaned_data[message_key]
   patchset = models.PatchSet(issue=issue, message=message, data=data, url=url,
@@ -632,10 +761,10 @@ def add_patchset_from_form(request, issue, form, message_key='message'):
     patchset.delete()
     errkey = url and 'url' or 'data'
     form.errors[errkey] = ['Patch set contains no recognizable patches']
-    return False
+    return None
   db.put(patches)
   issue.put()  # To update last modified time
-  return True
+  return patchset
 
 
 def _get_reviewers(form):
@@ -711,17 +840,24 @@ def edit(request):
   issue = request.issue
   base = issue.base
 
+  if issue.local_base:
+    form_cls = EditLocalBaseForm
+  else:
+    form_cls = EditForm
+
   if request.method != 'POST':
-    form = EditForm(initial={'subject': issue.subject,
+    form = form_cls(initial={'subject': issue.subject,
                              'description': issue.description,
                              'base': base,
                              'reviewers': ', '.join(issue.reviewers),
                              'closed': issue.closed})
-    form.set_branch_choices(base)
+    if not issue.local_base:
+      form.set_branch_choices(base)
     return respond(request, 'edit.html', {'issue': issue, 'form': form})
 
-  form = EditForm(request.POST)
-  form.set_branch_choices()
+  form = form_cls(request.POST)
+  if not issue.local_base:
+    form.set_branch_choices()
 
   if form.is_valid():
     reviewers = _get_reviewers(form)
@@ -860,9 +996,16 @@ def _get_diff_table_rows(request, patch, context):
   if rows and rows[-1] is None:
     del rows[-1]
     # Get rid of content, which may be bad
-    content.delete()
-    request.patch.content = None
-    request.patch.put()
+    if content.is_uploaded:
+      # Don't delete uploaded content, otherwise get_content()
+      # will fetch it.
+      content.is_bad = True
+      content.text = None
+      content.put()
+    else:
+      content.delete()
+      request.patch.content = None
+      request.patch.put()
 
   return rows
 

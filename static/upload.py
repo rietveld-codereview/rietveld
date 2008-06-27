@@ -24,9 +24,11 @@ Usage summary: upload.py [options] [-- svn_diff_options]
 import cookielib
 import getpass
 import logging
+import md5
 import mimetypes
 import optparse
 import os
+import re
 import socket
 import sys
 import urllib
@@ -364,6 +366,9 @@ parser.add_option("-i", "--issue", type="int", action="store",
 parser.add_option("-y", "--assume_yes", action="store_true",
                   dest="assume_yes", default=False,
                   help="Assume that the answer to yes/no questions is 'yes'.")
+parser.add_option("-l", "--local_base", action="store_true",
+                  dest="local_base", default=False,
+                  help="Base files will be uploaded.")
 
 
 def GetRpcServer(options):
@@ -499,7 +504,10 @@ def RealMain(argv):
     logging.getLogger().setLevel(logging.DEBUG)
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
-  base = GuessBase()
+  if options.local_base:
+    base = None
+  else:
+    base = GuessBase()
   if not options.assume_yes:
     CheckForUnknownFiles()
   data = RunShell("svn diff --diff-cmd=diff", args)
@@ -518,16 +526,113 @@ def RealMain(argv):
   if not message:
     ErrorExit("A non-empty message is required")
   rpc_server = GetRpcServer(options)
-  form_fields = [("base", base), ("subject", message)]
+  form_fields = [("subject", message)]
+  if base:
+    form_fields.append(("base", base))
   if options.issue:
     form_fields.append(("issue", str(options.issue)))
   if options.email:
     form_fields.append(("user", options.email))
+  if options.local_base:
+    form_fields.append(("content_upload", "1"))
   ctype, body = EncodeMultipartFormData(form_fields,
                                         [("data", "data.diff", data)])
   response_body = rpc_server.Send("/upload", body, content_type=ctype)
-  StatusUpdate(response_body)
-  sys.exit(not response_body.startswith("Issue created."))
+  if options.local_base:
+    lines = response_body.splitlines()
+    if len(lines) > 2:
+      msg = lines[0]
+      patchset = lines[1].strip()
+      patches = [x.split(" ", 1) for x in lines[2:]]
+    else:
+      msg = response_body
+  else:
+    msg = response_body
+  StatusUpdate(msg)
+  if not response_body.startswith("Issue created.") and \
+  not response_body.startswith("Issue updated."):
+    sys.exit(0)
+  if options.local_base:
+    issue = msg[msg.rfind("/")+1:]
+    UploadBaseFiles(issue, rpc_server, patches, patchset, options)
+  
+def UploadBaseFiles(issue, rpc_server, patch_list, patchset, options):
+  """Uploads the base files using svn cat."""
+  patches = dict()
+  [patches.setdefault(v, k) for k, v in patch_list]
+  for filename in patches.keys():
+    status = RunShell("svn st --ignore-externals", [filename])
+    if not status:
+      StatusUpdate("svn status returned no output for %s" % filename)
+      sys.exit(False)
+    if status[0] == "A":
+      content = ""
+    elif status[0] in ["M", "D"]:
+      content = RunShell("svn cat", [filename])
+      keywords = RunShell("svn -rBASE propget svn:keywords", [filename],
+                          silent_ok=True)
+      if keywords:
+        content = CollapseKeywords(content, keywords)
+    else:
+      StatusUpdate("svn status returned unexpected output: %s" % status)
+      sys.exit(False)
+    checksum = md5.new(content).hexdigest()
+    parts = []
+    while content:
+      parts.append(content[:800000])
+      content = content[800000:]
+    if not parts:
+      parts = [""] # empty file
+    for part, data in enumerate(parts):
+      if options.verbose > 0:
+        print "Uploading %s (%d/%d)" % (filename, part+1, len(parts))
+      url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset),
+                                          int(patches.get(filename)))
+      current_checksum = md5.new(data).hexdigest()
+      form_fields = [("filename", filename),
+                     ("num_parts", str(len(parts))),
+                     ("checksum", checksum),
+                     ("current_part", str(part)),
+                     ("current_checksum", current_checksum),]
+      if options.email:
+        form_fields.append(("user", options.email))
+      ctype, body = EncodeMultipartFormData(form_fields,
+                                            [("data", filename, data)])
+      response_body = rpc_server.Send(url, body,
+                                      content_type=ctype)
+      if not response_body.startswith("OK"):
+        StatusUpdate("  --> %s" % response_body)
+        sys.exit(False)
+
+def CollapseKeywords(content, keyword_str):
+    """Collapses SVN keywords."""
+    # svn cat translates keywords but svn diff doesn't. As a result of this
+    # behavior patching.PatchChunks() fails with a chunk mismatch error.
+    # This part was originally written by the Review Board development team
+    # who had the same problem (http://reviews.review-board.org/r/276/).
+    # Mapping of keywords to known aliases
+    svn_keywords = {
+      # Standard keywords
+      'Date':                ['Date', 'LastChangedDate'],
+      'Revision':            ['Revision', 'LastChangedRevision', 'Rev'],
+      'Author':              ['Author', 'LastChangedBy'],
+      'HeadURL':             ['HeadURL', 'URL'],
+      'Id':                  ['Id'],
+
+      # Aliases
+      'LastChangedDate':     ['LastChangedDate', 'Date'],
+      'LastChangedRevision': ['LastChangedRevision', 'Rev', 'Revision'],
+      'LastChangedBy':       ['LastChangedBy', 'Author'],
+      'URL':                 ['URL', 'HeadURL'],
+    }
+    def repl(m):
+       if m.group(2):
+         return "$%s::%s$" % (m.group(1), " " * len(m.group(3)))
+       return "$%s$" % m.group(1)
+    keywords = [keyword
+                for name in keyword_str.split(" ")
+                for keyword in svn_keywords.get(name, [])]
+    return re.sub(r"\$(%s):(:?)([^\$]+)\$" % '|'.join(keywords), repl, content)
 
 def CheckForUnknownFiles():
   status = RunShell("svn status --ignore-externals", silent_ok=True)

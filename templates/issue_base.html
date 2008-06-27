@@ -60,7 +60,7 @@
         <div><b>Reviewers:</b><br/>
         {{issue.reviewers|show_users}}</div>
         <div><b>SVN Base:</b><br/>
-        {{issue.base}}</div>
+        {%firstof issue.base%}</div>
       </div>
     </td>
     <td style="padding-left: .8em; padding-right: .8em;" width="80%">

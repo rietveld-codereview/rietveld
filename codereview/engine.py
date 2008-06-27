@@ -88,6 +88,12 @@ def FetchBase(base, patch):
     if rev == 0:
       # rev=0 means it's a new file.
       return models.Content(text=db.Text(u''), parent=patch)
+  try:
+    base = db.Link(base)
+  except db.BadValueError:
+    msg = 'Invalid base URL: %s' % base
+    logging.error(msg)
+    raise FetchError(msg)
   url = _MakeUrl(base, filename, rev)
   logging.info('Fetching %s', url)
   try:
@@ -100,7 +106,8 @@ def FetchBase(base, patch):
     msg = 'Error fetching %s: HTTP status %s' % (url, result.status_code)
     logging.error(msg)
     raise FetchError(msg)
-  return models.Content(text=_ToText([result.content]), parent=patch)
+  return models.Content(text=_ToText([result.content]), parent=patch,
+                        is_complete=True)
 
 
 def _MakeUrl(base, filename, rev):
