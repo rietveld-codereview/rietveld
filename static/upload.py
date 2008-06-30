@@ -496,7 +496,7 @@ def GuessBase():
 def RealMain(argv):
   logging.basicConfig(format=("%(asctime).19s %(levelname)s %(filename)s:"
                               "%(lineno)s %(message)s "))
-  os.environ['LANG'] = 'C'
+  os.environ['LC_ALL'] = 'C'
   options, args = parser.parse_args(sys.argv[1:])
   global verbosity
   verbosity = options.verbose
