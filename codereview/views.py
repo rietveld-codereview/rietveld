@@ -153,7 +153,7 @@ class UploadForm(forms.Form):
 
   subject = forms.CharField(max_length=100)
   description = forms.CharField(max_length=10000, required=False)
-  content_upload = forms.BooleanField()
+  content_upload = forms.BooleanField(required=False)
   base = forms.CharField(max_length=2000, required=False)
   data = forms.FileField()
   issue = forms.IntegerField(required=False)
@@ -189,12 +189,12 @@ class UploadContentForm(forms.Form):
     return self.cleaned_data
 
   def get_uploaded_content(self):
-    return self.files['data']['content']
+    return self.files['data'].read()
 
 
 class EditForm(IssueBaseForm):
 
-  closed = forms.BooleanField()
+  closed = forms.BooleanField(required=False)
 
 class EditLocalBaseForm(forms.Form):
   subject = forms.CharField(max_length=100,
@@ -205,7 +205,7 @@ class EditLocalBaseForm(forms.Form):
   reviewers = forms.CharField(required=False,
                               max_length=1000,
                               widget=forms.TextInput(attrs={'size': 60}))
-  closed = forms.BooleanField()
+  closed = forms.BooleanField(required=False)
 
   def get_base(self):
     return None
@@ -232,7 +232,7 @@ class PublishForm(forms.Form):
   reviewers = forms.CharField(required=False,
                               max_length=1000,
                               widget=forms.TextInput(attrs={'size': 60}))
-  send_mail = forms.BooleanField()
+  send_mail = forms.BooleanField(required=False)
   message = forms.CharField(required=False,
                             max_length=10000,
                             widget=forms.Textarea(attrs={'cols': 60}))
@@ -245,7 +245,7 @@ class MiniPublishForm(forms.Form):
   reviewers = forms.CharField(required=False,
                               max_length=1000,
                               widget=forms.TextInput(attrs={'size': 60}))
-  send_mail = forms.BooleanField()
+  send_mail = forms.BooleanField(required=False)
   message = forms.CharField(required=False,
                             max_length=10000,
                             widget=forms.Textarea(attrs={'cols': 60}))
@@ -716,7 +716,7 @@ def _get_data_url(form):
     return None
 
   if data is not None:
-    data = db.Blob(data.content)
+    data = db.Blob(data.data.read())
     url = None
   else:
     assert url
