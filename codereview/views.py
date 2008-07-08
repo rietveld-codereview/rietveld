@@ -716,7 +716,7 @@ def _get_data_url(form):
     return None
 
   if data is not None:
-    data = db.Blob(data.data.read())
+    data = db.Blob(data.read())
     url = None
   else:
     assert url
