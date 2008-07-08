@@ -203,9 +203,8 @@
         <div id="cl-comment-{{forloop.counter0}}"
              {%if forloop.last%}{%else%}style="display: none;"{%endif%}>
           <div class="message-body">
-            <pre name="cl-message-{{forloop.counter0}}">
-              {{message.text|wordwrap:80|urlize}}
-            </pre>
+            <pre name="cl-message-{{forloop.counter0}}"
+            >{{message.text|wordwrap:80|urlize}}</pre>
           </div>
           <div class="message-actions">
             {%if user%}
