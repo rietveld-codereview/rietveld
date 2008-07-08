@@ -5,31 +5,40 @@
 
 <div class="issue-list">
   <div class="pagination">
-    {%if newest%}<a class="novisit" href="{{newest}}">&laquo; Newest</a>{%endif%}
-    {%if prev%}<a class="novisit" href="{{prev}}">&lsaquo; Newer</a>{%endif%}
+    {%if newest%}
+      <a class="novisit" href="{{newest}}">&laquo; Newest</a>
+    {%endif%}
+    {%if prev%}
+      <a class="novisit" href="{{prev}}">&lsaquo; Newer</a>
+    {%endif%}
     <b>{{first}}{%if last%} - {{last}}{%endif%}</b>
     {%if next%}<a class="novisit" href="{{next}}">Older &rsaquo;</a>
     {%else%}<span style="color:gray">Older &raquo;</span>{%endif%}
   </div>
-<table id="queues">
 
-{%if not issues%}
-<tr><td colspan="7"><span class="disabled">(None)</span></td></tr>
-{%else%}
-{%include "issue_heading.html"%}
-{%for issue in issues%}
-{%include "issue_row.html"%}
-{%endfor%}
-{%endif%}
+  <table id="queues">
+    {%if not issues%}
+      <tr><td colspan="7"><span class="disabled">(None)</span></td></tr>
+    {%else%}
+      {%include "issue_heading.html"%}
+      {%for issue in issues%}
+        {%include "issue_row.html"%}
+      {%endfor%}
+    {%endif%}
+  </table>
 
-</table>
   <div class="pagination">
-    {%if newest%}<a class="novisit" href="{{newest}}">&laquo; Newest</a>{%endif%}
-    {%if prev%}<a class="novisit" href="{{prev}}">&lsaquo; Newer</a>{%endif%}
+    {%if newest%}
+      <a class="novisit" href="{{newest}}">&laquo; Newest</a>
+    {%endif%}
+    {%if prev%}
+      <a class="novisit" href="{{prev}}">&lsaquo; Newer</a>
+    {%endif%}
     <b>{{first}}{%if last%} - {{last}}{%endif%}</b>
     {%if next%}<a class="novisit" href="{{next}}">Older &rsaquo;</a>
     {%else%}<span style="color:gray">Older &raquo;</span>{%endif%}
   </div>
+
 </div>
 
 {%endblock%}
