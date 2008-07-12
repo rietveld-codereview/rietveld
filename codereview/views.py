@@ -29,6 +29,8 @@ import re
 import logging
 import binascii
 import datetime
+import urllib
+import md5
 from xml.etree import ElementTree
 from cStringIO import StringIO
 
@@ -151,17 +153,62 @@ class UploadForm(forms.Form):
 
   subject = forms.CharField(max_length=100)
   description = forms.CharField(max_length=10000, required=False)
-  base = forms.CharField(max_length=2000)
+  content_upload = forms.BooleanField(required=False)
+  base = forms.CharField(max_length=2000, required=False)
   data = forms.FileField()
   issue = forms.IntegerField(required=False)
+
+  def clean_base(self):
+    base = self.cleaned_data.get('base')
+    if not base and not self.cleaned_data.get('content_upload', False):
+      raise forms.ValidationError, 'SVN base is required.'
+    elif base:
+      try:
+        db.Link(base)
+      except db.BadValueError:
+        raise forms.ValidationError, 'Invalid URL'
+    return self.cleaned_data.get('base')
 
   def get_base(self):
     return self.cleaned_data.get('base')
 
 
+class UploadContentForm(forms.Form):
+  filename = forms.CharField(max_length=255)
+  num_parts = forms.IntegerField()
+  checksum = forms.CharField(max_length=32)
+  current_part = forms.IntegerField()
+  current_checksum = forms.CharField(max_length=32)
+
+  def clean(self):
+    # Check presence of 'data'. We cannot use FileField because
+    # it disallows empty files.
+    super(UploadContentForm, self).clean()
+    if not self.files and not self.files.has_key('data'):
+      raise forms.ValidationError, 'No content uploaded.'
+    return self.cleaned_data
+
+  def get_uploaded_content(self):
+    return self.files['data'].read()
+
+
 class EditForm(IssueBaseForm):
 
-  closed = forms.BooleanField()
+  closed = forms.BooleanField(required=False)
+
+class EditLocalBaseForm(forms.Form):
+  subject = forms.CharField(max_length=100,
+                            widget=forms.TextInput(attrs={'size': 60}))
+  description = forms.CharField(required=False,
+                                max_length=10000,
+                                widget=forms.Textarea(attrs={'cols': 60}))
+  reviewers = forms.CharField(required=False,
+                              max_length=1000,
+                              widget=forms.TextInput(attrs={'size': 60}))
+  closed = forms.BooleanField(required=False)
+
+  def get_base(self):
+    return None
 
 
 class RepoForm(djangoforms.ModelForm):
@@ -185,10 +232,12 @@ class PublishForm(forms.Form):
   reviewers = forms.CharField(required=False,
                               max_length=1000,
                               widget=forms.TextInput(attrs={'size': 60}))
-  send_mail = forms.BooleanField()
+  send_mail = forms.BooleanField(required=False)
   message = forms.CharField(required=False,
                             max_length=10000,
                             widget=forms.Textarea(attrs={'cols': 60}))
+  message_only = forms.BooleanField(required=False,
+                                    widget=forms.HiddenInput())
 
 
 class MiniPublishForm(forms.Form):
@@ -196,10 +245,12 @@ class MiniPublishForm(forms.Form):
   reviewers = forms.CharField(required=False,
                               max_length=1000,
                               widget=forms.TextInput(attrs={'size': 60}))
-  send_mail = forms.BooleanField()
+  send_mail = forms.BooleanField(required=False)
   message = forms.CharField(required=False,
                             max_length=10000,
                             widget=forms.Textarea(attrs={'cols': 60}))
+  message_only = forms.BooleanField(required=False,
+                                    widget=forms.HiddenInput())
 
 
 FORM_CONTEXT_VALUES = [(x, "%d lines" % x) for x in models.CONTEXT_CHOICES]
@@ -306,6 +357,22 @@ def issue_required(func):
   return issue_wrapper
 
 
+def user_key_required(func):
+  """Decorator that processes the user handler argument."""
+  def user_key_wrapper(request, user_key, *args, **kwds):
+    user_key = urllib.unquote(user_key)
+    if '@' in user_key:
+      request.user_to_show = users.User(user_key)
+    else:
+      accounts = models.Account.get_accounts_for_nickname(user_key)
+      if not accounts:
+        return HttpResponseNotFound('No user found with that key (%s)' %
+                                    user_key)
+      request.user_to_show = accounts[0].user
+    return func(request, *args, **kwds)
+  return user_key_wrapper
+
+
 def issue_owner_required(func):
   """Decorator that processes the issue_id argument and insists you own it."""
   @issue_required
@@ -405,25 +472,21 @@ def all(request):
                   'first': offset+1,
                   'last': len(issues) > 1 and offset+len(issues) or None})
 
-
 @login_required
 def mine(request):
   """/mine - Show a list of issues created by the current user."""
-  user = request.user
-  if 'user' in request.GET:
-    name = request.GET['user']
-    if '@' in name:
-      account = models.Account.get_account_for_email(name)
-      if account is not None:
-        user = account.user
-      else:
-        user = users.User(email=name)
-    elif name != 'me':
-      accounts = models.Account.get_accounts_for_nickname(name)
-      if accounts:
-        user = accounts[0].user
-      else:
-        return HttpResponseNotFound('No user found with nickname %r' % name)
+  request.user_to_show = request.user
+  return _show_user(request)
+
+
+@user_key_required
+def show_user(request):
+  """/user - Show the user's dashboard"""
+  return _show_user(request)
+
+
+def _show_user(request):
+  user = request.user_to_show
   my_issues = list(db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC',
@@ -437,8 +500,9 @@ def mine(request):
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
       'ORDER BY modified DESC',
       datetime.datetime.now() - datetime.timedelta(days=7), user))
-  return respond(request, 'mine.html',
-                 {'my_issues': my_issues,
+  return respond(request, 'user.html',
+                 {'email':user.email(),
+                  'my_issues': my_issues,
                   'review_issues': review_issues,
                   'closed_issues': closed_issues})
 
@@ -475,6 +539,7 @@ def upload(request):
       return HttpResponse('Login required', status=401)
   form = UploadForm(request.POST, request.FILES)
   issue = None
+  patchset = None
   if form.is_valid():
     issue_id = form.cleaned_data['issue']
     if issue_id:
@@ -483,24 +548,105 @@ def upload(request):
       if issue is None:
         form.errors['issue'] = ['No issue exists with that id (%s)' %
                                 issue_id]
+      elif issue.local_base and not form.cleaned_data.get('content_upload'):
+        form.errors['issue'] = ['Base files upload required for that issue.']
+        issue = None
       else:
         if request.user != issue.owner:
           form.errors['user'] = ['You (%s) don\'t own this issue (%s)' %
                                  (request.user, issue_id)]
           issue = None
         else:
-          if not add_patchset_from_form(request, issue, form, 'subject'):
+          patchset = add_patchset_from_form(request, issue, form, 'subject') 
+          if not patchset:
             issue = None
     else:
       action = 'created'
       issue = _make_new(request, form)
+      patchset = issue.patchset
   if issue is None:
     msg = 'Issue creation errors:\n%s' % repr(form.errors)
   else:
     msg = ('Issue %s. URL: %s' %
            (action,
             request.build_absolute_uri('/%s' % issue.key().id())))
+    if form.cleaned_data.get('content_upload'):
+      # Extend the response message: 2nd line is patchset id, additional lines
+      # are the expected filenames.
+      issue.local_base = True
+      issue.base = None
+      issue.put()
+      msg +="\n%d" % patchset.key().id()
+      for patch in patchset.patch_set:
+        content = models.Content(text=db.Text(''), is_uploaded=True,
+                                 is_complete=False, parent=patch)
+        content.put()
+        patch.content = content
+        patch.put()
+        msg += "\n%d %s" % (patch.key().id(), patch.filename)
   return HttpResponse(msg, content_type='text/plain')
+
+
+@patch_required
+def upload_content(request):
+  """/<issue>/upload_content/<patchset>/<patch> - Upload base file contents.
+
+  Used by upload.py to upload base files."""
+  if request.method != 'POST':
+    return HttpResponse('Method not allowed.', status=405)
+  form = UploadContentForm(request.POST, request.FILES)
+  if not form.is_valid():
+    return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
+                        content_type='text/plain')
+  patch = request.patch
+  try:
+    content = patch.get_partial_content()
+  except engine.FetchError, err:
+    return HttpResponse('ERROR: %s' % err, content_type='text/plain')
+  if request.user is None:
+    if IS_DEV:
+      request.user = users.User(request.POST.get('user', 'test@example.com'))
+    else:
+      return HttpResponse('Error: Login required', status=401)
+  if request.user != request.issue.owner:
+    return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
+                        (request.user, request.issue.key().id()))
+  current_part = form.cleaned_data['current_part']
+  # Reset Content instance when we've got part 0. Enables retry from upload.py.
+  if current_part == 0:
+    content.num_parts = form.cleaned_data['num_parts']
+    content.last_part = -1
+    content.is_bad = False
+    content.text = db.Text('')
+  if current_part != content.last_part+1:
+    msg = ('ERROR: Expected part %d of %d. '
+           'Got part %d instead.' % (content.last_part+2, content.num_parts,
+                                     current_part+1))
+    return HttpResponse(msg, content_type='text/plain')
+  data = form.get_uploaded_content()
+  if not md5.new(data).hexdigest() == form.cleaned_data['current_checksum']:
+    content.is_bad = True
+    content.text = db.Text('')
+    content.last_part = -1
+    content.put()
+    return HttpResponse('ERROR: Checksum mismatch.', content_type='text/plain')
+  if not content.text:
+    content.text = engine._ToText(data.splitlines(True))
+  else:
+    content.text += engine._ToText(data.splitlines(True))
+  content.last_part = current_part
+  if current_part+1 == content.num_parts:
+    content.is_complete = True
+    checksum = md5.new(content.text.encode('utf-8')).hexdigest()
+    if checksum != request.POST.get('checksum'):
+      content.is_bad = True
+      content.text = db.Text('')
+      content.last_part = -1
+      content.put()
+      return HttpResponse('ERROR: Checksum mismatch.',
+                          content_type='text/plain')
+  content.put()
+  return HttpResponse('OK', content_type='text/plain')
 
 
 class EmptyPatchSet(Exception):
@@ -539,6 +685,7 @@ def _make_new(request, form):
     patchset = models.PatchSet(issue=issue, data=data, url=url,
                                base=base, owner=request.user, parent=issue)
     patchset.put()
+    issue.patchset = patchset
 
     patches = engine.ParsePatchSet(patchset)
     if not patches:
@@ -569,7 +716,7 @@ def _get_data_url(form):
     return None
 
   if data is not None:
-    data = db.Blob(data.content)
+    data = db.Blob(data.read())
     url = None
   else:
     assert url
@@ -602,7 +749,7 @@ def add_patchset_from_form(request, issue, form, message_key='message'):
   if form.is_valid():
     data_url = _get_data_url(form)
   if not form.is_valid():
-    return False
+    return None
   data, url = data_url
   message = form.cleaned_data[message_key]
   patchset = models.PatchSet(issue=issue, message=message, data=data, url=url,
@@ -614,10 +761,10 @@ def add_patchset_from_form(request, issue, form, message_key='message'):
     patchset.delete()
     errkey = url and 'url' or 'data'
     form.errors[errkey] = ['Patch set contains no recognizable patches']
-    return False
+    return None
   db.put(patches)
   issue.put()  # To update last modified time
-  return True
+  return patchset
 
 
 def _get_reviewers(form):
@@ -647,6 +794,14 @@ def show(request, form=AddForm()):
   """/<issue> - Show an issue."""
   issue = request.issue
   patchsets = list(issue.patchset_set.order('created'))
+  if request.user:
+    drafts = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = TRUE'
+                                     '  AND author = :2',
+                                     issue, request.user))
+  else:
+    drafts = []
+  comments = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE',
+                                     issue))
   issue.draft_count = 0
   issue.comment_count = 0
   for patchset in patchsets:
@@ -655,11 +810,15 @@ def show(request, form=AddForm()):
       patch.patchset = patchset  # Prevent getting these over and over
     patchset.n_comments = 0
     for patch in patchset.patches:
+      pkey = patch.key()
+      patch._num_comments = sum(c.parent_key() == pkey for c in comments)
       patchset.n_comments += patch.num_comments
     issue.comment_count += patchset.n_comments
     patchset.n_drafts = 0
     if request.user:
       for patch in patchset.patches:
+        pkey = patch.key()
+        patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
         patchset.n_drafts += patch.num_drafts
       issue.draft_count += patchset.n_drafts
   last_patchset = first_patch = None
@@ -681,17 +840,24 @@ def edit(request):
   issue = request.issue
   base = issue.base
 
+  if issue.local_base:
+    form_cls = EditLocalBaseForm
+  else:
+    form_cls = EditForm
+
   if request.method != 'POST':
-    form = EditForm(initial={'subject': issue.subject,
+    form = form_cls(initial={'subject': issue.subject,
                              'description': issue.description,
                              'base': base,
                              'reviewers': ', '.join(issue.reviewers),
                              'closed': issue.closed})
-    form.set_branch_choices(base)
+    if not issue.local_base:
+      form.set_branch_choices(base)
     return respond(request, 'edit.html', {'issue': issue, 'form': form})
 
-  form = EditForm(request.POST)
-  form.set_branch_choices()
+  form = form_cls(request.POST)
+  if not issue.local_base:
+    form.set_branch_choices()
 
   if form.is_valid():
     reviewers = _get_reviewers(form)
@@ -830,9 +996,16 @@ def _get_diff_table_rows(request, patch, context):
   if rows and rows[-1] is None:
     del rows[-1]
     # Get rid of content, which may be bad
-    content.delete()
-    request.patch.content = None
-    request.patch.put()
+    if content.is_uploaded:
+      # Don't delete uploaded content, otherwise get_content()
+      # will fetch it.
+      content.is_bad = True
+      content.text = None
+      content.put()
+    else:
+      content.delete()
+      request.patch.content = None
+      request.patch.put()
 
   return rows
 
@@ -935,11 +1108,15 @@ def diff2(request, ps_left_id, ps_right_id, patch_id):
   _add_next_prev(data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
                  {'issue': request.issue,
-                  'ps_left': data["ps_left"], 'patch_left': data["patch_left"],
+                  'ps_left': data["ps_left"],
+                  'patch_left': data["patch_left"],
                   'ps_right': data["ps_right"],
-                  'patch_right': data["patch_right"], 'rows': data["rows"],
+                  'patch_right': data["patch_right"],
+                  'rows': data["rows"],
                   'patch_id': patch_id,
-                  'context': context, 'context_values': models.CONTEXT_CHOICES})
+                  'context': context,
+                  'context_values': models.CONTEXT_CHOICES,
+                  })
 
 
 @issue_required
@@ -957,6 +1134,7 @@ def _add_next_prev(patchset, patch):
   patch.prev = patch.next = None
   patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
                                   patchset))
+  patchset.patches = patches  # Required to render the jump to select.
   last = None
   for p in patches:
     if last is not None:
@@ -986,8 +1164,10 @@ def inline_draft(request):
 def _inline_draft(request):
   """Helper to submit an in-line draft comment."""
   # TODO(guido): turn asserts marked with XXX into errors
-  # Don't use @login_required, since the JS doesn't understand redirects
-  assert request.user  # XXX
+  # Don't use @login_required, since the JS doesn't understand redirects.
+  if not request.user:
+    # Don't log this, spammers have started abusing this.
+    return HttpResponse('Not logged in')
   snapshot = request.POST.get('snapshot')
   assert snapshot in ('old', 'new'), repr(snapshot)
   left = (snapshot == 'old')
@@ -996,10 +1176,12 @@ def _inline_draft(request):
   issue_id = int(request.POST['issue'])
   issue = models.Issue.get_by_id(issue_id)
   assert issue  # XXX
-  patchset_id = int(request.POST.get('patchset') or request.POST[side == 'a' and 'ps_left' or 'ps_right'])
+  patchset_id = int(request.POST.get('patchset') or
+                    request.POST[side == 'a' and 'ps_left' or 'ps_right'])
   patchset = models.PatchSet.get_by_id(int(patchset_id), parent=issue)
   assert patchset  # XXX
-  patch_id = int(request.POST.get('patch') or request.POST[side == 'a' and 'patch_left' or 'patch_right'])
+  patch_id = int(request.POST.get('patch') or
+                 request.POST[side == 'a' and 'patch_left' or 'patch_right'])
   patch = models.Patch.get_by_id(int(patch_id), parent=patchset)
   assert patch  # XXX
   text = request.POST.get('text')
@@ -1053,26 +1235,6 @@ def _inline_draft(request):
                              'side': side})
 
 
-PUBLISH_MAIL_TEMPLATE = """Dear %s,
-
-New code review comments by %s have been published.
-Please go to %s to read them.
-
-Message:
-%s
-
-Details:
-%s
-
-Issue Description:
-%s
-
-Sincerely,
-
-  Your friendly code review daemon (%s).
-"""
-
-
 @issue_required
 @login_required
 def publish(request):
@@ -1087,30 +1249,68 @@ def publish(request):
     if request.user != issue.owner and (request.user.email()
                                         not in issue.reviewers):
       reviewers.append(request.user.email())
+    tbd, comments = _get_draft_comments(request, issue, True)
+    preview = _get_draft_details(request, comments)
     form = form_class(initial={'subject': issue.subject,
                                'reviewers': ', '.join(reviewers),
                                'send_mail': True,
                                })
-    return respond(request, 'publish.html', {'form': form, 'issue': issue})
+    return respond(request, 'publish.html', {'form': form, 'issue': issue,
+                                             'preview' : preview})
 
   form = form_class(request.POST)
-  if form.is_valid():
+  if form.is_valid() and not form.cleaned_data.get('message_only', False):
     reviewers = _get_reviewers(form)
+  else:
+    reviewers = issue.reviewers
   if not form.is_valid():
     return respond(request, 'publish.html',  {'form': form, 'issue': issue})
-  tbd = []  # List of things to put() after all is said and done
   if request.user == issue.owner:
-    subject = form.cleaned_data['subject']
-    issue.subject = subject
-    issue.reviewers = reviewers
+    issue.subject = form.cleaned_data['subject']
+  issue.reviewers = reviewers
+  if not form.cleaned_data.get('message_only', False):
+    tbd, comments = _get_draft_comments(request, issue)
   else:
-    subject = issue.subject
-    issue.reviewers = reviewers
-  tbd.append(issue)  # To update the last modified time
-  message = form.cleaned_data['message'].replace('\r\n', '\n')
-  send_mail = form.cleaned_data['send_mail']
-  comments = []
+    tbd = []
+    comments = None
+  tbd.append(issue)
 
+  if comments:
+    logging.warn('Publishing %d comments', len(comments))
+  msg = _make_message('mails/publish.txt', request, issue,
+                      form.cleaned_data['message'],
+                      comments, 
+                      form.cleaned_data['send_mail'])
+  tbd.append(msg)
+
+  for obj in tbd:
+    db.put(obj)
+  return HttpResponseRedirect('/%s' % issue.key().id())
+
+
+def _encode_safely(s):
+  """Helper to turn a unicode string into 8-bit bytes."""
+  if isinstance(s, unicode):
+    s = s.encode('utf-8')
+  return s
+
+
+def _get_draft_comments(request, issue, preview=False):
+  """Helper to return objects to put() and a list of draft comments.
+
+  If preview is True, the list of objects to put() is empty to avoid changes
+  to the datastore.
+
+  Args:
+    request: Django Request object.
+    issue: Issue instance.
+    preview: Preview flag (default: False).
+
+  Returns:
+    2-tuple (put_objects, comments).
+  """
+  comments = []
+  tbd = []
   # XXX Should request all drafts for this issue once, now we can.
   for patchset in issue.patchset_set.order('created'):
     ps_comments = list(models.Comment.gql(
@@ -1128,61 +1328,12 @@ def publish(request):
         if pkey in patches:
           patch = patches[pkey]
           c.patch = patch
-      tbd.append(ps_comments)
+      if not preview:
+        tbd.append(ps_comments)
       ps_comments.sort(key=lambda c: (c.patch.filename, not c.left,
                                       c.lineno, c.date))
       comments += ps_comments
-
-  if comments:
-    logging.warn('Publishing %d comments', len(comments))
-  # Decide who should receive mail
-  my_email = db.Email(request.user.email())
-  addressees = [db.Email(issue.owner.email())] + issue.reviewers
-  if my_email in addressees:
-    everyone = addressees[:]
-    if len(addressees) > 1:  # Keep it if sending only to yourself
-      addressees.remove(my_email)
-  else:
-    everyone = addressees
-  details = _get_draft_details(request, comments)
-  text = ((message.strip() + '\n\n' + details.strip())).strip()
-  msg = models.Message(issue=issue,
-                       subject=issue.subject,
-                       sender=my_email,
-                       recipients=everyone,
-                       text=db.Text(text),
-                       parent=issue)
-  tbd.append(msg)
-
-  if send_mail:
-    url = request.build_absolute_uri('/%s' % issue.key().id())
-    addressees_nicknames = ", ".join(library.nickname(addressee, True)
-                                     for addressee in addressees)
-    my_nickname = library.nickname(request.user, True)
-    addressees = ', '.join(addressees)
-    description = (issue.description or '').replace('\r\n', '\n')
-    home = request.build_absolute_uri('/')
-    body = PUBLISH_MAIL_TEMPLATE % (addressees_nicknames, my_nickname,
-                                    url, message,
-                                    details, description, home)
-    logging.warn('Mail: to=%s; cc=%s', addressees, my_email)
-    mail.send_mail(sender=SENDER,
-                   to=_encode_safely(addressees),
-                   subject=_encode_safely('Re: ' + subject),
-                   body=_encode_safely(body),
-                   cc=_encode_safely(my_email),
-                   reply_to=_encode_safely(', '.join(everyone)))
-
-  for obj in tbd:
-    db.put(obj)
-  return HttpResponseRedirect('/%s' % issue.key().id())
-
-
-def _encode_safely(s):
-  """Helper to turn a unicode string into 8-bit bytes."""
-  if isinstance(s, unicode):
-    s = s.encode('utf-8')
-  return s
+  return tbd, comments
 
 
 def _get_draft_details(request, comments):
@@ -1223,6 +1374,57 @@ def _get_draft_details(request, comments):
   if modified_patches:
     db.put(modified_patches)
   return '\n'.join(output)
+
+
+def _make_message(template, request, issue, message, comments=None,
+                  send_mail=False, context=None):
+  """Helper to create a Message instance and optionally send an email."""
+  if context is None:
+    context = {}
+  # Decide who should receive mail
+  my_email = db.Email(request.user.email())
+  addressees = [db.Email(issue.owner.email())] + issue.reviewers
+  if my_email in addressees:
+    everyone = addressees[:]
+    if len(addressees) > 1:  # Keep it if sending only to yourself
+      addressees.remove(my_email)
+  else:
+    everyone = addressees
+  if comments:
+    details = _get_draft_details(request, comments)
+  else:
+    details = ''
+  message = message.replace('\r\n', '\n')
+  text = ((message.strip() + '\n\n' + details.strip())).strip()
+  msg = models.Message(issue=issue,
+                       subject=issue.subject,
+                       sender=my_email,
+                       recipients=everyone,
+                       text=db.Text(text),
+                       parent=issue)
+
+  if send_mail:
+    url = request.build_absolute_uri('/%s' % issue.key().id())
+    addressees_nicknames = ', '.join(library.nickname(addressee, True)
+                                     for addressee in addressees)
+    my_nickname = library.nickname(request.user, True)
+    addressees = ', '.join(addressees)
+    description = (issue.description or '').replace('\r\n', '\n')
+    home = request.build_absolute_uri('/')
+    context.update({'nicknames': addressees_nicknames,
+                    'my_nickname': my_nickname, 'url': url,
+                    'message': message, 'details': details,
+                    'description': description, 'home': home})
+    body = django.template.loader.render_to_string(template, context)
+    logging.warn('Mail: to=%s; cc=%s', addressees, my_email)
+    mail.send_mail(sender=SENDER,
+                   to=_encode_safely(addressees),
+                   subject=_encode_safely('Re: ' + issue.subject),
+                   body=_encode_safely(body),
+                   cc=_encode_safely(my_email),
+                   reply_to=_encode_safely(', '.join(everyone)))
+
+  return msg
 
 
 ### Repositories and Branches ###
@@ -1382,6 +1584,9 @@ def settings(request):
       form.errors['nickname'] = ['Your nickname cannot contain "@".']
     elif ',' in nickname:
       form.errors['nickname'] = ['Your nickname cannot contain ",".']
+    elif nickname == 'me':
+      form.errors['nickname'] = ['Of course, you are what you are. '
+                                 'But \'me\' is for everyone.']
     else:
       accounts = models.Account.get_accounts_for_nickname(nickname)
       if nickname != account.nickname and accounts:

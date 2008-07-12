@@ -1,10 +1,6 @@
-{%extends "base.html"%}
+{%extends "repos_base.html"%}
 {%block body%}
 <h2>Repositories and Branches</h2>
-
-{%if user%}
-<p>(<a href="{%url codereview.views.repo_new%}">Add Repository</a>)</p>
-{%endif%}
 
 {%for br in branches%}
 {%ifchanged%}<h3>Repository: {{br.repo.name}}</h3>
@@ -18,11 +14,5 @@
 {%endifequal%}
 <br>
 {%endfor%}
-
-{%if is_admin%}
-<p>
-<a href="{%url codereview.views.repo_init%}">Initialize Repositories</a> (admin only)
-</form>
-{%endif%}
 
 {%endblock%}
