@@ -147,6 +147,8 @@ class AddForm(forms.Form):
   url = forms.URLField(required=False,
                        max_length=2083,
                        widget=forms.TextInput(attrs={'size': 60}))
+  reviewers = forms.CharField(max_length=1000, required=False,
+                              widget=forms.TextInput(attrs={'size': 60}))
 
 
 class UploadForm(forms.Form):
@@ -157,6 +159,7 @@ class UploadForm(forms.Form):
   base = forms.CharField(max_length=2000, required=False)
   data = forms.FileField()
   issue = forms.IntegerField(required=False)
+  reviewers = forms.CharField(max_length=1000, required=False)
 
   def clean_base(self):
     base = self.cleaned_data.get('base')
@@ -557,7 +560,8 @@ def upload(request):
                                  (request.user, issue_id)]
           issue = None
         else:
-          patchset = add_patchset_from_form(request, issue, form, 'subject') 
+          patchset = add_patchset_from_form(request, issue, form, 'subject',
+                                            reviewers_add_only=True) 
           if not patchset:
             issue = None
     else:
@@ -743,7 +747,8 @@ def add(request):
   return HttpResponseRedirect('/%s' % issue.key().id())
 
 
-def add_patchset_from_form(request, issue, form, message_key='message'):
+def add_patchset_from_form(request, issue, form, message_key='message',
+                           reviewers_add_only=False):
   """Helper for add() and upload()."""
   # TODO(guido): use a transaction like in _make_new(); may be share more code?
   if form.is_valid():
@@ -763,7 +768,13 @@ def add_patchset_from_form(request, issue, form, message_key='message'):
     form.errors[errkey] = ['Patch set contains no recognizable patches']
     return None
   db.put(patches)
-  issue.put()  # To update last modified time
+
+  if reviewers_add_only:
+    issue.reviewers += [reviewer for reviewer in _get_reviewers(form)
+                        if reviewer not in issue.reviewers]
+  else:
+    issue.reviewers = _get_reviewers(form)
+  issue.put()
   return patchset
 
 
@@ -790,9 +801,11 @@ def _get_reviewers(form):
 
 
 @issue_required
-def show(request, form=AddForm()):
+def show(request, form=None):
   """/<issue> - Show an issue."""
   issue = request.issue
+  if not form:
+    form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   patchsets = list(issue.patchset_set.order('created'))
   if request.user:
     drafts = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = TRUE'
@@ -1259,14 +1272,13 @@ def publish(request):
                                              'preview' : preview})
 
   form = form_class(request.POST)
-  if form.is_valid() and not form.cleaned_data.get('message_only', False):
-    reviewers = _get_reviewers(form)
-  else:
-    reviewers = issue.reviewers
   if not form.is_valid():
-    return respond(request, 'publish.html',  {'form': form, 'issue': issue})
+    return respond(request, 'publish.html', {'form': form, 'issue': issue})
   if request.user == issue.owner:
     issue.subject = form.cleaned_data['subject']
+  reviewers = _get_reviewers(form)
+  if not form.is_valid():
+    return respond(request, 'publish.html', {'form': form, 'issue': issue})
   issue.reviewers = reviewers
   if not form.cleaned_data.get('message_only', False):
     tbd, comments = _get_draft_comments(request, issue)

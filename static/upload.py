@@ -369,7 +369,9 @@ parser.add_option("-y", "--assume_yes", action="store_true",
 parser.add_option("-l", "--local_base", action="store_true",
                   dest="local_base", default=False,
                   help="Base files will be uploaded.")
-
+parser.add_option("-r", "--reviewers", action="store", dest="reviewers",
+                  metavar="REVIEWERS", default=None,
+                  help="Add reviewers (comma separated email addresses).")
 
 def GetRpcServer(options):
   """Returns an instance of an AbstractRpcServer.
@@ -533,6 +535,11 @@ def RealMain(argv):
     form_fields.append(("issue", str(options.issue)))
   if options.email:
     form_fields.append(("user", options.email))
+  if options.reviewers:
+    for reviewer in options.reviewers.split(','):
+      if reviewer.count("@") != 1 or "." not in reviewer.split("@")[1]:
+        ErrorExit("Invalid email address: %s" % reviewer)
+    form_fields.append(("reviewers", options.reviewers))
   if options.local_base:
     form_fields.append(("content_upload", "1"))
   ctype, body = EncodeMultipartFormData(form_fields,
