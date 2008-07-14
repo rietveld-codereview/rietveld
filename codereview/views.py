@@ -96,6 +96,10 @@ class IssueBaseForm(forms.Form):
   reviewers = forms.CharField(required=False,
                               max_length=1000,
                               widget=forms.TextInput(attrs={'size': 60}))
+  cc = forms.CharField(required=False,
+                       max_length=1000,
+                       label = 'CC',
+                       widget=forms.TextInput(attrs={'size': 60}))
 
   def set_branch_choices(self, base=None):
     branches = models.Branch.gql('ORDER BY repo, category, name')
@@ -160,6 +164,7 @@ class UploadForm(forms.Form):
   data = forms.FileField()
   issue = forms.IntegerField(required=False)
   reviewers = forms.CharField(max_length=1000, required=False)
+  cc = forms.CharField(max_length=1000, required=False)
 
   def clean_base(self):
     base = self.cleaned_data.get('base')
@@ -235,6 +240,10 @@ class PublishForm(forms.Form):
   reviewers = forms.CharField(required=False,
                               max_length=1000,
                               widget=forms.TextInput(attrs={'size': 60}))
+  cc = forms.CharField(required=False,
+                       max_length=1000,
+                       label = 'CC',
+                       widget=forms.TextInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
   message = forms.CharField(required=False,
                             max_length=10000,
@@ -248,6 +257,10 @@ class MiniPublishForm(forms.Form):
   reviewers = forms.CharField(required=False,
                               max_length=1000,
                               widget=forms.TextInput(attrs={'size': 60}))
+  cc = forms.CharField(required=False,
+                       max_length=1000,
+                       label = 'CC',
+                       widget=forms.TextInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
   message = forms.CharField(required=False,
                             max_length=10000,
@@ -561,7 +574,7 @@ def upload(request):
           issue = None
         else:
           patchset = add_patchset_from_form(request, issue, form, 'subject',
-                                            reviewers_add_only=True) 
+                                            emails_add_only=True) 
           if not patchset:
             issue = None
     else:
@@ -670,8 +683,12 @@ def _make_new(request, form):
     return None
   data, url = data_url
 
-  reviewers = _get_reviewers(form)
-  if reviewers is None:
+  reviewers = _get_emails(form, 'reviewers')
+  if not form.is_valid() or reviewers is None:
+    return None
+    
+  cc = _get_emails(form, 'cc')
+  if not form.is_valid():
     return None
 
   base = form.get_base()
@@ -683,6 +700,7 @@ def _make_new(request, form):
                          description=form.cleaned_data['description'],
                          base=base,
                          reviewers=reviewers,
+                         cc=cc,
                          owner=request.user)
     issue.put()
 
@@ -748,7 +766,7 @@ def add(request):
 
 
 def add_patchset_from_form(request, issue, form, message_key='message',
-                           reviewers_add_only=False):
+                           emails_add_only=False):
   """Helper for add() and upload()."""
   # TODO(guido): use a transaction like in _make_new(); may be share more code?
   if form.is_valid():
@@ -769,35 +787,38 @@ def add_patchset_from_form(request, issue, form, message_key='message',
     return None
   db.put(patches)
 
-  if reviewers_add_only:
-    issue.reviewers += [reviewer for reviewer in _get_reviewers(form)
+  if emails_add_only:
+    issue.reviewers += [reviewer for reviewer in _get_emails(form, 'reviewers')
                         if reviewer not in issue.reviewers]
+    issue.cc += [cc for cc in _get_emails(form, 'cc')
+                 if cc not in issue.cc]
   else:
-    issue.reviewers = _get_reviewers(form)
+    issue.reviewers = _get_emails(form, 'reviewers')
+    issue.cc = _get_emails(form, 'cc')
   issue.put()
   return patchset
 
 
-def _get_reviewers(form):
+def _get_emails(form, label):
   """Helper to return the list of reviewers, or None for error."""
-  reviewers = []
-  raw_reviewers = form.cleaned_data.get('reviewers')
-  if raw_reviewers:
-    for reviewer in raw_reviewers.split(','):
-      reviewer = reviewer.strip()
-      if reviewer and reviewer not in reviewers:
+  emails = []
+  raw_emails = form.cleaned_data.get(label)
+  if raw_emails:
+    for email in raw_emails.split(','):
+      email = email.strip().lower()
+      if email and email not in emails:
         try:
-          reviewer = db.Email(reviewer)
-          if reviewer.count('@') != 1:
-            raise db.BadValueError('Invalid email address: %s' % reviewer)
-          head, tail = reviewer.split('@')
+          email = db.Email(email)
+          if email.count('@') != 1:
+            raise db.BadValueError('Invalid email address: %s' % email)
+          head, tail = email.split('@')
           if '.' not in tail:
-            raise db.BadValueError('Invalid email address: %s' % reviewer)
+            raise db.BadValueError('Invalid email address: %s' % email)
         except db.BadValueError, err:
-          form.errors['reviewers'] = [unicode(err)]
+          form.errors[label] = [unicode(err)]
           return None
-        reviewers.append(reviewer)
-  return reviewers
+        emails.append(email)
+  return emails
 
 
 @issue_required
@@ -863,6 +884,7 @@ def edit(request):
                              'description': issue.description,
                              'base': base,
                              'reviewers': ', '.join(issue.reviewers),
+                             'cc': ', '.join(issue.cc),
                              'closed': issue.closed})
     if not issue.local_base:
       form.set_branch_choices(base)
@@ -873,7 +895,10 @@ def edit(request):
     form.set_branch_choices()
 
   if form.is_valid():
-    reviewers = _get_reviewers(form)
+    reviewers = _get_emails(form, 'reviewers')
+
+  if form.is_valid():
+    cc = _get_emails(form, 'cc')
 
   if form.is_valid():
     base = form.get_base()
@@ -888,6 +913,7 @@ def edit(request):
   base_changed = (issue.base != base)
   issue.base = base
   issue.reviewers = reviewers
+  issue.cc = cc
   if base_changed:
     for patchset in issue.patchset_set:
       db.run_in_transaction(_delete_cached_contents, list(patchset.patch_set))
@@ -1259,13 +1285,17 @@ def publish(request):
     form_class = MiniPublishForm
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
+    cc = issue.cc[:]
     if request.user != issue.owner and (request.user.email()
                                         not in issue.reviewers):
       reviewers.append(request.user.email())
+      if request.user.email() in cc:
+        cc.remove(request.user.email())
     tbd, comments = _get_draft_comments(request, issue, True)
     preview = _get_draft_details(request, comments)
     form = form_class(initial={'subject': issue.subject,
                                'reviewers': ', '.join(reviewers),
+                               'cc': ', '.join(cc),
                                'send_mail': True,
                                })
     return respond(request, 'publish.html', {'form': form, 'issue': issue,
@@ -1276,10 +1306,18 @@ def publish(request):
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
   if request.user == issue.owner:
     issue.subject = form.cleaned_data['subject']
-  reviewers = _get_reviewers(form)
+  reviewers = _get_emails(form, 'reviewers')
+  if form.is_valid() and not form.cleaned_data.get('message_only', False):
+    cc = _get_emails(form, 'cc')
+  else:
+    cc = issue.cc
+    # The user is in the reviewer list, remove them from CC if they're there.
+    if request.user.email() in cc:
+      cc.remove(request.user.email())
   if not form.is_valid():
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
   issue.reviewers = reviewers
+  issue.cc = cc
   if not form.cleaned_data.get('message_only', False):
     tbd, comments = _get_draft_comments(request, issue)
   else:
@@ -1395,13 +1433,16 @@ def _make_message(template, request, issue, message, comments=None,
     context = {}
   # Decide who should receive mail
   my_email = db.Email(request.user.email())
-  addressees = [db.Email(issue.owner.email())] + issue.reviewers
-  if my_email in addressees:
-    everyone = addressees[:]
-    if len(addressees) > 1:  # Keep it if sending only to yourself
-      addressees.remove(my_email)
-  else:
-    everyone = addressees
+  to = [db.Email(issue.owner.email())] + issue.reviewers
+  cc = issue.cc[:]
+  reply_to = to + cc
+  if my_email in to and len(to) > 1:  # send_mail() wants a non-empty to list
+    to.remove(my_email)
+  if my_email not in cc and my_email not in to:
+    cc.append(my_email)
+  subject = issue.subject
+  if issue.message_set.count(1) > 0:
+    subject = 'Re: ' + subject
   if comments:
     details = _get_draft_details(request, comments)
   else:
@@ -1409,32 +1450,40 @@ def _make_message(template, request, issue, message, comments=None,
   message = message.replace('\r\n', '\n')
   text = ((message.strip() + '\n\n' + details.strip())).strip()
   msg = models.Message(issue=issue,
-                       subject=issue.subject,
+                       subject=subject,
                        sender=my_email,
-                       recipients=everyone,
+                       recipients=reply_to,
                        text=db.Text(text),
                        parent=issue)
 
   if send_mail:
     url = request.build_absolute_uri('/%s' % issue.key().id())
-    addressees_nicknames = ', '.join(library.nickname(addressee, True)
-                                     for addressee in addressees)
+    to_nicknames = ', '.join(library.nickname(to_temp, True)
+                             for to_temp in to)
+    cc_nicknames = ', '.join(library.nickname(cc_temp, True)
+                             for cc_temp in cc)
     my_nickname = library.nickname(request.user, True)
-    addressees = ', '.join(addressees)
+    to = ', '.join(to)
+    cc = ', '.join(cc)
+    reply_to = ', '.join(reply_to)
     description = (issue.description or '').replace('\r\n', '\n')
     home = request.build_absolute_uri('/')
-    context.update({'nicknames': addressees_nicknames,
+    context.update({'to_nicknames': to_nicknames,
+                    'cc_nicknames': cc_nicknames,
                     'my_nickname': my_nickname, 'url': url,
                     'message': message, 'details': details,
                     'description': description, 'home': home})
     body = django.template.loader.render_to_string(template, context)
-    logging.warn('Mail: to=%s; cc=%s', addressees, my_email)
+    logging.warn('Mail: to=%s; cc=%s', to, cc)
+    kwds = {}
+    if cc:
+      kwds['cc'] = _encode_safely(cc)
     mail.send_mail(sender=SENDER,
-                   to=_encode_safely(addressees),
-                   subject=_encode_safely('Re: ' + issue.subject),
+                   to=_encode_safely(to),
+                   subject=_encode_safely(subject),
                    body=_encode_safely(body),
-                   cc=_encode_safely(my_email),
-                   reply_to=_encode_safely(', '.join(everyone)))
+                   reply_to=_encode_safely(reply_to),
+                   **kwds)
 
   return msg
 
