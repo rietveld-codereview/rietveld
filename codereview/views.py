@@ -1306,7 +1306,12 @@ def publish(request):
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
   if request.user == issue.owner:
     issue.subject = form.cleaned_data['subject']
-  reviewers = _get_emails(form, 'reviewers')
+  if form.is_valid() and not form.cleaned_data.get('message_only', False):
+    reviewers = _get_emails(form, 'reviewers')
+  else:
+    reviewers = issue.reviewers
+    if request.user != issue.owner and request.user.email() not in reviewers:
+      reviewers.append(db.Email(request.user.email()))
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
   else:
