@@ -515,7 +515,10 @@ def RealMain(argv):
     base = GuessBase()
   if not options.assume_yes:
     CheckForUnknownFiles()
-  data = RunShell("svn diff --diff-cmd=diff", args)
+  cmd = "svn diff"
+  if not sys.platform.startswith("win"):
+    cmd += " --diff-cmd=diff"
+  data = RunShell(cmd, args)
   count = 0
   for line in data.splitlines():
     if line.startswith("Index:"):
@@ -570,13 +573,13 @@ def RealMain(argv):
   if options.local_base:
     issue = msg[msg.rfind("/")+1:]
     UploadBaseFiles(issue, rpc_server, patches, patchset, options)
-  
+
 def UploadBaseFiles(issue, rpc_server, patch_list, patchset, options):
   """Uploads the base files using svn cat."""
   patches = dict()
   [patches.setdefault(v, k) for k, v in patch_list]
   for filename in patches.keys():
-    status = RunShell("svn st --ignore-externals", [filename])
+    status = RunShell("svn status --ignore-externals", [filename])
     if not status:
       StatusUpdate("svn status returned no output for %s" % filename)
       sys.exit(False)
