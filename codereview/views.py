@@ -580,7 +580,8 @@ def upload(request):
     else:
       action = 'created'
       issue = _make_new(request, form)
-      patchset = issue.patchset
+      if issue is not None:
+        patchset = issue.patchset
   if issue is None:
     msg = 'Issue creation errors:\n%s' % repr(form.errors)
   else:
