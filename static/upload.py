@@ -35,6 +35,10 @@ import urllib
 import urllib2
 import urlparse
 
+try:
+  import readline
+except ImportError:
+  pass
 
 # The logging verbosity:
 #  0: Errors only.
