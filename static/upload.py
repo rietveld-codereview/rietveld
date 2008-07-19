@@ -457,8 +457,9 @@ def GetContentType(filename):
 
 
 def RunShell(command, args=(), silent_ok=False):
+  command = "%s %s" % (command, " ".join(args))
   logging.info("Running %s", command)
-  stream = os.popen("%s %s" % (command, " ".join(args)), "r")
+  stream = os.popen(command, "r")
   data = stream.read()
   if stream.close():
     ErrorExit("Got error status from %s" % command)
