@@ -78,15 +78,16 @@ def show_user(email, arg=None, autoescape=None):
         user_key = email
       else:
         user_key = nick
-      ret = '<a href="/user/%s">%s</a>' % (user_key, user_key)
       # Cache for a longer time, this is likely to remain valid.
       cache_timeout = 300
     else:
-      ret = nick
+      user_key = nick
       # Cache likely to become invalid due to user sign up.
       cache_timeout = 30
 
     memcache.add('show_user:%s' % email, ret, cache_timeout)
+    ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
+           '%(key)s</a>' % {'key': user_key})
   return django.utils.safestring.mark_safe(ret)
 
 @register.filter

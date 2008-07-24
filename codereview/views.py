@@ -36,6 +36,7 @@ from cStringIO import StringIO
 
 # AppEngine imports
 from google.appengine.api import mail
+from google.appengine.api import memcache
 from google.appengine.api import users
 from google.appengine.api import urlfetch
 from google.appengine.ext import db
@@ -382,6 +383,7 @@ def user_key_required(func):
     else:
       accounts = models.Account.get_accounts_for_nickname(user_key)
       if not accounts:
+        logging.info("account not found for nickname %s" % user_key)
         return HttpResponseNotFound('No user found with that key (%s)' %
                                     user_key)
       request.user_to_show = accounts[0].user
@@ -1665,3 +1667,37 @@ def settings(request):
   if not form.is_valid():
     return respond(request, 'settings.html', {'form': form})
   return HttpResponseRedirect('/settings')
+
+
+@user_key_required
+def user_popup(request):
+  """/user_popup - Pop up to show the user info."""
+  try:
+    return _user_popup(request)
+  except Exception, err:
+    logging.exception('Exception in user_popup processing:')
+    return HttpResponse('<font color="red">Error: %s; please report!</font>' %
+                        err.__class__.__name__)
+
+def _user_popup(request):
+  user = request.user_to_show
+  popup_html = memcache.get("user_popup:" + user.email())
+  if popup_html is None:
+    num_issues_created = db.GqlQuery(
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND owner = :1',
+      user).count()
+    num_issues_reviewed = db.GqlQuery(
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND reviewers = :1',
+      user).count()
+    
+    user.nickname = models.Account.get_nickname_for_email(user.email())
+    popup_html = render_to_response('user_popup.html', 
+                            {'user': user,
+                             'num_issues_created': num_issues_created,
+                             'num_issues_reviewed': num_issues_reviewed})
+    # Use time expired cache because the number of issues will change over time
+    memcache.add("user_popup:" + user.email(), popup_html, 60)
+  return popup_html
+    

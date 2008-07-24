@@ -2476,7 +2476,7 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
 }
 
 /**
- * TODO(jiayao,andi): docstring
+ * Finds the element position.
  */
 function M_getElementPosition(obj) {
   var curleft = curtop = 0;
@@ -2488,6 +2488,73 @@ function M_getElementPosition(obj) {
   }
   return [curleft,curtop];
 }
+
+/**
+ * Position the user info popup according to the mouse event coordinates
+ */
+function M_positionUserInfoPopup(obj, userPopupDiv) {
+  pos = M_getElementPosition(obj);
+  userPopupDiv.style.left = pos[0] + "px";
+  userPopupDiv.style.top = pos[1] + 20 + "px";
+}
+
+/**
+ * Brings up user info popup using ajax
+ */
+function M_showUserInfoPopup(obj) {
+  var DIV_ID = "userPopupDiv";
+  var userPopupDiv = document.getElementById(DIV_ID);
+  var url = obj.getAttribute("href")
+  var index = url.indexOf("/user/");
+  var user_key = url.substring(index + 6);
+
+  if (!userPopupDiv) {
+    var userPopupDiv = document.createElement("div");
+    userPopupDiv.className = "popup";
+    userPopupDiv.id = DIV_ID;
+    userPopupDiv.filter = 'alpha(opacity=85)';
+    userPopupDiv.opacity = '0.85'; 
+    userPopupDiv.innerHTML = "";
+    userPopupDiv.onmouseout = function() {
+      userPopupDiv.style.visibility = 'hidden';
+    }
+    document.body.appendChild(userPopupDiv);
+  }
+  M_positionUserInfoPopup(obj, userPopupDiv);
+
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+
+  var aborted = false;
+  var httpreq_timeout = setTimeout(function() {
+    aborted = true;
+    httpreq.abort();
+  }, 5000);
+
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4 && !aborted) {
+      clearTimeout(httpreq_timeout);
+      if (httpreq.status == 200) {
+        userPopupDiv = document.getElementById(DIV_ID);
+        userPopupDiv.innerHTML=httpreq.responseText;
+        userPopupDiv.style.visibility = "visible";
+      } else {
+        //Better fail silently here because it's not 
+        //critical functionality
+      }
+    }
+  }
+  httpreq.open("GET", "/user_popup/" + user_key, true);
+  httpreq.send(null);
+  obj.onmouseout = function() {
+    aborted = true;
+    userPopupDiv.style.visibility = 'hidden';
+    obj.onmouseout = null;
+  }
+}
+
 /**
  * TODO(jiayao,andi): docstring
  */
@@ -2504,7 +2571,7 @@ function M_showPopUp(obj, id) {
 }
 
 /**
- * TODO(andi): docstring
+ * Todo(andi): docstring
  */
 function M_jumpToPatch(select, issue, patchset, unified) {
   if ( unified ) {
@@ -2514,3 +2581,4 @@ function M_jumpToPatch(select, issue, patchset, unified) {
   }
   document.location.href = '/'+issue+'/'+part+'/'+patchset+'/'+select.value;
 }
+
