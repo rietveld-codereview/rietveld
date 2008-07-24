@@ -53,7 +53,7 @@ except ImportError:
 
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
-from django import newforms as forms
+from django import forms
 from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
