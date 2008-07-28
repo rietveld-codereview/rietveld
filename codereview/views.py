@@ -637,7 +637,7 @@ def upload_content(request):
     content.num_parts = form.cleaned_data['num_parts']
     content.last_part = -1
     content.is_bad = False
-    content.text = db.Text('')
+    content.partial_upload = db.Blob()
   if current_part != content.last_part+1:
     msg = ('ERROR: Expected part %d of %d. '
            'Got part %d instead.' % (content.last_part+2, content.num_parts,
@@ -646,18 +646,20 @@ def upload_content(request):
   data = form.get_uploaded_content()
   if not md5.new(data).hexdigest() == form.cleaned_data['current_checksum']:
     content.is_bad = True
-    content.text = db.Text('')
+    content.partial_upload = db.Blob()
     content.last_part = -1
     content.put()
     return HttpResponse('ERROR: Checksum mismatch.', content_type='text/plain')
-  if not content.text:
-    content.text = engine._ToText(data.splitlines(True))
+  if not content.partial_upload:
+    content.partial_upload = data
   else:
-    content.text += engine._ToText(data.splitlines(True))
+    content.partial_upload += data
   content.last_part = current_part
   if current_part+1 == content.num_parts:
     content.is_complete = True
-    checksum = md5.new(content.text.encode('utf-8')).hexdigest()
+    content.text = engine._ToText(content.partial_upload.splitlines(True))
+    checksum = md5.new(content.partial_upload).hexdigest()
+    content.partial_upload = db.Blob()
     if checksum != request.POST.get('checksum'):
       content.is_bad = True
       content.text = db.Text('')

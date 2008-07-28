@@ -145,6 +145,7 @@ class Content(db.Model):
 
   # parent => Patch
   text = db.TextProperty()
+  partial_upload = db.BlobProperty()
   is_uploaded = db.BooleanProperty(default=False)
   is_complete = db.BooleanProperty(default=True)
   is_bad = db.BooleanProperty(default=False)
