@@ -576,7 +576,7 @@ def upload(request):
           issue = None
         else:
           patchset = add_patchset_from_form(request, issue, form, 'subject',
-                                            emails_add_only=True) 
+                                            emails_add_only=True)
           if not patchset:
             issue = None
     else:
@@ -691,7 +691,7 @@ def _make_new(request, form):
   reviewers = _get_emails(form, 'reviewers')
   if not form.is_valid() or reviewers is None:
     return None
-    
+
   cc = _get_emails(form, 'cc')
   if not form.is_valid():
     return None
@@ -1339,7 +1339,7 @@ def publish(request):
     logging.warn('Publishing %d comments', len(comments))
   msg = _make_message('mails/publish.txt', request, issue,
                       form.cleaned_data['message'],
-                      comments, 
+                      comments,
                       form.cleaned_data['send_mail'])
   tbd.append(msg)
 
@@ -1693,13 +1693,12 @@ def _user_popup(request):
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1',
       user).count()
-    
+
     user.nickname = models.Account.get_nickname_for_email(user.email())
-    popup_html = render_to_response('user_popup.html', 
+    popup_html = render_to_response('user_popup.html',
                             {'user': user,
                              'num_issues_created': num_issues_created,
                              'num_issues_reviewed': num_issues_reviewed})
     # Use time expired cache because the number of issues will change over time
     memcache.add("user_popup:" + user.email(), popup_html, 60)
   return popup_html
-    
