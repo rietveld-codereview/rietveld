@@ -380,6 +380,7 @@ parser.add_option("--cc", action="store", dest="cc",
                   metavar="CC", default=None,
                   help="Add CC (comma separated email addresses).")
 
+
 def GetRpcServer(options):
   """Returns an instance of an AbstractRpcServer.
 
@@ -474,7 +475,7 @@ def RunShell(command, args=(), silent_ok=False):
 
 def GuessBase(required):
   """Returns the SVN base URL.
-  
+
   Args:
     required: If true, exits if the url can't be guessed, otherwise None is
       returned.
@@ -587,7 +588,8 @@ def RealMain(argv):
   if options.local_base:
     UploadBaseFiles(issue, rpc_server, patches, patchset, options)
   return issue
-  
+
+
 def UploadBaseFiles(issue, rpc_server, patch_list, patchset, options):
   """Uploads the base files using svn cat."""
   patches = dict()
@@ -646,6 +648,7 @@ def UploadBaseFiles(issue, rpc_server, patch_list, patchset, options):
         StatusUpdate("  --> %s" % response_body)
         sys.exit(False)
 
+
 def CollapseKeywords(content, keyword_str):
     """Collapses SVN keywords."""
     # svn cat translates keywords but svn diff doesn't. As a result of this
@@ -676,6 +679,7 @@ def CollapseKeywords(content, keyword_str):
                 for keyword in svn_keywords.get(name, [])]
     return re.sub(r"\$(%s):(:?)([^\$]+)\$" % '|'.join(keywords), repl, content)
 
+
 def CheckForUnknownFiles():
   status = RunShell("svn status --ignore-externals", silent_ok=True)
   unknown_files = []
@@ -690,6 +694,7 @@ def CheckForUnknownFiles():
     answer = raw_input(prompt).strip()
     if answer != "y":
       ErrorExit("User aborted")
+
 
 def main():
   try:
