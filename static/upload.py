@@ -612,7 +612,12 @@ def UploadBaseFiles(issue, rpc_server, patch_list, patchset, options):
     if status[0] == "A":
       content = ""
     elif status[0] in ["M", "D"]:
-      content = RunShell("svn cat", [filename])
+      mimetype = RunShell("svn -rBASE propget svn:mime-type", [filename],
+                          silent_ok=True)
+      if mimetype.startswith("application/octet-stream"):
+        content = ""
+      else:
+        content = RunShell("svn cat", [filename])
       keywords = RunShell("svn -rBASE propget svn:keywords", [filename],
                           silent_ok=True)
       if keywords:
