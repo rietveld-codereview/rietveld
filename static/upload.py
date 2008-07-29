@@ -531,6 +531,8 @@ def RealMain(argv):
       logging.info(line)
   if not count:
     ErrorExit("No valid patches found in output from svn diff")
+  if verbosity >= 1:
+    print "Upload server:", options.server, "(change with -s/--server)"
   if options.issue:
     prompt = "Message describing this patch set: "
   else:
