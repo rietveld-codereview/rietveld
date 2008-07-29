@@ -69,7 +69,7 @@ def show_user(email, arg=None, autoescape=None):
   except KeyError:
     ret = None
   if ret is None:
-    logging.info('memcache miss for %r', email)
+    logging.debug('memcache miss for %r', email)
     nick = nickname(email, True)
     account = models.Account.get_account_for_email(email)
     if account:
