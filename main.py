@@ -28,7 +28,8 @@ import sys
 import logging
 
 # Log a message each time this module get loaded.
-logging.info('Loading %s', __name__)
+logging.info('Loading %s, app version = %s',
+             __name__, os.getenv('CURRENT_VERSION_ID'))
 
 # Delete the preloaded copy of Django.
 for key in [key for key in sys.modules if key.startswith('django')]:
