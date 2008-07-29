@@ -323,7 +323,7 @@ class HttpRpcServer(AbstractRpcServer):
           self.authenticated = True
           StatusUpdate("Loaded authentication cookies from %s" %
                        self.cookie_file)
-        except cookielib.LoadError:
+        except (cookielib.LoadError, IOError):
           # Failed to load cookies - just ignore them.
           pass
       else:
@@ -472,7 +472,13 @@ def RunShell(command, args=(), silent_ok=False):
   return data
 
 
-def GuessBase():
+def GuessBase(required):
+  """Returns the SVN base URL.
+  
+  Args:
+    required: If true, exits if the url can't be guessed, otherwise None is
+      returned.
+  """
   info = RunShell("svn info")
   for line in info.splitlines():
     words = line.split()
@@ -498,26 +504,26 @@ def GuessBase():
           base = "http" + base[5:]
         logging.info("Guessed Google Code base = %s", base)
       else:
-        ErrorExit("Unrecognized svn project root: %s" % url)
+        base = url + "/"
+        logging.info("Guessed base = %s", base)
       return base
-  ErrorExit("Can't find URL in output from svn info")
+  if required:
+    ErrorExit("Can't find URL in output from svn info")
+  return None
 
 
 def RealMain(argv):
   logging.basicConfig(format=("%(asctime).19s %(levelname)s %(filename)s:"
                               "%(lineno)s %(message)s "))
   os.environ['LC_ALL'] = 'C'
-  options, args = parser.parse_args(sys.argv[1:])
+  options, args = parser.parse_args(argv[1:])
   global verbosity
   verbosity = options.verbose
   if verbosity >= 3:
     logging.getLogger().setLevel(logging.DEBUG)
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
-  if options.local_base:
-    base = None
-  else:
-    base = GuessBase()
+  base = GuessBase(not options.local_base)
   if not options.assume_yes:
     CheckForUnknownFiles()
   cmd = "svn diff"
@@ -577,10 +583,11 @@ def RealMain(argv):
   if not response_body.startswith("Issue created.") and \
   not response_body.startswith("Issue updated."):
     sys.exit(0)
+  issue = msg[msg.rfind("/")+1:]
   if options.local_base:
-    issue = msg[msg.rfind("/")+1:]
     UploadBaseFiles(issue, rpc_server, patches, patchset, options)
-
+  return issue
+  
 def UploadBaseFiles(issue, rpc_server, patch_list, patchset, options):
   """Uploads the base files using svn cat."""
   patches = dict()
@@ -590,6 +597,16 @@ def UploadBaseFiles(issue, rpc_server, patch_list, patchset, options):
     if not status:
       StatusUpdate("svn status returned no output for %s" % filename)
       sys.exit(False)
+    status_lines = status.splitlines()
+    # If file is in a cl, the output will begin with
+    # "\n--- Changelist 'cl_name':\n".  See
+    # http://svn.collab.net/repos/svn/trunk/notes/changelist-design.txt
+    if (len(status_lines) == 3 and
+        not status_lines[0] and
+        status_lines[1].startswith("--- Changelist")):
+      status = status_lines[2]
+    else:
+      status = status_lines[0]
     if status[0] == "A":
       content = ""
     elif status[0] in ["M", "D"]:

@@ -75,8 +75,6 @@ if not django.template.libraries.get(_library_name, None):
 ### Constants ###
 
 
-SENDER = 'svncodereview@gmail.com'  # An administrator allowed to send mail
-
 IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
 
 
@@ -214,6 +212,10 @@ class EditLocalBaseForm(forms.Form):
   reviewers = forms.CharField(required=False,
                               max_length=1000,
                               widget=forms.TextInput(attrs={'size': 60}))
+  cc = forms.CharField(required=False,
+                       max_length=1000,
+                       label = 'CC',
+                       widget=forms.TextInput(attrs={'size': 60}))
   closed = forms.BooleanField(required=False)
 
   def get_base(self):
@@ -594,7 +596,6 @@ def upload(request):
       # Extend the response message: 2nd line is patchset id, additional lines
       # are the expected filenames.
       issue.local_base = True
-      issue.base = None
       issue.put()
       msg +="\n%d" % patchset.key().id()
       for patch in patchset.patch_set:
@@ -905,7 +906,7 @@ def edit(request):
   if form.is_valid():
     cc = _get_emails(form, 'cc')
 
-  if form.is_valid():
+  if form.is_valid() and not issue.local_base:
     base = form.get_base()
 
   if not form.is_valid():
@@ -968,10 +969,27 @@ def delete(request):
   return HttpResponseRedirect('/mine')
 
 
+@issue_required
+def close(request):
+  """/<issue>/close - Close an issue."""
+  if request.issue.owner != request.user:
+    if not IS_DEV:
+      return HttpResponse('Login required', status=401)
+  issue = request.issue
+  issue.closed = True
+  issue.put()
+  return HttpResponse('Closed', content_type='text/plain')
+
 @patchset_required
 def download(request):
   """/<issue>/download/<patchset> - Download a patch set."""
   return HttpResponse(request.patchset.data, content_type='text/plain')
+
+
+@issue_required
+def description(request):
+  """/<issue>/description - Gets an issue's description."""
+  return HttpResponse(request.issue.description, content_type='text/plain')
 
 
 @patch_required
@@ -1448,8 +1466,8 @@ def _make_message(template, request, issue, message, comments=None,
   reply_to = to + cc
   if my_email in to and len(to) > 1:  # send_mail() wants a non-empty to list
     to.remove(my_email)
-  if my_email not in cc and my_email not in to:
-    cc.append(my_email)
+  if my_email in cc:
+    cc.remove(my_email)
   subject = issue.subject
   if issue.message_set.count(1) > 0:
     subject = 'Re: ' + subject
@@ -1488,7 +1506,7 @@ def _make_message(template, request, issue, message, comments=None,
     kwds = {}
     if cc:
       kwds['cc'] = _encode_safely(cc)
-    mail.send_mail(sender=SENDER,
+    mail.send_mail(sender=my_email,
                    to=_encode_safely(to),
                    subject=_encode_safely(subject),
                    body=_encode_safely(body),
