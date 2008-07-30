@@ -2,6 +2,38 @@ Bugs
 ----
 
 If a user never logs in, someone else can grab their nickname
+'u' doesn't work from delta pages
+See the issue tracker at code.google.com/p/rietveld for more bugs
+
+Downloads
+---------
+
+Download links should use more meaningful filenames,
+    e.g. "123_456.diff" rather than 456 (where 123 is the issue and 456
+    the patch set).
+
+Popups
+------
+
+Issue popup should contain links to go to the issue page, the edit page, ...
+Issue popup should always contain the full info (even if it's redundant)
+User popups should contain links to go to the user's page
+
+Data Cleaning
+-------------
+
+Email addresses should be lowercased before comparing
+Nicknames too???
+Nicknames should not be allowed to contain multiple internal spaces
+    nor internal whitespace other than space
+
+Sending Mail
+------------
+
+Should allow registered nicknames in Reviewers and CC fields
+Normalize emails to nicknames in these fields when displaying, if known
+Mail templates should be sparser -- no happy talk
+Review template should include diff if small (<= 100 lines)
 
 Issues
 ------
@@ -18,6 +50,7 @@ Delete patch sets
 Repositories and Branches
 -------------------------
 
+Get rid of the repository feature in favor of always using upload.py?
 Edit/Delete Repository?
 Automatically add Repository entries when a new project uploads stuff?
 
@@ -33,6 +66,8 @@ Commenting
 Add stars
 Add non-inline comments per file, per patchset, per issue
 Support inline comments in patch (unified diff) view
+Keyboard shortcut for entering a comment at the blue line
+    (isn't this already in the JS code?)
 
 Diffs and Patches
 -----------------
@@ -42,23 +77,30 @@ Improve UI for selecting patch set deltas; handle missing files better
 Syntax colorization
 Record revision and show in UI; indicate action (add/edit/delete)
 Handle propsets?
-Handle binary files?!
+Handle binary files?!  (Progress: fewer crashes related to binary files)
 Add line length option
-Support more diff formats
+Support more diff formats  (Better: let upload.py normlize these)
 Need a more powerful way to specify the URL for finding a revision (?)
-Need to allow upload.py to upload the diff *and* the file
 
 User Experience
 ---------------
 
+Need a unique favicon
 Make Edit Issue show the form inline instead of opening a new page?
 Support more of the Mondrian functionality already in script.js,
   e.g. j / k with arrow to select an issue
-Prettify UI
 Fields "SVN Base" and "Base" have hard-to-guess names
 Better UI for adding branches?  (Low priority now we have upload.py)
+Page titles should be more informative:
+    show issue # and subject for issues
+    show issue # and full filename for diffs and patches
+Show a download patch link on the individual diff pages
+Right-justify the "Id" and "Drafts (mine)" headings in the Issues list table
+Allow clicking on the issue id to go to the issue as well
 
 Software Engineering
 --------------------
 
 Unittests
+Zip up Django
+Change Makefile to use a "clean" release directory for uploading
