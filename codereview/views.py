@@ -140,6 +140,7 @@ class NewForm(IssueBaseForm):
   url = forms.URLField(required=False,
                        max_length=2083,
                        widget=forms.TextInput(attrs={'size': 60}))
+  send_mail = forms.BooleanField(required=False, initial=True)
 
 
 class AddForm(forms.Form):
@@ -152,6 +153,7 @@ class AddForm(forms.Form):
                        widget=forms.TextInput(attrs={'size': 60}))
   reviewers = forms.CharField(max_length=1000, required=False,
                               widget=forms.TextInput(attrs={'size': 60}))
+  send_mail = forms.BooleanField(required=False, initial=True)
 
 
 class UploadForm(forms.Form):
@@ -162,8 +164,10 @@ class UploadForm(forms.Form):
   base = forms.CharField(max_length=2000, required=False)
   data = forms.FileField()
   issue = forms.IntegerField(required=False)
+  description = forms.CharField(max_length=10000, required=False)
   reviewers = forms.CharField(max_length=1000, required=False)
   cc = forms.CharField(max_length=1000, required=False)
+  send_mail = forms.BooleanField(required=False)
 
   def clean_base(self):
     base = self.cleaned_data.get('base')
@@ -577,8 +581,8 @@ def upload(request):
                                  (request.user, issue_id)]
           issue = None
         else:
-          patchset = add_patchset_from_form(request, issue, form, 'subject',
-                                            emails_add_only=True)
+          patchset = _add_patchset_from_form(request, issue, form, 'subject',
+                                             emails_add_only=True)
           if not patchset:
             issue = None
     else:
@@ -722,11 +726,17 @@ def _make_new(request, form):
     return issue
 
   try:
-    return db.run_in_transaction(txn)
+    issue = db.run_in_transaction(txn)
   except EmptyPatchSet:
     errkey = url and 'url' or 'data'
     form.errors[errkey] = ['Patch set contains no recognizable patches']
-    return None
+    issue = None
+
+  if form.cleaned_data.get('send_mail'):
+    msg = _make_message('mails/publish.txt', request, issue, 'Issue created.',
+                        send_mail=True)
+    msg.put()
+  return issue
 
 
 def _get_data_url(form):
@@ -766,13 +776,13 @@ def add(request):
   """/<issue>/add - Add a new PatchSet to an existing Issue."""
   issue = request.issue
   form = AddForm(request.POST, request.FILES)
-  if not add_patchset_from_form(request, issue, form):
+  if not _add_patchset_from_form(request, issue, form):
     return show(request, issue.key().id(), form)
   return HttpResponseRedirect('/%s' % issue.key().id())
 
 
-def add_patchset_from_form(request, issue, form, message_key='message',
-                           emails_add_only=False):
+def _add_patchset_from_form(request, issue, form, message_key='message',
+                            emails_add_only=False):
   """Helper for add() and upload()."""
   # TODO(guido): use a transaction like in _make_new(); may be share more code?
   if form.is_valid():
@@ -802,6 +812,11 @@ def add_patchset_from_form(request, issue, form, message_key='message',
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
   issue.put()
+
+  if form.cleaned_data.get('send_mail'):
+    msg = _make_message('mails/publish.txt', request, issue, message,
+                        send_mail=True)
+    msg.put()
   return patchset
 
 

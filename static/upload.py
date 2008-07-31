@@ -364,6 +364,9 @@ parser.add_option("-m", "--message", action="store", dest="message",
                   metavar="MESSAGE", default=None,
                   help="A message to identify the patch. "
                        "Will prompt if omitted.")
+parser.add_option("-d", "--description", action="store", dest="description",
+                  metavar="DESCRIPTION", default=None,
+                  help="Optional description when creating an issue.")
 parser.add_option("-i", "--issue", type="int", action="store",
                   metavar="ISSUE", default=None,
                   help="Issue number to which to add. Defaults to new issue.")
@@ -379,6 +382,9 @@ parser.add_option("-r", "--reviewers", action="store", dest="reviewers",
 parser.add_option("--cc", action="store", dest="cc",
                   metavar="CC", default=None,
                   help="Add CC (comma separated email addresses).")
+parser.add_option("--send_mail", action="store_true",
+                  dest="send_mail", default=False,
+                  help="Send notification email to reviewers.")
 
 
 def GetRpcServer(options):
@@ -688,6 +694,8 @@ def RealMain(argv):
   data = vcs.GenerateDiff(args)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
+  if options.description and options.issue:
+    ErrorExit("A description is not allowed when updating an issue.")
   if options.issue:
     prompt = "Message describing this patch set: "
   else:
@@ -713,6 +721,10 @@ def RealMain(argv):
       if cc.count("@") != 1 or "." not in cc.split("@")[1]:
         ErrorExit("Invalid email address: %s" % cc)
     form_fields.append(("cc", options.cc))
+  if options.description:
+    form_fields.append(("description", options.description))
+  if options.send_mail:
+    form_fields.append(("send_mail", "1"))
   if options.local_base:
     form_fields.append(("content_upload", "1"))
   ctype, body = EncodeMultipartFormData(form_fields,
