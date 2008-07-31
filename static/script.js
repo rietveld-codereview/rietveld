@@ -2571,7 +2571,7 @@ function M_showPopUp(obj, id) {
 }
 
 /**
- * Todo(andi): docstring
+ * TODO(andi): docstring
  */
 function M_jumpToPatch(select, issue, patchset, unified) {
   if ( unified ) {
