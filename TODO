@@ -2,7 +2,6 @@ Bugs
 ----
 
 If a user never logs in, someone else can grab their nickname
-'u' doesn't work from delta pages
 See the issue tracker at code.google.com/p/rietveld for more bugs
 
 Downloads
