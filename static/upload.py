@@ -111,7 +111,7 @@ class AbstractRpcServer(object):
     Returns:
       A urllib2.OpenerDirector object.
     """
-    raise NotImplemented()
+    raise NotImplementedError()
 
   def _CreateRequest(self, url, data=None):
     """Creates a new urllib request."""
@@ -473,44 +473,201 @@ def RunShell(command, args=(), silent_ok=False):
   return data
 
 
-def GuessBase(required):
-  """Returns the SVN base URL.
+class VersionControlSystem(object):
+  """Abstract base class providing an interface to the VCS."""
 
-  Args:
-    required: If true, exits if the url can't be guessed, otherwise None is
-      returned.
-  """
-  info = RunShell("svn info")
-  for line in info.splitlines():
-    words = line.split()
-    if len(words) == 2 and words[0] == "URL:":
-      url = words[1]
-      scheme, netloc, path, params, query, fragment = urlparse.urlparse(url)
-      if netloc.endswith("svn.python.org"):
-        if netloc == "svn.python.org":
-          if path.startswith("/projects/"):
-            path = path[9:]
-        elif netloc != "pythondev@svn.python.org":
-          ErrorExit("Unrecognized Python URL: %s" % url)
-        base = "http://svn.python.org/view/*checkout*%s/" % path
-        logging.info("Guessed Python base = %s", base)
-      elif netloc.endswith("svn.collab.net"):
-        if path.startswith("/repos/"):
-          path = path[6:]
-        base = "http://svn.collab.net/viewvc/*checkout*%s/" % path
-        logging.info("Guessed CollabNet base = %s", base)
-      elif netloc.endswith(".googlecode.com"):
-        base = url + "/"
-        if base.startswith("https"):
-          base = "http" + base[5:]
-        logging.info("Guessed Google Code base = %s", base)
+  def GenerateDiff(self, args):
+    """Return the current diff as a string.
+
+    Args:
+      args: Extra arguments to pass to the diff command.
+    """
+    raise NotImplementedError(
+        "abstract method -- subclass %s must override" % self.__class__)
+
+  def GetUnknownFiles(self):
+    """Return a list of files unknown to the VCS."""
+    raise NotImplementedError(
+        "abstract method -- subclass %s must override" % self.__class__)
+
+  def CheckForUnknownFiles(self):
+    """Show an "are you sure?" prompt if there are unknown files."""
+    unknown_files = self.GetUnknownFiles()
+    if unknown_files:
+      print "The following files are not added to version control:"
+      for line in unknown_files:
+        print line
+      prompt = "Are you sure to continue?(y/N) "
+      answer = raw_input(prompt).strip()
+      if answer != "y":
+        ErrorExit("User aborted")
+
+  def GetBaseFile(self, filename):
+    """Get the content of the upstream version of a file."""
+    raise NotImplementedError(
+        "abstract method -- subclass %s must override" % self.__class__)
+
+  def UploadBaseFiles(self, issue, rpc_server, patch_list, patchset, options):
+    """Uploads the base files."""
+    patches = dict()
+    [patches.setdefault(v, k) for k, v in patch_list]
+    for filename in patches.keys():
+      content = self.GetBaseFile(filename)
+      checksum = md5.new(content).hexdigest()
+      parts = []
+      while content:
+        parts.append(content[:800000])
+        content = content[800000:]
+      if not parts:
+        parts = [""] # empty file
+      for part, data in enumerate(parts):
+        if options.verbose > 0:
+          print "Uploading %s (%d/%d)" % (filename, part+1, len(parts))
+        url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset),
+                                            int(patches.get(filename)))
+        current_checksum = md5.new(data).hexdigest()
+        form_fields = [("filename", filename),
+                       ("num_parts", str(len(parts))),
+                       ("checksum", checksum),
+                       ("current_part", str(part)),
+                       ("current_checksum", current_checksum),]
+        if options.email:
+          form_fields.append(("user", options.email))
+        ctype, body = EncodeMultipartFormData(form_fields,
+                                              [("data", filename, data)])
+        response_body = rpc_server.Send(url, body,
+                                        content_type=ctype)
+        if not response_body.startswith("OK"):
+          StatusUpdate("  --> %s" % response_body)
+          sys.exit(False)
+
+
+class SubversionVCS(VersionControlSystem):
+  """Implementation of the VersionControlSystem interface for Subversion."""
+
+  def GuessBase(self, required):
+    """Returns the SVN base URL.
+
+    Args:
+      required: If true, exits if the url can't be guessed, otherwise None is
+        returned.
+    """
+    info = RunShell("svn info")
+    for line in info.splitlines():
+      words = line.split()
+      if len(words) == 2 and words[0] == "URL:":
+        url = words[1]
+        scheme, netloc, path, params, query, fragment = urlparse.urlparse(url)
+        if netloc.endswith("svn.python.org"):
+          if netloc == "svn.python.org":
+            if path.startswith("/projects/"):
+              path = path[9:]
+          elif netloc != "pythondev@svn.python.org":
+            ErrorExit("Unrecognized Python URL: %s" % url)
+          base = "http://svn.python.org/view/*checkout*%s/" % path
+          logging.info("Guessed Python base = %s", base)
+        elif netloc.endswith("svn.collab.net"):
+          if path.startswith("/repos/"):
+            path = path[6:]
+          base = "http://svn.collab.net/viewvc/*checkout*%s/" % path
+          logging.info("Guessed CollabNet base = %s", base)
+        elif netloc.endswith(".googlecode.com"):
+          base = url + "/"
+          if base.startswith("https"):
+            base = "http" + base[5:]
+          logging.info("Guessed Google Code base = %s", base)
+        else:
+          base = url + "/"
+          logging.info("Guessed base = %s", base)
+        return base
+    if required:
+      ErrorExit("Can't find URL in output from svn info")
+    return None
+
+  def GenerateDiff(self, args):
+    cmd = "svn diff"
+    if not sys.platform.startswith("win"):
+      cmd += " --diff-cmd=diff"
+    data = RunShell(cmd, args)
+    count = 0
+    for line in data.splitlines():
+      if line.startswith("Index:"):
+        count += 1
+        logging.info(line)
+    if not count:
+      ErrorExit("No valid patches found in output from svn diff")
+    return data
+
+  def _CollapseKeywords(self, content, keyword_str):
+    """Collapses SVN keywords."""
+    # svn cat translates keywords but svn diff doesn't. As a result of this
+    # behavior patching.PatchChunks() fails with a chunk mismatch error.
+    # This part was originally written by the Review Board development team
+    # who had the same problem (http://reviews.review-board.org/r/276/).
+    # Mapping of keywords to known aliases
+    svn_keywords = {
+      # Standard keywords
+      'Date':                ['Date', 'LastChangedDate'],
+      'Revision':            ['Revision', 'LastChangedRevision', 'Rev'],
+      'Author':              ['Author', 'LastChangedBy'],
+      'HeadURL':             ['HeadURL', 'URL'],
+      'Id':                  ['Id'],
+
+      # Aliases
+      'LastChangedDate':     ['LastChangedDate', 'Date'],
+      'LastChangedRevision': ['LastChangedRevision', 'Rev', 'Revision'],
+      'LastChangedBy':       ['LastChangedBy', 'Author'],
+      'URL':                 ['URL', 'HeadURL'],
+    }
+    def repl(m):
+       if m.group(2):
+         return "$%s::%s$" % (m.group(1), " " * len(m.group(3)))
+       return "$%s$" % m.group(1)
+    keywords = [keyword
+                for name in keyword_str.split(" ")
+                for keyword in svn_keywords.get(name, [])]
+    return re.sub(r"\$(%s):(:?)([^\$]+)\$" % '|'.join(keywords), repl, content)
+
+  def GetUnknownFiles(self):
+    status = RunShell("svn status --ignore-externals", silent_ok=True)
+    unknown_files = []
+    for line in status.split("\n"):
+      if line and line[0] == "?":
+        unknown_files.append(line)
+    return unknown_files
+
+  def GetBaseFile(self, filename):
+    status = RunShell("svn status --ignore-externals", [filename])
+    if not status:
+      StatusUpdate("svn status returned no output for %s" % filename)
+      sys.exit(False)
+    status_lines = status.splitlines()
+    # If file is in a cl, the output will begin with
+    # "\n--- Changelist 'cl_name':\n".  See
+    # http://svn.collab.net/repos/svn/trunk/notes/changelist-design.txt
+    if (len(status_lines) == 3 and
+        not status_lines[0] and
+        status_lines[1].startswith("--- Changelist")):
+      status = status_lines[2]
+    else:
+      status = status_lines[0]
+    if status[0] == "A":
+      content = ""
+    elif status[0] in ["M", "D"]:
+      mimetype = RunShell("svn -rBASE propget svn:mime-type", [filename],
+                          silent_ok=True)
+      if mimetype.startswith("application/octet-stream"):
+        content = ""
       else:
-        base = url + "/"
-        logging.info("Guessed base = %s", base)
-      return base
-  if required:
-    ErrorExit("Can't find URL in output from svn info")
-  return None
+        content = RunShell("svn cat", [filename])
+      keywords = RunShell("svn -rBASE propget svn:keywords", [filename],
+                          silent_ok=True)
+      if keywords:
+        content = self._CollapseKeywords(content, keywords)
+    else:
+      StatusUpdate("svn status returned unexpected output: %s" % status)
+      sys.exit(False)
+    return content
 
 
 def RealMain(argv):
@@ -524,20 +681,11 @@ def RealMain(argv):
     logging.getLogger().setLevel(logging.DEBUG)
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
-  base = GuessBase(not options.local_base)
+  vcs = SubversionVCS()
+  base = vcs.GuessBase(not options.local_base)
   if not options.assume_yes:
-    CheckForUnknownFiles()
-  cmd = "svn diff"
-  if not sys.platform.startswith("win"):
-    cmd += " --diff-cmd=diff"
-  data = RunShell(cmd, args)
-  count = 0
-  for line in data.splitlines():
-    if line.startswith("Index:"):
-      count += 1
-      logging.info(line)
-  if not count:
-    ErrorExit("No valid patches found in output from svn diff")
+    vcs.CheckForUnknownFiles()
+  data = vcs.GenerateDiff(args)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
   if options.issue:
@@ -586,119 +734,8 @@ def RealMain(argv):
     sys.exit(0)
   issue = msg[msg.rfind("/")+1:]
   if options.local_base:
-    UploadBaseFiles(issue, rpc_server, patches, patchset, options)
+    vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
   return issue
-
-
-def UploadBaseFiles(issue, rpc_server, patch_list, patchset, options):
-  """Uploads the base files using svn cat."""
-  patches = dict()
-  [patches.setdefault(v, k) for k, v in patch_list]
-  for filename in patches.keys():
-    status = RunShell("svn status --ignore-externals", [filename])
-    if not status:
-      StatusUpdate("svn status returned no output for %s" % filename)
-      sys.exit(False)
-    status_lines = status.splitlines()
-    # If file is in a cl, the output will begin with
-    # "\n--- Changelist 'cl_name':\n".  See
-    # http://svn.collab.net/repos/svn/trunk/notes/changelist-design.txt
-    if (len(status_lines) == 3 and
-        not status_lines[0] and
-        status_lines[1].startswith("--- Changelist")):
-      status = status_lines[2]
-    else:
-      status = status_lines[0]
-    if status[0] == "A":
-      content = ""
-    elif status[0] in ["M", "D"]:
-      mimetype = RunShell("svn -rBASE propget svn:mime-type", [filename],
-                          silent_ok=True)
-      if mimetype.startswith("application/octet-stream"):
-        content = ""
-      else:
-        content = RunShell("svn cat", [filename])
-      keywords = RunShell("svn -rBASE propget svn:keywords", [filename],
-                          silent_ok=True)
-      if keywords:
-        content = CollapseKeywords(content, keywords)
-    else:
-      StatusUpdate("svn status returned unexpected output: %s" % status)
-      sys.exit(False)
-    checksum = md5.new(content).hexdigest()
-    parts = []
-    while content:
-      parts.append(content[:800000])
-      content = content[800000:]
-    if not parts:
-      parts = [""] # empty file
-    for part, data in enumerate(parts):
-      if options.verbose > 0:
-        print "Uploading %s (%d/%d)" % (filename, part+1, len(parts))
-      url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset),
-                                          int(patches.get(filename)))
-      current_checksum = md5.new(data).hexdigest()
-      form_fields = [("filename", filename),
-                     ("num_parts", str(len(parts))),
-                     ("checksum", checksum),
-                     ("current_part", str(part)),
-                     ("current_checksum", current_checksum),]
-      if options.email:
-        form_fields.append(("user", options.email))
-      ctype, body = EncodeMultipartFormData(form_fields,
-                                            [("data", filename, data)])
-      response_body = rpc_server.Send(url, body,
-                                      content_type=ctype)
-      if not response_body.startswith("OK"):
-        StatusUpdate("  --> %s" % response_body)
-        sys.exit(False)
-
-
-def CollapseKeywords(content, keyword_str):
-    """Collapses SVN keywords."""
-    # svn cat translates keywords but svn diff doesn't. As a result of this
-    # behavior patching.PatchChunks() fails with a chunk mismatch error.
-    # This part was originally written by the Review Board development team
-    # who had the same problem (http://reviews.review-board.org/r/276/).
-    # Mapping of keywords to known aliases
-    svn_keywords = {
-      # Standard keywords
-      'Date':                ['Date', 'LastChangedDate'],
-      'Revision':            ['Revision', 'LastChangedRevision', 'Rev'],
-      'Author':              ['Author', 'LastChangedBy'],
-      'HeadURL':             ['HeadURL', 'URL'],
-      'Id':                  ['Id'],
-
-      # Aliases
-      'LastChangedDate':     ['LastChangedDate', 'Date'],
-      'LastChangedRevision': ['LastChangedRevision', 'Rev', 'Revision'],
-      'LastChangedBy':       ['LastChangedBy', 'Author'],
-      'URL':                 ['URL', 'HeadURL'],
-    }
-    def repl(m):
-       if m.group(2):
-         return "$%s::%s$" % (m.group(1), " " * len(m.group(3)))
-       return "$%s$" % m.group(1)
-    keywords = [keyword
-                for name in keyword_str.split(" ")
-                for keyword in svn_keywords.get(name, [])]
-    return re.sub(r"\$(%s):(:?)([^\$]+)\$" % '|'.join(keywords), repl, content)
-
-
-def CheckForUnknownFiles():
-  status = RunShell("svn status --ignore-externals", silent_ok=True)
-  unknown_files = []
-  for line in status.split("\n"):
-    if line and line[0] == "?":
-      unknown_files.append(line)
-  if unknown_files:
-    print "The following files are not added to version control:"
-    for line in unknown_files:
-      print line
-    prompt = "Are you sure to continue?(y/N) "
-    answer = raw_input(prompt).strip()
-    if answer != "y":
-      ErrorExit("User aborted")
 
 
 def main():
