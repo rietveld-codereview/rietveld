@@ -189,6 +189,23 @@ class Patch(db.Model):
     self._lines = lines
     return lines
 
+  _property_changes = None
+
+  @property
+  def property_changes(self):
+    """The property changes split into lines.
+    
+    The value is cached.
+    """
+    if self._property_changes != None:
+      return self._property_changes
+    self._property_changes = []
+    index = self.text.find('Property changes on')
+    if index == -1:
+      return None
+    self._property_changes = self.text[index:].splitlines()[2:]
+    return self._property_changes
+
   @property
   def num_lines(self):
     """The number of lines in this patch."""

@@ -492,6 +492,15 @@ table.history .sep {
   border-top: 1px solid #f2f2f2;
 }
 
+table.property_changes {
+  color: #333333;
+  background-color: #eeeeec;
+  border: 1px solid lightgray;
+  -moz-border-radius: 5px 5px 5px 5px;
+  padding: 5px;
+  margin-bottom: 1em;
+}
+
 table#queues, table#clfiles {
   border-collapse: collapse;
   width: 100%;

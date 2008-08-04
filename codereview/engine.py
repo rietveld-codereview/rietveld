@@ -51,13 +51,25 @@ def ParsePatchSet(patchset):
   patches = []
   filename = lines = None
   for line in patchset.data.splitlines(True):
+    new_filename = None
     if line.startswith('Index:'):
+      unused, new_filename = line.split(':', 1)
+      new_filename = new_filename.strip()
+    elif line.startswith('Property changes on:'):    
+      unused, temp_filename = line.split(':', 1)
+      # When a file is modified, paths use '/' between directories, however
+      # when a property is modified '\' is used on Windows.  Make them the same
+      # otherwise the file shows up twice.
+      temp_filename = temp_filename.strip().replace('\\', '/')
+      if temp_filename != filename:
+        # File has property changes but no modifications, create a new patch.
+        new_filename = temp_filename
+    if new_filename:      
       if filename and lines:
         patch = models.Patch(patchset=patchset, text=_ToText(lines),
                              filename=filename, parent=patchset)
         patches.append(patch)
-      unused, filename = line.split(':', 1)
-      filename = filename.strip()
+      filename = new_filename
       lines = [line]
       continue
     if lines is not None:

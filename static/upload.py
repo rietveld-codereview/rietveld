@@ -597,7 +597,7 @@ class SubversionVCS(VersionControlSystem):
     data = RunShell(cmd, args)
     count = 0
     for line in data.splitlines():
-      if line.startswith("Index:"):
+      if line.startswith("Index:") or line.startswith("Property changes on:"):
         count += 1
         logging.info(line)
     if not count:
@@ -657,9 +657,14 @@ class SubversionVCS(VersionControlSystem):
       status = status_lines[2]
     else:
       status = status_lines[0]
-    if status[0] == "A":
+    # If a file is copied its status will be "A  +", which signifies
+    # "addition-with-history".  See "svn st" for more information.  We need to
+    # upload the original file or else diff parsing will fail if the file was
+    # edited.
+    if ((status[0] == "A" and status[3] != "+") or
+        (status[0] == " " and status[1] == "M")):  # property changed
       content = ""
-    elif status[0] in ["M", "D"]:
+    elif status[0] in ("M", "D") or (status[0] == "A" and status[3] == "+"):
       mimetype = RunShell("svn -rBASE propget svn:mime-type", [filename],
                           silent_ok=True)
       if mimetype.startswith("application/octet-stream"):

@@ -94,6 +94,16 @@ login_warned = false;
 
 <span id="hook-sel" style="display:none;"></span>
 
+{%if patch.property_changes %}
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr align="center"><td>
+<table class="property_changes">
+<tr><th>Property Changes:</th></tr>
+{%for row in patch.property_changes%}<tr><td>{{row|safe}}</td></tr>{%endfor%}
+</table></td></tr>
+</table>
+{%endif%}
+
 <table border="0" cellpadding="0" cellspacing="0" id="thecode"
        ondblclick="M_handleTableDblClick(event)">
 <tr><th>OLD</th><th>NEW</th></tr>
