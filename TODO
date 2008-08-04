@@ -85,6 +85,8 @@ User Experience
 ---------------
 
 Need a unique favicon
+Need to have a [+] icon next to all text edit boxes, e.g. issue reply
+    and edit description
 Make Edit Issue show the form inline instead of opening a new page?
 Support more of the Mondrian functionality already in script.js,
   e.g. j / k with arrow to select an issue
