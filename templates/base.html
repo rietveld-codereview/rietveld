@@ -3,7 +3,8 @@
 <html>
 <head>
   <title>
-    {%if issue%}{{issue.subject}} -{%endif%}
+    {%if patch%}{{patch.filename}} -{%endif%}
+    {%if issue%}Issue {{issue.key.id}}: {{issue.subject}} -{%endif%}
     {%if is_dev%}
     DEV SERVER
     {%else%}
@@ -145,8 +146,8 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 <div class="counter">({{counter}})</div>
 <div class="mainmenu">
   {%block mainmenu%}
-  <a href="{%url codereview.views.index%}" class="active">Issues</a>
-  <a href="{%url codereview.views.repos %}" class="active">Repositories</a>
+  <a href="{%url codereview.views.index%}">Issues</a>
+  <a href="{%url codereview.views.repos %}">Repositories</a>
   {%endblock%}
 </div>
 <div class="mainmenu2">

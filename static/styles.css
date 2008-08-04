@@ -580,19 +580,20 @@ span.visualtab {
 }
 .mainmenu a {
   margin-right: .2em;
-  background-color: #eeeeec;
+  background-color: #f3f3f3;
   border-bottom: none;
   -moz-border-radius: 5px 5px 0px 0px;
   padding-left: .8em;
   padding-right: .8em;
   padding-top: 3px;
   text-decoration: none;
-  color: black;
+  color: #666666;
   font-weight: bold;
 }
 .mainmenu a.active {
   background-color: #e9f2df;
   border-bottom: none;
+  color: black;
 }
 .mainmenu2 {
   background-color: #e9f2df;
