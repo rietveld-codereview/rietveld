@@ -201,9 +201,8 @@ class Patch(db.Model):
       return self._property_changes
     self._property_changes = []
     index = self.text.find('Property changes on')
-    if index == -1:
-      return None
-    self._property_changes = self.text[index:].splitlines()[2:]
+    if index != -1:
+      self._property_changes = self.text[index:].splitlines()[2:]
     return self._property_changes
 
   @property
