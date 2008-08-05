@@ -997,7 +997,7 @@ def close(request):
 
 @patchset_required
 def download(request):
-  """/<issue>/download/<patchset> - Download a patch set."""
+  """/download/<issue>_<patchset>.diff - Download a patch set."""
   return HttpResponse(request.patchset.data, content_type='text/plain')
 
 

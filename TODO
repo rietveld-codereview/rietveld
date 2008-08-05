@@ -4,13 +4,6 @@ Bugs
 If a user never logs in, someone else can grab their nickname
 See the issue tracker at code.google.com/p/rietveld for more bugs
 
-Downloads
----------
-
-Download links should use more meaningful filenames,
-    e.g. "123_456.diff" rather than 456 (where 123 is the issue and 456
-    the patch set).
-
 Popups
 ------
 
