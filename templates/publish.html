@@ -3,7 +3,7 @@
 <h2>Publish + Mail Draft Comments</h2>
 
 <div>
-  <form action="{%url codereview.views.publish%}" method="post">
+  <form action="" method="post">
   <table>
   {%ifnotequal user issue.owner%}
   <tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
