@@ -2274,9 +2274,10 @@ function M_restoreDraftText_(draftKey, form, opt_selectAll) {
  * the selector on the dashboard, and moves it on keypress.
  * @param {Window} win The window that the dashboard table is in.
  * @param {String} trName The name of TRs that we will move between.
+ * @param {String} cookieName The cookie name to store the marker position into.
  * @constructor
  */
-function M_DashboardState(win, trName) {
+function M_DashboardState(win, trName, cookieName) {
   /**
    * The position of the marker, 0-indexed into the trCache array.
    * @ype Integer
@@ -2306,6 +2307,12 @@ function M_DashboardState(win, trName) {
    * @type String
    */
   this.trName = trName;
+
+  /**
+   * The name of the cookie value where the marker position is stored.
+   * @type String
+   */
+  this.cookieName = cookieName;
 
   this.initialize();
 }
@@ -2337,6 +2344,16 @@ M_DashboardState.prototype.initialize = function() {
     return elem.style.display != "none";
   });
 
+  if (document.cookie && this.cookieName) {
+    cookie_values = document.cookie.split(";");
+    for (var i=0; i<cookie_values.length; i++) {
+      name = cookie_values[i].split("=")[0].replace(/ /g, '');
+      if (name == this.cookieName) {
+        this.trPos = cookie_values[i].split("=")[1];
+      }
+    }
+  }
+
   this.goto_(0);
 }
 
@@ -2353,6 +2370,9 @@ M_DashboardState.prototype.goto_ = function(direction) {
   }
   this.curTR = this.trCache[this.trPos];
   this.curTR.cells[0].firstChild.style.visibility = "";
+  if (this.cookieName) {
+    document.cookie = this.cookieName+'='+this.trPos;
+  }
 
   if (!M_isElementVisible(this.win, this.curTR)) {
     M_scrollIntoView(this.win, this.curTR, direction);

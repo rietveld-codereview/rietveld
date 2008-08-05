@@ -1,6 +1,11 @@
 {%extends "issue_base.html"%}
 {%block body%}
-
+<script language="JavaScript" type="text/javascript"><!--
+function keyPressIntermediary(evt) {
+  return M_dashboardKeyPress(evt);
+}
+document.onkeypress = keyPressIntermediary;
+</script>
 <h2>Recent Issues</h2>
 
 <div class="issue-list">
@@ -41,4 +46,7 @@
 
 </div>
 
+<script language="JavaScript" type="text/javascript"><!--
+var dashboardState = new M_DashboardState(window,'issue');
+</script>
 {%endblock%}

@@ -1,6 +1,9 @@
-<tr {%if issue.num_drafts%}style="color:red"{%endif%}>
-  <td align="right" class="first">
-    <div class="subject">{{issue.key.id}}</div>
+<tr {%if issue.num_drafts%}style="color:red"{%endif%} name="issue">
+  <td class="first" width="14"><img src="/static/closedtriangle.gif" 
+    style="visibility: hidden;" width="12" height="9" /></td>
+  <td align="right"><div class="subject"><a class="noul"
+         href="{%url codereview.views.show issue.key.id%}">{{issue.key.id}}</a>
+     </div>
   </td>
   <td>
     <div class="subject">
