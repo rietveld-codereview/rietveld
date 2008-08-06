@@ -3,12 +3,15 @@
 <html>
 <head>
   <title>
-    {%if patch%}{{patch.filename}} -{%endif%}
-    {%if issue%}Issue {{issue.key.id}}: {{issue.subject}} -{%endif%}
-    {%if is_dev%}
-    DEV SERVER
-    {%else%}
+    {%block title1%}
+      {%if patch%}{{patch.filename}} -{%endif%}
+    {%endblock%}
+    {%block title2%}
+      {%if issue%}Issue {{issue.key.id}}: {{issue.subject}} -{%endif%}
+    {%endblock%}
     Code Review
+    {%if is_dev%}
+      (DEV)
     {%endif%}
   </title>
   <link type="text/css" rel="stylesheet" href="/static/styles.css">
