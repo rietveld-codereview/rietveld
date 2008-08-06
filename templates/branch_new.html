@@ -2,7 +2,7 @@
 {%block body%}
 <h2>Create New Branch in Repository '{{repo.name}}'</h2>
 
-<form action="{%url codereview.views.branch_new%}" method="post">
+<form action="{%url codereview.views.branch_new repo.key.id%}" method="post">
 <table>
 {{form}}
 <tr><td><input type="submit" value="Create Branch"></td></tr>
