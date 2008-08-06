@@ -81,14 +81,11 @@ def log_exception(*args, **kwds):
   logging.exception('Exception in request: %s: %s', cls.__name__, err)
 
 # Log all exceptions detected by Django.
-django.dispatch.dispatcher.connect(
-    log_exception,
-    django.core.signals.got_request_exception)
+django.core.signals.got_request_exception.connect(log_exception)
 
 # Unregister Django's default rollback event handler.
-django.dispatch.dispatcher.disconnect(
-    django.db._rollback_on_exception,
-    django.core.signals.got_request_exception)
+django.core.signals.got_request_exception.disconnect(
+    django.db._rollback_on_exception)
 
 def real_main():
   """Main program."""
