@@ -21,9 +21,12 @@ for import hooks.
 Usage:
   import py_zipimport
 
-When your app is running in Google App Engine production, this is
-already done for you.  In the Google App Engine SDK this module is not
-used; instead, the standard zipimport module is used.
+As a side effect of importing, the module overrides sys.path_hooks,
+and also creates an alias 'zipimport' for itself.  When your app is
+running in Google App Engine production, you don't even need to import
+it, since this is already done for you.  In the Google App Engine SDK
+this module is not used; instead, the standard zipimport module is
+used.
 """
 
 __author__ = ('Iain Wade', 'Guido van Rossum')
@@ -105,7 +108,7 @@ class zipimporter:
       except (EnvironmentError, zipfile.BadZipfile), err:
         # This is logged as a warning since it means we failed to open
         # what appears to be an existing zipfile.
-        msg = 'Can\'t open zipfile %s: %s: %s' % (self.zipfilename, 
+        msg = 'Can\'t open zipfile %s: %s: %s' % (self.zipfilename,
                                                   err.__class__.__name__, err)
         logging.warn(msg)
         raise ZipImportError(msg)
@@ -122,7 +125,7 @@ class zipimporter:
     name = self.zipfilename
     if self.prefix:
       name = os.path.join(name, self.prefix)
-    return '<zipimporter object %s>' % name
+    return '<zipimporter object "%s">' % name
 
   def _get_info(self, fullmodname):
     """Internal helper for find_module() and load_module().
@@ -141,9 +144,8 @@ class zipimporter:
     """
     parts = fullmodname.split('.')
     submodname = parts[-1]
-    modpath = '/'.join(parts)
     for suffix, is_package in _SEARCH_ORDER:
-      relpath = modpath + suffix
+      relpath = os.path.join(self.prefix, submodname + suffix)
       try:
         self.zipfile.getinfo(relpath)
       except KeyError:
