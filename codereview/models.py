@@ -203,6 +203,8 @@ class Patch(db.Model):
     self._property_changes = []
     match = re.search('^Property changes on.*\n'+'_'*67+'$', self.text,
                       re.MULTILINE)
+    if match:
+      self._property_changes = self.text[match.end():].splitlines()
     return self._property_changes
 
   @property
