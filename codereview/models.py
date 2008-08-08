@@ -16,6 +16,7 @@
 
 # Python imports
 import logging
+import re
 
 # AppEngine imports
 from google.appengine.api import users
@@ -200,9 +201,8 @@ class Patch(db.Model):
     if self._property_changes != None:
       return self._property_changes
     self._property_changes = []
-    index = self.text.find('Property changes on')
-    if index != -1:
-      self._property_changes = self.text[index:].splitlines()[2:]
+    match = re.search('^Property changes on.*\n'+'_'*67+'$', self.text,
+                      re.MULTILINE)
     return self._property_changes
 
   @property
