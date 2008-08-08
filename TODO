@@ -24,8 +24,6 @@ Sending Mail
 
 Should allow registered nicknames in Reviewers and CC fields
 Normalize emails to nicknames in these fields when displaying, if known
-Mail templates should be sparser -- no happy talk
-Review template should include diff if small (<= 100 lines)
 
 Issues
 ------
@@ -68,7 +66,6 @@ Deprecate the upload form (and repositories) and do it all with upload.py
 Improve UI for selecting patch set deltas; handle missing files better
 Syntax colorization
 Record revision and show in UI; indicate action (add/edit/delete)
-Handle propsets?
 Handle binary files?!  (Progress: fewer crashes related to binary files)
 Add line length option
 Support more diff formats  (Better: let upload.py normlize these)
@@ -77,24 +74,16 @@ Need a more powerful way to specify the URL for finding a revision (?)
 User Experience
 ---------------
 
-Need a unique favicon
 Need to have a [+] icon next to all text edit boxes, e.g. issue reply
     and edit description
 Make Edit Issue show the form inline instead of opening a new page?
-Support more of the Mondrian functionality already in script.js,
-  e.g. j / k with arrow to select an issue
 Fields "SVN Base" and "Base" have hard-to-guess names
 Better UI for adding branches?  (Low priority now we have upload.py)
-Page titles should be more informative:
-    show issue # and subject for issues
-    show issue # and full filename for diffs and patches
 Show a download patch link on the individual diff pages
 Right-justify the "Id" and "Drafts (mine)" headings in the Issues list table
-Allow clicking on the issue id to go to the issue as well
 
 Software Engineering
 --------------------
 
 Unittests
-Zip up Django
-Change Makefile to use a "clean" release directory for uploading
+Make the deployment procedure work on Windows
