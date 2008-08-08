@@ -186,6 +186,7 @@ class UploadForm(forms.Form):
 
 class UploadContentForm(forms.Form):
   filename = forms.CharField(max_length=255)
+  status = forms.CharField(required=False, max_length=20)
   num_parts = forms.IntegerField()
   checksum = forms.CharField(max_length=32)
   current_part = forms.IntegerField()
@@ -624,6 +625,8 @@ def upload_content(request):
     return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
                         content_type='text/plain')
   patch = request.patch
+  patch.status = form.cleaned_data['status']
+  patch.put()
   try:
     content = patch.get_partial_content()
   except engine.FetchError, err:
@@ -733,8 +736,7 @@ def _make_new(request, form):
     issue = None
 
   if form.cleaned_data.get('send_mail'):
-    msg = _make_message('mails/publish.txt', request, issue, 'Issue created.',
-                        send_mail=True)
+    msg = _make_message(request, issue, '', '', True)
     msg.put()
   return issue
 
@@ -814,8 +816,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   issue.put()
 
   if form.cleaned_data.get('send_mail'):
-    msg = _make_message('mails/publish.txt', request, issue, message,
-                        send_mail=True)
+    msg = _make_message(request, issue, message, '', True)
     msg.put()
   return patchset
 
@@ -995,6 +996,19 @@ def close(request):
   issue.put()
   return HttpResponse('Closed', content_type='text/plain')
 
+
+@issue_required
+def mailissue(request):
+  """/<issue>/mail - Send mail for an issue."""
+  if request.issue.owner != request.user:
+    if not IS_DEV:
+      return HttpResponse('Login required', status=401)
+  issue = request.issue
+  msg = _make_message(request, issue, '', '', True)
+  msg.put()
+  return HttpResponse('OK', content_type='text/plain')
+
+
 @patchset_required
 def download(request):
   """/download/<issue>_<patchset>.diff - Download a patch set."""
@@ -1003,8 +1017,17 @@ def download(request):
 
 @issue_required
 def description(request):
-  """/<issue>/description - Gets an issue's description."""
-  return HttpResponse(request.issue.description, content_type='text/plain')
+  """/<issue>/description - Gets/Sets an issue's description."""
+  if request.method != 'POST':
+    description = request.issue.description or ""
+    return HttpResponse(description, content_type='text/plain')
+  if request.issue.owner != request.user:
+    if not IS_DEV:
+      return HttpResponse('Login required', status=401)
+  issue = request.issue
+  issue.description = request.POST.get('description')
+  issue.put()
+  return HttpResponse('')
 
 
 @patch_required
@@ -1312,6 +1335,52 @@ def _inline_draft(request):
                              'side': side})
 
 
+def _get_affected_files(issue):
+  """Helper to return a list of affected files from the latest patchset.
+
+  Args:
+    issue: Issue instance.
+
+  Returns:
+    2-tuple containing a list of affected files, and the diff contents if it
+    is less than 100 lines (otherwise the second item is an empty string).
+  """
+  files = []
+  modified_count = 0
+  diff = ''
+  patchsets = list(issue.patchset_set.order('created'))
+  if len(patchsets):
+    patchset = patchsets[-1]
+    for patch in patchset.patch_set.order('filename'):
+      file_str = ''
+      if patch.status:
+        file_str += patch.status + ' '
+      file_str += patch.filename
+      files.append(file_str)
+      modified_count += patch.num_lines
+
+    if modified_count and modified_count < 100:
+      diff = patchset.data
+
+  return files, diff
+
+
+def _get_mail_template(issue):
+  """Helper to return the template and context for an email.
+  
+  If this is the first email for this issue, a template that lists the
+  reviewers, description and files is used.
+  """
+  context = {}
+  if issue.message_set.count(1) == 0:
+    template = 'mails/review.txt'
+    files, patch = _get_affected_files(issue)
+    context.update({'files': files, 'patch': patch})
+  else:
+    template = 'mails/comment.txt'
+  return template, context
+
+
 @issue_required
 @login_required
 def publish(request):
@@ -1370,7 +1439,7 @@ def publish(request):
 
   if comments:
     logging.warn('Publishing %d comments', len(comments))
-  msg = _make_message('mails/publish.txt', request, issue,
+  msg = _make_message(request, issue,
                       form.cleaned_data['message'],
                       comments,
                       form.cleaned_data['send_mail'])
@@ -1469,11 +1538,9 @@ def _get_draft_details(request, comments):
   return '\n'.join(output)
 
 
-def _make_message(template, request, issue, message, comments=None,
-                  send_mail=False, context=None):
+def _make_message(request, issue, message, comments=None, send_mail=False):
   """Helper to create a Message instance and optionally send an email."""
-  if context is None:
-    context = {}
+  template, context = _get_mail_template(issue)
   # Decide who should receive mail
   my_email = db.Email(request.user.email())
   to = [db.Email(issue.owner.email())] + issue.reviewers

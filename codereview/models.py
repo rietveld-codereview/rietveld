@@ -169,6 +169,7 @@ class Patch(db.Model):
 
   patchset = db.ReferenceProperty(PatchSet)  # == parent
   filename = db.StringProperty()
+  status = db.StringProperty()  # 'A', 'A  +', 'M', 'D' etc
   text = db.TextProperty()
   content = db.ReferenceProperty(Content)
   patched_content = db.ReferenceProperty(Content, collection_name='patch2_set')

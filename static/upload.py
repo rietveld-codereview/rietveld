@@ -238,7 +238,7 @@ class AbstractRpcServer(object):
       self._GetAuthCookie(auth_token)
       return
 
-  def Send(self, request_path, payload="",
+  def Send(self, request_path, payload=None,
            content_type="application/octet-stream",
            timeout=None,
            **kwargs):
@@ -367,6 +367,11 @@ parser.add_option("-m", "--message", action="store", dest="message",
 parser.add_option("-d", "--description", action="store", dest="description",
                   metavar="DESCRIPTION", default=None,
                   help="Optional description when creating an issue.")
+parser.add_option("-f", "--description_file", action="store",
+                  dest="description_file", metavar="DESCRIPTION_FILE",
+                  default=None,
+                  help="Optional path of a file that contains "
+                       "the description when creating an issue.")
 parser.add_option("-i", "--issue", type="int", action="store",
                   metavar="ISSUE", default=None,
                   help="Issue number to which to add. Defaults to new issue.")
@@ -509,7 +514,13 @@ class VersionControlSystem(object):
         ErrorExit("User aborted")
 
   def GetBaseFile(self, filename):
-    """Get the content of the upstream version of a file."""
+    """Get the content of the upstream version of a file.
+    
+    Returns:
+      A tuple (content, status) representing the file content and the status of
+      the file.
+    """
+
     raise NotImplementedError(
         "abstract method -- subclass %s must override" % self.__class__)
 
@@ -518,7 +529,7 @@ class VersionControlSystem(object):
     patches = dict()
     [patches.setdefault(v, k) for k, v in patch_list]
     for filename in patches.keys():
-      content = self.GetBaseFile(filename)
+      content, status = self.GetBaseFile(filename)
       checksum = md5.new(content).hexdigest()
       parts = []
       while content:
@@ -533,6 +544,7 @@ class VersionControlSystem(object):
                                             int(patches.get(filename)))
         current_checksum = md5.new(data).hexdigest()
         form_fields = [("filename", filename),
+                       ("status", status),
                        ("num_parts", str(len(parts))),
                        ("checksum", checksum),
                        ("current_part", str(part)),
@@ -678,7 +690,7 @@ class SubversionVCS(VersionControlSystem):
     else:
       StatusUpdate("svn status returned unexpected output: %s" % status)
       sys.exit(False)
-    return content
+    return content, status[0:5]
 
 
 def RealMain(argv):
@@ -699,8 +711,6 @@ def RealMain(argv):
   data = vcs.GenerateDiff(args)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
-  if options.description and options.issue:
-    ErrorExit("A description is not allowed when updating an issue.")
   if options.issue:
     prompt = "Message describing this patch set: "
   else:
@@ -726,9 +736,18 @@ def RealMain(argv):
       if cc.count("@") != 1 or "." not in cc.split("@")[1]:
         ErrorExit("Invalid email address: %s" % cc)
     form_fields.append(("cc", options.cc))
-  if options.description:
-    form_fields.append(("description", options.description))
-  if options.send_mail:
+  description = options.description
+  if options.description_file:
+    if options.description:
+      ErrorExit("Can't specify description and description_file")
+    file = open(options.description_file, 'r')
+    description = file.read()
+    file.close()    
+  if description:
+    form_fields.append(("description", description))
+  # If we're uploading base files, don't send the email before the uploads, so
+  # that it contains the file status.
+  if options.send_mail and not options.local_base:
     form_fields.append(("send_mail", "1"))
   if options.local_base:
     form_fields.append(("content_upload", "1"))
@@ -752,6 +771,8 @@ def RealMain(argv):
   issue = msg[msg.rfind("/")+1:]
   if options.local_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
+    if options.send_mail:
+      rpc_server.Send("/" + issue + "/mail")
   return issue
 
 

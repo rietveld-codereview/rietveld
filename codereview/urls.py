@@ -30,6 +30,7 @@ urlpatterns = patterns(
     (r'^(\d+)/edit$', 'edit'),
     (r'^(\d+)/delete$', 'delete'),
     (r'^(\d+)/close$', 'close'),
+    (r'^(\d+)/mail$', 'mailissue'),
     (r'^(\d+)/publish$', 'publish'),
     (r'^download/issue(\d+)_(\d+)\.diff', 'download'),
     (r'^(\d+)/patch/(\d+)/(\d+)$', 'patch'),
