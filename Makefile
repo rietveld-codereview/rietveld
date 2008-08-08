@@ -23,7 +23,7 @@ serve_email:
 serve_remote_email:
 	$(DEV_APPSERVER) --enable_sendmail --address 0.0.0.0 .
 
-release: make_release.sh
+release: make_release.sh django/.svn
 	sh make_release.sh
 
 update: release
