@@ -72,6 +72,7 @@ class Issue(BaseModel):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   reviewers = db.ListProperty(db.Email)
+  cc = db.ListProperty(db.Email)
   closed = db.BooleanProperty(default=False)
 
   _num_comments = None
@@ -145,6 +146,7 @@ class Content(BaseModel):
 
   # parent => Patch
   text = db.TextProperty()
+  partial_upload = db.BlobProperty()
   is_uploaded = db.BooleanProperty(default=False)
   is_complete = db.BooleanProperty(default=True)
   is_bad = db.BooleanProperty(default=False)
@@ -187,6 +189,22 @@ class Patch(BaseModel):
       lines = self.text.splitlines(True)
     self._lines = lines
     return lines
+
+  _property_changes = None
+
+  @property
+  def property_changes(self):
+    """The property changes split into lines.
+    
+    The value is cached.
+    """
+    if self._property_changes != None:
+      return self._property_changes
+    self._property_changes = []
+    index = self.text.find('Property changes on')
+    if index != -1:
+      self._property_changes = self.text[index:].splitlines()[2:]
+    return self._property_changes
 
   @property
   def num_lines(self):

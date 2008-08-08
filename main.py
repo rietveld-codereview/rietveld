@@ -28,11 +28,21 @@ import sys
 import logging
 
 # Log a message each time this module get loaded.
-logging.info('Loading %s', __name__)
+logging.info('Loading %s, app version = %s',
+             __name__, os.getenv('CURRENT_VERSION_ID'))
 
 # Load and install the AppEngine helper.
 from appengine_django import InstallAppengineHelperForDjango
 InstallAppengineHelperForDjango()
+
+# Enable custom zipimport and use it.
+import py_zipimport
+sys.path.insert(0, os.path.abspath('django.zip'))
+
+# Fail early if we can't import Django.  Log identifying information.
+import django
+logging.info('django.__file__ = %r, django.VERSION = %r',
+             django.__file__, django.VERSION)
 
 # AppEngine imports.
 from google.appengine.ext.webapp import util
@@ -57,6 +67,10 @@ import django.core.handlers.wsgi
 import django.core.signals
 import django.db
 import django.dispatch.dispatcher
+import django.forms
+
+# Work-around to avoid warning about django.newforms in djangoforms.
+django.newforms = django.forms
 
 def log_exception(*args, **kwds):
   """Django signal handler to log an exception."""
@@ -64,14 +78,11 @@ def log_exception(*args, **kwds):
   logging.exception('Exception in request: %s: %s', cls.__name__, err)
 
 # Log all exceptions detected by Django.
-django.dispatch.dispatcher.connect(
-    log_exception,
-    django.core.signals.got_request_exception)
+django.core.signals.got_request_exception.connect(log_exception)
 
 # Unregister Django's default rollback event handler.
-django.dispatch.dispatcher.disconnect(
-    django.db._rollback_on_exception,
-    django.core.signals.got_request_exception)
+django.core.signals.got_request_exception.disconnect(
+    django.db._rollback_on_exception)
 
 def real_main():
   """Main program."""

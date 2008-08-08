@@ -1,4 +1,4 @@
-{%autoescape off%}Dear {{nicknames}},
+{%autoescape off%}Dear {{to_nicknames}},
 
 {%block content%}{%endblock%}{%if message%}
 

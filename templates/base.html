@@ -3,11 +3,15 @@
 <html>
 <head>
   <title>
-    {%if issue%}{{issue.subject}} -{%endif%}
-    {%if is_dev%}
-    DEV SERVER
-    {%else%}
+    {%block title1%}
+      {%if patch%}{{patch.filename}} -{%endif%}
+    {%endblock%}
+    {%block title2%}
+      {%if issue%}Issue {{issue.key.id}}: {{issue.subject}} -{%endif%}
+    {%endblock%}
     Code Review
+    {%if is_dev%}
+      (DEV)
     {%endif%}
   </title>
   <link type="text/css" rel="stylesheet" href="/static/styles.css">
@@ -83,9 +87,13 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
           <td class="shortcut"><span class="letter">m</span> <b>:</b></td><td>publish + mail comments</td>
         </tr>
         <tr><td>&nbsp;</td></tr>
-        <tr><td>&nbsp;</td></tr>
-        <tr><td>&nbsp;</td></tr>
-        <tr><td>&nbsp;</td></tr>
+        <tr><td></td><th>Issue List</th></tr>
+        <tr>
+          <td class="shortcut"><span class="letter">j</span> / <span class="letter">k</span> <b>:</b></td><td>jump to issue after / before current issue</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">o</span> / <span class="letter">&lt;Enter&gt;</span> <b>:</b></td><td>open current issue</td>
+        </tr>
         <tr><td>&nbsp;</td></tr>
         <tr><td>&nbsp;</td></tr>
         <tr>
@@ -145,8 +153,8 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 <div class="counter">({{counter}})</div>
 <div class="mainmenu">
   {%block mainmenu%}
-  <a href="{%url codereview.views.index%}" class="active">Issues</a>
-  <a href="{%url codereview.views.repos %}" class="active">Repositories</a>
+  <a href="{%url codereview.views.index%}">Issues</a>
+  <a href="{%url codereview.views.repos %}">Repositories</a>
   {%endblock%}
 </div>
 <div class="mainmenu2">

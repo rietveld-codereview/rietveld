@@ -249,8 +249,6 @@
         <textarea rows="7" cols="70" name="message"></textarea>
       </div>
       <input type="hidden" name="subject" value="{{issue.subject}}" />
-      <input type="hidden" name="reviewers"
-             value="{%for reviewer in issue.reviewers%}{{reviewer}}, {%endfor%}{{request.user.email}}" />
       <input type="hidden" name="message_only" value="1" />
       <input type="submit" value="Send Message" />
       <input type="button" value="Discard" name="discard" />

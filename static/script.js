@@ -2274,9 +2274,10 @@ function M_restoreDraftText_(draftKey, form, opt_selectAll) {
  * the selector on the dashboard, and moves it on keypress.
  * @param {Window} win The window that the dashboard table is in.
  * @param {String} trName The name of TRs that we will move between.
+ * @param {String} cookieName The cookie name to store the marker position into.
  * @constructor
  */
-function M_DashboardState(win, trName) {
+function M_DashboardState(win, trName, cookieName) {
   /**
    * The position of the marker, 0-indexed into the trCache array.
    * @ype Integer
@@ -2306,6 +2307,12 @@ function M_DashboardState(win, trName) {
    * @type String
    */
   this.trName = trName;
+
+  /**
+   * The name of the cookie value where the marker position is stored.
+   * @type String
+   */
+  this.cookieName = cookieName;
 
   this.initialize();
 }
@@ -2337,6 +2344,16 @@ M_DashboardState.prototype.initialize = function() {
     return elem.style.display != "none";
   });
 
+  if (document.cookie && this.cookieName) {
+    cookie_values = document.cookie.split(";");
+    for (var i=0; i<cookie_values.length; i++) {
+      name = cookie_values[i].split("=")[0].replace(/ /g, '');
+      if (name == this.cookieName) {
+        this.trPos = cookie_values[i].split("=")[1];
+      }
+    }
+  }
+
   this.goto_(0);
 }
 
@@ -2353,6 +2370,9 @@ M_DashboardState.prototype.goto_ = function(direction) {
   }
   this.curTR = this.trCache[this.trPos];
   this.curTR.cells[0].firstChild.style.visibility = "";
+  if (this.cookieName) {
+    document.cookie = this.cookieName+'='+this.trPos;
+  }
 
   if (!M_isElementVisible(this.win, this.curTR)) {
     M_scrollIntoView(this.win, this.curTR, direction);
@@ -2476,7 +2496,7 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
 }
 
 /**
- * TODO(jiayao,andi): docstring
+ * Finds the element position.
  */
 function M_getElementPosition(obj) {
   var curleft = curtop = 0;
@@ -2488,6 +2508,73 @@ function M_getElementPosition(obj) {
   }
   return [curleft,curtop];
 }
+
+/**
+ * Position the user info popup according to the mouse event coordinates
+ */
+function M_positionUserInfoPopup(obj, userPopupDiv) {
+  pos = M_getElementPosition(obj);
+  userPopupDiv.style.left = pos[0] + "px";
+  userPopupDiv.style.top = pos[1] + 20 + "px";
+}
+
+/**
+ * Brings up user info popup using ajax
+ */
+function M_showUserInfoPopup(obj) {
+  var DIV_ID = "userPopupDiv";
+  var userPopupDiv = document.getElementById(DIV_ID);
+  var url = obj.getAttribute("href")
+  var index = url.indexOf("/user/");
+  var user_key = url.substring(index + 6);
+
+  if (!userPopupDiv) {
+    var userPopupDiv = document.createElement("div");
+    userPopupDiv.className = "popup";
+    userPopupDiv.id = DIV_ID;
+    userPopupDiv.filter = 'alpha(opacity=85)';
+    userPopupDiv.opacity = '0.85'; 
+    userPopupDiv.innerHTML = "";
+    userPopupDiv.onmouseout = function() {
+      userPopupDiv.style.visibility = 'hidden';
+    }
+    document.body.appendChild(userPopupDiv);
+  }
+  M_positionUserInfoPopup(obj, userPopupDiv);
+
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+
+  var aborted = false;
+  var httpreq_timeout = setTimeout(function() {
+    aborted = true;
+    httpreq.abort();
+  }, 5000);
+
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4 && !aborted) {
+      clearTimeout(httpreq_timeout);
+      if (httpreq.status == 200) {
+        userPopupDiv = document.getElementById(DIV_ID);
+        userPopupDiv.innerHTML=httpreq.responseText;
+        userPopupDiv.style.visibility = "visible";
+      } else {
+        //Better fail silently here because it's not 
+        //critical functionality
+      }
+    }
+  }
+  httpreq.open("GET", "/user_popup/" + user_key, true);
+  httpreq.send(null);
+  obj.onmouseout = function() {
+    aborted = true;
+    userPopupDiv.style.visibility = 'hidden';
+    obj.onmouseout = null;
+  }
+}
+
 /**
  * TODO(jiayao,andi): docstring
  */
@@ -2514,3 +2601,4 @@ function M_jumpToPatch(select, issue, patchset, unified) {
   }
   document.location.href = '/'+issue+'/'+part+'/'+patchset+'/'+select.value;
 }
+
