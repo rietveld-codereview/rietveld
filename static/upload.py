@@ -676,7 +676,8 @@ class SubversionVCS(VersionControlSystem):
     if ((status[0] == "A" and status[3] != "+") or
         (status[0] == " " and status[1] == "M")):  # property changed
       content = ""
-    elif status[0] in ("M", "D") or (status[0] == "A" and status[3] == "+"):
+    elif (status[0] in ("M", "D", "R") or
+          (status[0] == "A" and status[3] == "+")):
       mimetype = RunShell("svn -rBASE propget svn:mime-type", [filename],
                           silent_ok=True)
       if mimetype.startswith("application/octet-stream"):
