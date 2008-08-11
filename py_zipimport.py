@@ -270,16 +270,7 @@ class zipimporter:
     return source
 
 
-class _CleanupHack(object):
-  def __del__(self):
-    sys.path_hooks[:] = []
-    sys.modules['zipimport'] = None
-
-
 # Install our hook.
 ##logging.debug("%s: installing sys.path_hooks", __name__)
 sys.modules['zipimport'] = sys.modules[__name__]
 sys.path_hooks[:] = [zipimporter]
-
-# Arrange for cleanup when this module is deleted.
-_cleanup_hack = _CleanupHack()
