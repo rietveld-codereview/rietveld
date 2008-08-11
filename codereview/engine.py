@@ -142,6 +142,17 @@ def _MakeUrl(base, filename, rev):
     url = "%s://%s/svn-history/r%d/%s/%s" % (scheme, netloc, rev,
                                              path, filename)
     return url
+  elif netloc.endswith("sourceforge.net") and rev is not None:
+    if path.strip().endswith("/"):
+      path = path.strip()[:-1]
+    else:
+      path = path.strip()
+    splitted_path = path.split("/")
+    url = "%s://%s/%s/!svn/bc/%d/%s/%s" % (scheme, netloc,
+                                           "/".join(splitted_path[1:3]), rev,
+                                           "/".join(splitted_path[3:]),
+                                           filename)
+    return url
   # Default for viewvc-based URLs (svn.python.org)
   url = base
   if not url.endswith('/'):
