@@ -74,8 +74,6 @@ Need a more powerful way to specify the URL for finding a revision (?)
 User Experience
 ---------------
 
-Need to have a [+] icon next to all text edit boxes, e.g. issue reply
-    and edit description
 Make Edit Issue show the form inline instead of opening a new page?
 Fields "SVN Base" and "Base" have hard-to-guess names
 Better UI for adding branches?  (Low priority now we have upload.py)

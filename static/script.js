@@ -639,6 +639,7 @@ function M_replyToMessage(message_id, written_time, author) {
   M_setValueFromDivs(divs, form.message);
   form.message.value += "\n";
   form.message.focus();
+  M_addTextResizer_(form);
   document.getElementById('message-reply-href-'+message_id).style.display = "none";
 }
 
@@ -758,6 +759,33 @@ function M_createResizer_(form, suffix) {
       }
     }
     form.hasResizer = true;
+  }
+}
+
+/**
+ * Like M_createResizer_(), but updates the form's first textarea field.
+ * This is assumed not to be the last field.
+ * @param {Element} form The form whose textarea field to update.
+ */
+function M_addTextResizer_(form) {
+  var elementsLength = form.elements.length;
+  for (var i = 0; i < elementsLength; ++i) {
+    var node = form.elements[i];
+    if (node.nodeName == "TEXTAREA") {
+      var parent = M_getParent(node);
+      var resizer = document.getElementById("resizer").cloneNode(true);
+      var next = node.nextSibling;
+      parent.insertBefore(resizer, next);
+      resizer.onclick = function() {
+	node.rows += 5;
+	node.focus();
+      };
+      resizer.style.display = "";
+      if (next && next.className == "resizer") { // Remove old resizer.
+	parent.removeChild(next);
+      }
+      break;
+    }
   }
 }
 
@@ -2429,7 +2457,7 @@ function M_dashboardKeyPress(evt) {
 function M_expandSkipped(id_before, id_after, where, id_skip) {
   links = document.getElementById('skiplinks-'+id_skip).childNodes;
   for (var i=0; i<links.length; i++) {
-	links[i].href = '#skiplinks-'+id_skip;  
+	links[i].href = '#skiplinks-'+id_skip;
   }
   tr = document.getElementById('skip-'+id_skip);
   var httpreq = M_getXMLHttpRequest();
@@ -2489,7 +2517,7 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
       }
     }
   }
-  
+
   url = skipped_lines_url+id_before+'/'+id_after+'/'+where;
   httpreq.open('GET', url, true);
   httpreq.send('');
@@ -2533,7 +2561,7 @@ function M_showUserInfoPopup(obj) {
     userPopupDiv.className = "popup";
     userPopupDiv.id = DIV_ID;
     userPopupDiv.filter = 'alpha(opacity=85)';
-    userPopupDiv.opacity = '0.85'; 
+    userPopupDiv.opacity = '0.85';
     userPopupDiv.innerHTML = "";
     userPopupDiv.onmouseout = function() {
       userPopupDiv.style.visibility = 'hidden';
@@ -2561,7 +2589,7 @@ function M_showUserInfoPopup(obj) {
         userPopupDiv.innerHTML=httpreq.responseText;
         userPopupDiv.style.visibility = "visible";
       } else {
-        //Better fail silently here because it's not 
+        //Better fail silently here because it's not
         //critical functionality
       }
     }
@@ -2595,7 +2623,7 @@ function M_showPopUp(obj, id) {
  */
 function M_jumpToPatch(select, issue, patchset, unified) {
   if ( unified ) {
-    part = 'patch'; 
+    part = 'patch';
   } else {
     part = 'diff';
   }

@@ -4,7 +4,8 @@
 <h2>Publish + Mail Draft Comments</h2>
 
 <div>
-  <form action="{%url codereview.views.publish issue.key.id%}" method="post">
+  <form action="{%url codereview.views.publish issue.key.id%}"
+        method="post" id="publish-form">
   <table>
   {%ifnotequal user issue.owner%}
   <tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
@@ -22,6 +23,13 @@
   </tr>
   </table>
   </form>
+
+  <a id="resizer" style="display:none;cursor:pointer">
+  <img src="/static/zippyplus.gif"></a>
+  <script language="JavaScript" type="text/javascript"><!--
+  M_addTextResizer_(document.getElementById("publish-form"));
+  --></script>
+
 </div>
 {%if preview%}
 <div style="margin-top: 3em;">
