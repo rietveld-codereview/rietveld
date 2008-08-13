@@ -75,15 +75,21 @@ login_warned = false;
       {% endfor %}
     </select>
   </div>
-  <div>
+  <div style="margin-top: 5px;">
     <a href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}">
     View unified diff</a>
-    {%if user%}
     |
+    <a href="{%url codereview.views.download_patch issue.key.id,patchset.key.id,patch.key.id%}"
+       title="Download patch for {{patch.filename}}">
+      Download patch
+    </a>
+  </div>
+  {%if user%}
+  <div style="margin-top: 5px;">
     <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
     Comments</a> ('m')
-    {%endif%}
   </div>
+  {%endif%}
 </div>
 <div style="clear: both;"></div>
 

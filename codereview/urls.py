@@ -33,6 +33,7 @@ urlpatterns = patterns(
     (r'^(\d+)/mail$', 'mailissue'),
     (r'^(\d+)/publish$', 'publish'),
     (r'^download/issue(\d+)_(\d+)\.diff', 'download'),
+    (r'^download/issue(\d+)_(\d+)_(\d+)\.diff', 'download_patch'),
     (r'^(\d+)/patch/(\d+)/(\d+)$', 'patch'),
     (r'^(\d+)/diff/(\d+)/(\d+)$', 'diff'),
     (r'^(\d+)/diff2/(\d+):(\d+)/(\d+)$', 'diff2'),

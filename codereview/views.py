@@ -1040,6 +1040,12 @@ def patch(request):
                   'issue': request.issue})
 
 
+@patch_required
+def download_patch(request):
+  """/download/issue<issue>_<patchset>_<patch>.diff - Download patch."""
+  return HttpResponse(request.patch.text, content_type='text/plain')
+
+
 def _get_context_for_user(request):
   """Returns the context setting for a user.
 

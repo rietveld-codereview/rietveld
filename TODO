@@ -70,7 +70,6 @@ User Experience
 Make Edit Issue show the form inline instead of opening a new page?
 Fields "SVN Base" and "Base" have hard-to-guess names
 Better UI for adding branches?  (Low priority now we have upload.py)
-Show a download patch link on the individual diff pages
 Right-justify the "Id" and "Drafts (mine)" headings in the Issues list table
 
 Software Engineering

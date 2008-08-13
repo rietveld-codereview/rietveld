@@ -73,6 +73,7 @@
           <th colspan="2">Stats</th>
           <th>Side-by-side diffs with inline comments</th>
           <th>Delta from patch set</th>
+          <th>Patch</th>
         </tr>
 
         {%for patch in patchset.patches%}
@@ -115,6 +116,12 @@
                 {%endifnotequal%}
               {%endfor%}
             {%endspaceless%}</td>
+            <td>
+              <a href="{%url codereview.views.download_patch issue.key.id,patch.patchset.key.id,patch.key.id%}"
+                 title="Download patch for {{patch.filename}}">
+                Download
+              </a>
+            </td>
           </tr>
         {%endfor%}
 

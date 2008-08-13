@@ -34,9 +34,15 @@ document.onkeypress = keyPressIntermediary;
       {% endfor %}
     </select>
   </div>
-  <div>
+  <div style="margin-top: 5px;">
     <a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.key.id%}">
     View side by-side-diff with in-line comments</a>
+  </div>
+  <div style="margin-top: 5px;">
+    <a href="{%url codereview.views.download_patch issue.key.id,patchset.key.id,patch.key.id%}"
+       title="Download patch for {{patch.filename}}">
+      Download patch
+    </a>
   </div>
 </div>
 <div style="clear: both;"></div>
