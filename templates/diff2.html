@@ -89,12 +89,20 @@ login_warned = false;
     </select>
   </div>
   <div>
-    Left: <a href="{%url codereview.views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}">
-    View regular side by side diff</a><br/>
-    Right: <a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}">
-    View regular side by side diff</a>
+    Left: <a href="{%url codereview.views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}"
+             title="View regular side by side diff">Side by side diff</a>
+          |
+          <a href="{%url codereview.views.download_patch issue.key.id,ps_left.key.id,patch_left.key.id%}"
+             title="Download patch for {{patch_left.filename}}">Download</a>
+          <br/>
+    Right: <a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}"
+              title="View regular side by side diff">Side by side diff</a>
+           |
+           <a href="{%url codereview.views.download_patch issue.key.id,ps_right.key.id,patch_right.key.id%}"
+             title="Download patch for {{patch_right.filename}}">Download</a>
     {%if user%}
-    <br/>
+  </div>
+  <div style="margin-top: 5px;">
     <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
     Comments</a> ('m')
     {%endif%}
@@ -176,14 +184,6 @@ Toggle Intra-line Diffs</a> ('i')
 Toggle Comments</a> ('s')
 </div>
 
-</div>
-<div class="popup" id="popup-issue">
-  <b>Issue {{issue.key.id}}: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</b><br/>
-  Created {{issue.created|timesince}} ago by {{issue.owner|nickname}}.<br/>
-  Modified {{issue.modified|timesince}} ago.<br/>
-  Reviewers: {{issue.reviewers|nicknames}}<br/>
-  SVN Base: {{issue.base}}<br/>
-  Comments: {{issue.num_comments}}{%if issue.num_drafts%} <span style="color: red;">+ {{issue.num_drafts}} drafts</span>{%endif%}
 </div>
 </script>
 <script language="JavaScript" type="text/javascript"><!--

@@ -16,6 +16,7 @@
 
 # Python imports
 import logging
+import re
 
 # AppEngine imports
 from google.appengine.api import users
@@ -169,6 +170,7 @@ class Patch(BaseModel):
 
   patchset = db.ReferenceProperty(PatchSet)  # == parent
   filename = db.StringProperty()
+  status = db.StringProperty()  # 'A', 'A  +', 'M', 'D' etc
   text = db.TextProperty()
   content = db.ReferenceProperty(Content)
   patched_content = db.ReferenceProperty(Content, collection_name='patch2_set')
@@ -201,9 +203,10 @@ class Patch(BaseModel):
     if self._property_changes != None:
       return self._property_changes
     self._property_changes = []
-    index = self.text.find('Property changes on')
-    if index != -1:
-      self._property_changes = self.text[index:].splitlines()[2:]
+    match = re.search('^Property changes on.*\n'+'_'*67+'$', self.text,
+                      re.MULTILINE)
+    if match:
+      self._property_changes = self.text[match.end():].splitlines()
     return self._property_changes
 
   @property

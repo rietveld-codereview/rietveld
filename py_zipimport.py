@@ -33,7 +33,16 @@ __author__ = ('Iain Wade', 'Guido van Rossum')
 
 __all__ = ['ZipImportError', 'zipimporter']
 
-import logging
+# NOTE(guido): Because this module is imported really early, importing
+# logging here is somehow a bad idea for the Python runtime, and
+# causes TestLogging to fail with a bizarre error condition.  Instead,
+# we import logging when it's actually needed (there are two places
+# where we log something).  There are also a few commented-out
+# logging.debug() calls which may serve a purpose for debugging this
+# under the SDK.  To enable those, simply replace all occurrences of
+# '##' with '' in this file.
+
+##import logging
 import os
 import sys
 import types
@@ -110,6 +119,7 @@ class zipimporter:
         # what appears to be an existing zipfile.
         msg = 'Can\'t open zipfile %s: %s: %s' % (self.zipfilename,
                                                   err.__class__.__name__, err)
+        import logging
         logging.warn(msg)
         raise ZipImportError(msg)
       else:
@@ -118,6 +128,7 @@ class zipimporter:
         # This is logged as info since it represents a significant
         # result.  This log message appears only during the initial
         # process initialization, not for subsequent requests.
+        import logging
         logging.info('zipimporter(%r, %r)', zipfilename, prefix)
 
   def __repr__(self):

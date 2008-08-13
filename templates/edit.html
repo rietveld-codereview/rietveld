@@ -3,7 +3,8 @@
 {%block issue_body%}
 <h2>Edit Issue: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</h2>
 
-<form action="{%url codereview.views.edit issue.key.id%}" method="post">
+<form action="{%url codereview.views.edit issue.key.id%}"
+      method="post" id="edit-form">
 <table>
 {{form}}
 {%if issue.local_base%}
@@ -15,6 +16,12 @@
 <tr><td><input type="submit" value="Update Issue"></td></tr>
 </table>
 </form>
+
+<a id="resizer" style="display:none;cursor:pointer">
+<img src="/static/zippyplus.gif"></a>
+<script language="JavaScript" type="text/javascript"><!--
+M_addTextResizer_(document.getElementById("edit-form"));
+--></script>
 
 <p>
 <ul>

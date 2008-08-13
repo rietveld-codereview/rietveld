@@ -75,15 +75,21 @@ login_warned = false;
       {% endfor %}
     </select>
   </div>
-  <div>
+  <div style="margin-top: 5px;">
     <a href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}">
     View unified diff</a>
-    {%if user%}
     |
+    <a href="{%url codereview.views.download_patch issue.key.id,patchset.key.id,patch.key.id%}"
+       title="Download patch for {{patch.filename}}">
+      Download patch
+    </a>
+  </div>
+  {%if user%}
+  <div style="margin-top: 5px;">
     <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
     Comments</a> ('m')
-    {%endif%}
   </div>
+  {%endif%}
 </div>
 <div style="clear: both;"></div>
 
@@ -132,15 +138,6 @@ var skipped_lines_url = ('/' + {{issue.key.id}} + '/diff_skipped_lines/' +
 
 // -->
 </script>
-
-<div class="popup" id="popup-issue">
-  <b>Issue {{issue.key.id}}: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</b><br/>
-  Created {{issue.created|timesince}} ago by {{issue.owner|nickname}}.<br/>
-  Modified {{issue.modified|timesince}} ago.<br/>
-  Reviewers: {{issue.reviewers|nicknames}}<br/>
-  SVN Base: {{issue.base}}<br/>
-  Comments: {{issue.num_comments}}{%if issue.num_drafts%} <span style="color: red;">+ {{issue.num_drafts}} drafts</span>{%endif%}
-</div>
 {%endblock%}
 
 {%block help%}

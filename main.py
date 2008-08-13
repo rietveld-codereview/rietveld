@@ -35,6 +35,13 @@ logging.info('Loading %s, app version = %s',
 from appengine_django import InstallAppengineHelperForDjango
 InstallAppengineHelperForDjango()
 
+# Supply a dummy imp.find_module if one doesn't exist.  Django now uses this.
+import imp
+if not hasattr(imp, 'find_module'):
+  def dummy_find_module(*args):
+    raise ImportError('imp.find_module() not supported')
+  imp.find_module = dummy_find_module
+
 # Enable custom zipimport and use it.
 import py_zipimport
 sys.path.insert(0, os.path.abspath('django.zip'))
