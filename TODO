@@ -4,13 +4,6 @@ Bugs
 If a user never logs in, someone else can grab their nickname
 See the issue tracker at code.google.com/p/rietveld for more bugs
 
-Popups
-------
-
-Issue popup should contain links to go to the issue page, the edit page, ...
-Issue popup should always contain the full info (even if it's redundant)
-User popups should contain links to go to the user's page
-
 Data Cleaning
 -------------
 

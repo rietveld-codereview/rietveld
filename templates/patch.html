@@ -11,14 +11,6 @@ document.onkeypress = keyPressIntermediary;
 <div style="float: left;">
   <h2 style="margin-bottom: 0em; margin-top: 0em;">Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');" id="upCL">{{issue.key.id}}</a>:
   {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</h2>
-  <div class="popup" id="popup-issue">
-    <b>Issue {{issue.key.id}}: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</b><br/>
-    Created {{issue.created|timesince}} ago by {{issue.owner|show_user}}.<br/>
-    Modified {{issue.modified|timesince}} ago.<br/>
-    Reviewers: {{issue.reviewers|show_users}}<br/>
-    SVN Base: {{issue.base}}<br/>
-    Comments: {{issue.num_comments}}{%if issue.num_drafts%} <span style="color: red;">+ {{issue.num_drafts}} drafts</span>{%endif%}
-  </div>
   <h3>Unified Diff</h3>
   <div style=""><b>File: {{patch.filename}}</b></div>
   <div style="margin-top: .4em;">

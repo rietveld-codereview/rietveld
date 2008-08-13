@@ -29,10 +29,6 @@
             {{issue.key.id}}</a>:
     {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}
   </h2>
-  <div class="popup" id="popup-issue">
-    <b>Issue {{issue.key.id}}: {{issue.subject}}</b><br/>
-    <i>Owner:</i> {{issue.owner|nickname}}
-  </div>
 
   <table class="issue-details" border="0" width="100%">
     <tr valign="top">
@@ -87,4 +83,21 @@
       </td>
     </tr>
   </table>
+{%endblock%}
+
+
+{%block popup%}
+  {%if issue%}
+    <div class="popup" id="popup-issue">
+      <b>Issue {{issue.key.id}}: {{issue.subject}}
+	{%if issue.closed %} (Closed) {%endif%}</b><br/>
+      Created {{issue.created|timesince}} ago by {{issue.owner|nickname}}<br/>
+      Modified {{issue.modified|timesince}} ago<br/>
+      Reviewers: {{issue.reviewers|nicknames}}<br/>
+      SVN Base: {{issue.base}}<br/>
+      Comments: {{issue.num_comments}}
+      {%if issue.num_drafts%} <span style="color: red;">+
+	{{issue.num_drafts}} drafts</span>{%endif%}
+    </div>
+  {%endif%}
 {%endblock%}

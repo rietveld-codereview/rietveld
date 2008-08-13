@@ -177,14 +177,6 @@ Toggle Comments</a> ('s')
 </div>
 
 </div>
-<div class="popup" id="popup-issue">
-  <b>Issue {{issue.key.id}}: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</b><br/>
-  Created {{issue.created|timesince}} ago by {{issue.owner|nickname}}.<br/>
-  Modified {{issue.modified|timesince}} ago.<br/>
-  Reviewers: {{issue.reviewers|nicknames}}<br/>
-  SVN Base: {{issue.base}}<br/>
-  Comments: {{issue.num_comments}}{%if issue.num_drafts%} <span style="color: red;">+ {{issue.num_drafts}} drafts</span>{%endif%}
-</div>
 </script>
 <script language="JavaScript" type="text/javascript"><!--
 var old_snapshot = "new";
