@@ -57,7 +57,7 @@ def nicknames(email_list, arg=None):
   return ', '.join(nickname(email, arg) for email in email_list)
 
 @register.filter
-def show_user(email, arg=None, autoescape=None):
+def show_user(email, arg=None, autoescape=None, memcache_results=None):
   """Render a link to the user's dashboard, with text being the nickname."""
   if isinstance(email, users.User):
     email = email.email()
@@ -65,12 +65,15 @@ def show_user(email, arg=None, autoescape=None):
     user = users.get_current_user()
     if user is not None and email == user.email():
       return 'me'
-  try:
-    ret = memcache.get('show_user:%s' % email)
-  except KeyError:
-    ret = None
+
+  ret = None
+  if memcache_results is not None:
+    if email in memcache_results:
+      ret = memcache_results[email]
+    else:
+      logging.debug('memcache miss for %r', email)
+
   if ret is None:
-    logging.debug('memcache miss for %r', email)
     nick = nickname(email, True)
     account = models.Account.get_account_for_email(email)
     if account:
@@ -87,6 +90,11 @@ def show_user(email, arg=None, autoescape=None):
       cache_timeout = 30
 
     memcache.add('show_user:%s' % email, ret, cache_timeout)
+
+    # populate the dict with the results, so same user in the list later
+    # will have a memcache "hit" on "read".
+    if memcache_results is not None:
+      memcache_results[email] = ret
     ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
            '%(key)s</a>' % {'key': cgi.escape(user_key)})
   return django.utils.safestring.mark_safe(ret)
@@ -94,5 +102,7 @@ def show_user(email, arg=None, autoescape=None):
 @register.filter
 def show_users(email_list, arg=None):
   """Render list of links to each user's dashboard."""
-  return django.utils.safestring.mark_safe(', '.join(show_user(email, arg)
-                                                     for email in email_list))
+  memcache_results = memcache.get_multi(email_list, key_prefix='show_user:')
+  return django.utils.safestring.mark_safe(', '.join(
+      show_user(email, arg, memcache_results=memcache_results)
+      for email in email_list))
