@@ -340,56 +340,65 @@ class HttpRpcServer(AbstractRpcServer):
 
 
 parser = optparse.OptionParser(usage="%prog [options] [-- svn_diff_options]")
-parser.add_option("-q", "--quiet", action="store_const", const=0,
-                  dest="verbose", help="Print errors only.")
-parser.add_option("-v", "--verbose", action="store_const", const=2,
-                  dest="verbose", default=1,
-                  help="Print info level logs.")
-parser.add_option("--noisy", action="store_const", const=3,
-                  dest="verbose", help="Print all logs.")
-parser.add_option("-s", "--server", action="store", dest="server",
-                  default="codereview.appspot.com",
-                  metavar="SERVER",
-                  help="The server to upload to. The format is host[:port].")
-parser.add_option("-e", "--email", action="store", dest="email",
-                  metavar="EMAIL", default=None,
-                  help="The username to use. Will prompt if omitted.")
-parser.add_option("-H", "--host", action="store", dest="host",
-                  metavar="HOST", default=None,
-                  help="Overrides the Host header sent with all RPCs.")
-parser.add_option("--no_cookies", action="store_false",
-                  dest="save_cookies", default=True,
-                  help="Do not save authentication cookies to local disk.")
-parser.add_option("-m", "--message", action="store", dest="message",
-                  metavar="MESSAGE", default=None,
-                  help="A message to identify the patch. "
-                       "Will prompt if omitted.")
-parser.add_option("-d", "--description", action="store", dest="description",
-                  metavar="DESCRIPTION", default=None,
-                  help="Optional description when creating an issue.")
-parser.add_option("-f", "--description_file", action="store",
-                  dest="description_file", metavar="DESCRIPTION_FILE",
-                  default=None,
-                  help="Optional path of a file that contains "
-                       "the description when creating an issue.")
-parser.add_option("-i", "--issue", type="int", action="store",
-                  metavar="ISSUE", default=None,
-                  help="Issue number to which to add. Defaults to new issue.")
 parser.add_option("-y", "--assume_yes", action="store_true",
                   dest="assume_yes", default=False,
                   help="Assume that the answer to yes/no questions is 'yes'.")
-parser.add_option("-l", "--local_base", action="store_true",
-                  dest="local_base", default=False,
-                  help="Base files will be uploaded.")
-parser.add_option("-r", "--reviewers", action="store", dest="reviewers",
-                  metavar="REVIEWERS", default=None,
-                  help="Add reviewers (comma separated email addresses).")
-parser.add_option("--cc", action="store", dest="cc",
-                  metavar="CC", default=None,
-                  help="Add CC (comma separated email addresses).")
-parser.add_option("--send_mail", action="store_true",
-                  dest="send_mail", default=False,
-                  help="Send notification email to reviewers.")
+# Logging
+group = parser.add_option_group("Logging options")
+group.add_option("-q", "--quiet", action="store_const", const=0,
+                 dest="verbose", help="Print errors only.")
+group.add_option("-v", "--verbose", action="store_const", const=2,
+                 dest="verbose", default=1,
+                 help="Print info level logs (default).")
+group.add_option("--noisy", action="store_const", const=3,
+                 dest="verbose", help="Print all logs.")
+# Review server
+group = parser.add_option_group("Review server options")
+group.add_option("-s", "--server", action="store", dest="server",
+                 default="codereview.appspot.com",
+                 metavar="SERVER",
+                 help=("The server to upload to. The format is host[:port]. "
+                       "Defaults to 'codereview.appspot.com'."))
+group.add_option("-e", "--email", action="store", dest="email",
+                 metavar="EMAIL", default=None,
+                 help="The username to use. Will prompt if omitted.")
+group.add_option("-H", "--host", action="store", dest="host",
+                 metavar="HOST", default=None,
+                 help="Overrides the Host header sent with all RPCs.")
+group.add_option("--no_cookies", action="store_false",
+                 dest="save_cookies", default=True,
+                 help="Do not save authentication cookies to local disk.")
+# Issue
+group = parser.add_option_group("Issue options")
+group.add_option("-d", "--description", action="store", dest="description",
+                 metavar="DESCRIPTION", default=None,
+                 help="Optional description when creating an issue.")
+group.add_option("-f", "--description_file", action="store",
+                 dest="description_file", metavar="DESCRIPTION_FILE",
+                 default=None,
+                 help="Optional path of a file that contains "
+                      "the description when creating an issue.")
+group.add_option("-r", "--reviewers", action="store", dest="reviewers",
+                 metavar="REVIEWERS", default=None,
+                 help="Add reviewers (comma separated email addresses).")
+group.add_option("--cc", action="store", dest="cc",
+                 metavar="CC", default=None,
+                 help="Add CC (comma separated email addresses).")
+# Upload options
+group = parser.add_option_group("Patch options")
+group.add_option("-m", "--message", action="store", dest="message",
+                 metavar="MESSAGE", default=None,
+                 help="A message to identify the patch. "
+                      "Will prompt if omitted.")
+group.add_option("-i", "--issue", type="int", action="store",
+                 metavar="ISSUE", default=None,
+                 help="Issue number to which to add. Defaults to new issue.")
+group.add_option("-l", "--local_base", action="store_true",
+                 dest="local_base", default=False,
+                 help="Base files will be uploaded.")
+group.add_option("--send_mail", action="store_true",
+                 dest="send_mail", default=False,
+                 help="Send notification email to reviewers.")
 
 
 def GetRpcServer(options):
