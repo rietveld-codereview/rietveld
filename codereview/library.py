@@ -14,6 +14,7 @@
 
 """Django template library for Rietveld."""
 
+import cgi
 import logging
 
 from google.appengine.api import memcache
@@ -87,7 +88,7 @@ def show_user(email, arg=None, autoescape=None):
 
     memcache.add('show_user:%s' % email, ret, cache_timeout)
     ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
-           '%(key)s</a>' % {'key': user_key})
+           '%(key)s</a>' % {'key': cgi.escape(user_key)})
   return django.utils.safestring.mark_safe(ret)
 
 @register.filter
