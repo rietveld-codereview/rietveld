@@ -161,8 +161,10 @@ class UploadForm(forms.Form):
   subject = forms.CharField(max_length=100)
   description = forms.CharField(max_length=10000, required=False)
   content_upload = forms.BooleanField(required=False)
+  separate_patches = forms.BooleanField(required=False,
+                                        widget=forms.HiddenInput())
   base = forms.CharField(max_length=2000, required=False)
-  data = forms.FileField()
+  data = forms.FileField(required=False)
   issue = forms.IntegerField(required=False)
   description = forms.CharField(max_length=10000, required=False)
   reviewers = forms.CharField(max_length=1000, required=False)
@@ -204,9 +206,17 @@ class UploadContentForm(forms.Form):
     return self.files['data'].read()
 
 
+class UploadPatchForm(forms.Form):
+  filename = forms.CharField(max_length=255)
+  content_upload = forms.BooleanField(required=False)
+  def get_uploaded_patch(self):
+    return self.files['data'].read()
+
+
 class EditForm(IssueBaseForm):
 
   closed = forms.BooleanField(required=False)
+
 
 class EditLocalBaseForm(forms.Form):
   subject = forms.CharField(max_length=100,
@@ -610,19 +620,22 @@ def upload(request):
     msg = ('Issue %s. URL: %s' %
            (action,
             request.build_absolute_uri('/%s' % issue.key().id())))
-    if form.cleaned_data.get('content_upload'):
-      # Extend the response message: 2nd line is patchset id, additional lines
-      # are the expected filenames.
-      issue.local_base = True
-      issue.put()
+    if (form.cleaned_data.get('content_upload') or
+        form.cleaned_data.get('separate_patches')):
+      # Extend the response message: 2nd line is patchset id.
       msg +="\n%d" % patchset.key().id()
-      for patch in patchset.patch_set:
-        content = models.Content(text=db.Text(''), is_uploaded=True,
-                                 is_complete=False, parent=patch)
-        content.put()
-        patch.content = content
-        patch.put()
-        msg += "\n%d %s" % (patch.key().id(), patch.filename)
+      if form.cleaned_data.get('content_upload'): 
+        # Extend the response: additional lines are the expected filenames.
+        issue.local_base = True
+        issue.put()
+        
+        for patch in patchset.patch_set:
+          content = models.Content(text=db.Text(''), is_uploaded=True,
+                                   is_complete=False, parent=patch)
+          content.put()
+          patch.content = content
+          patch.put()
+          msg += "\n%d %s" % (patch.key().id(), patch.filename)
   return HttpResponse(msg, content_type='text/plain')
 
 
@@ -678,7 +691,7 @@ def upload_content(request):
   content.last_part = current_part
   if current_part+1 == content.num_parts:
     content.is_complete = True
-    content.text = engine._ToText(content.partial_upload.splitlines(True))
+    content.text = engine.ToText(content.partial_upload)
     checksum = md5.new(content.partial_upload).hexdigest()
     content.partial_upload = db.Blob()
     if checksum != request.POST.get('checksum'):
@@ -690,6 +703,46 @@ def upload_content(request):
                           content_type='text/plain')
   content.put()
   return HttpResponse('OK', content_type='text/plain')
+
+
+@patchset_required
+def upload_patch(request):
+  """/<issue>/upload_patch/<patchset> - Upload patch to patchset.
+
+  Used by upload.py to upload a patch when the diff is too large to upload all
+  together.
+  """
+  if request.method != 'POST':
+    return HttpResponse('Method not allowed.', status=405)
+  if request.user is None:
+    if IS_DEV:
+      request.user = users.User(request.POST.get('user', 'test@example.com'))
+    else:
+      return HttpResponse('Error: Login required', status=401)
+  if request.user != request.issue.owner:
+    return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
+                        (request.user, request.issue.key().id()))
+  form = UploadPatchForm(request.POST, request.FILES)
+  if not form.is_valid():
+    return HttpResponse('ERROR: Upload patch errors:\n%s' % repr(form.errors),
+                        content_type='text/plain')
+  patchset = request.patchset
+  if patchset.data:
+    return HttpResponse('ERROR: Can\'t upload patches to patchset with data.',
+                        content_type='text/plain')
+  patch = models.Patch(patchset=patchset,
+                       text=engine.ToText(form.get_uploaded_patch()),
+                       filename=form.cleaned_data['filename'], parent=patchset)
+  patch.put()
+  if form.cleaned_data.get('content_upload'):
+    content = models.Content(text=db.Text(''), is_uploaded=True,
+                             is_complete=False, parent=patch)
+    content.put()
+    patch.content = content
+    patch.put()
+
+  msg = 'OK\n' + str(patch.key().id())
+  return HttpResponse(msg, content_type='text/plain')
 
 
 class EmptyPatchSet(Exception):
@@ -707,7 +760,7 @@ def _make_new(request, form):
   data_url = _get_data_url(form)
   if data_url is None:
     return None
-  data, url = data_url
+  data, url, separate_patches = data_url
 
   reviewers = _get_emails(form, 'reviewers')
   if not form.is_valid() or reviewers is None:
@@ -735,10 +788,11 @@ def _make_new(request, form):
     patchset.put()
     issue.patchset = patchset
 
-    patches = engine.ParsePatchSet(patchset)
-    if not patches:
-      raise EmptyPatchSet  # Abort the transaction
-    db.put(patches)
+    if not separate_patches:
+      patches = engine.ParsePatchSet(patchset)
+      if not patches:
+        raise EmptyPatchSet  # Abort the transaction
+      db.put(patches)
     return issue
 
   try:
@@ -755,24 +809,40 @@ def _make_new(request, form):
 
 
 def _get_data_url(form):
-  """Helper for _make_new() above and add() below."""
+  """Helper for _make_new() above and add() below.
+  
+  Args:
+    form: Django form object.
+  
+  Returns:
+    3-tuple (data, url, separate_patches).
+      data: the diff content, if available.
+      url: the url of the diff, if given.
+      separate_patches: True iff the patches will be uploaded separately for
+        each file.
+  
+  """
   cleaned_data = form.cleaned_data
 
   data = cleaned_data['data']
   url = cleaned_data.get('url')
-  if not (data or url):
+  separate_patches = cleaned_data.get('separate_patches')
+  if not (data or url or separate_patches):
     form.errors['data'] = ['You must specify a URL or upload a file']
     return None
   if data and url:
     form.errors['data'] = ['You must specify either a URL or upload a file '
                            'but not both']
     return None
+  if separate_patches and (data or url):
+    form.errors['data'] = ['If the patches will be uploaded separately later, '
+                           'you can\'t send some data or a url.']
+    return None
 
   if data is not None:
     data = db.Blob(data.read())
     url = None
-  else:
-    assert url
+  elif url:
     try:
       fetch_result = urlfetch.fetch(url)
     except Exception, err:
@@ -783,7 +853,7 @@ def _get_data_url(form):
       return None
     data = db.Blob(fetch_result.content)
 
-  return data, url
+  return data, url, separate_patches
 
 
 @issue_owner_required
@@ -804,19 +874,20 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
     data_url = _get_data_url(form)
   if not form.is_valid():
     return None
-  data, url = data_url
+  data, url, separate_patches = data_url
   message = form.cleaned_data[message_key]
   patchset = models.PatchSet(issue=issue, message=message, data=data, url=url,
                              base=issue.base, owner=request.user, parent=issue)
   patchset.put()
 
-  patches = engine.ParsePatchSet(patchset)
-  if not patches:
-    patchset.delete()
-    errkey = url and 'url' or 'data'
-    form.errors[errkey] = ['Patch set contains no recognizable patches']
-    return None
-  db.put(patches)
+  if not separate_patches:
+    patches = engine.ParsePatchSet(patchset)
+    if not patches:
+      patchset.delete()
+      errkey = url and 'url' or 'data'
+      form.errors[errkey] = ['Patch set contains no recognizable patches']
+      return None
+    db.put(patches)
 
   if emails_add_only:
     issue.reviewers += [reviewer for reviewer in _get_emails(form, 'reviewers')

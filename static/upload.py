@@ -47,6 +47,9 @@ except ImportError:
 #  3: Debug logs.
 verbosity = 1
 
+# Max size of patch or base file.
+MAX_UPLOAD_SIZE = 900 * 1024
+
 
 def StatusUpdate(msg):
   """Print a status message to stdout.
@@ -487,7 +490,7 @@ def RunShell(command, args=(), silent_ok=False):
   stream = os.popen(command, "r")
   data = stream.read()
   if stream.close():
-    ErrorExit("Got error status from %s" % command)
+    ErrorExit("Got error status from %s" % (command + str(args)))
   if not silent_ok and not data:
     ErrorExit("No output from %s" % command)
   return data
@@ -539,6 +542,10 @@ class VersionControlSystem(object):
     [patches.setdefault(v, k) for k, v in patch_list]
     for filename in patches.keys():
       content, status = self.GetBaseFile(filename)
+      if len(content) > MAX_UPLOAD_SIZE:
+        print ("Not uploading the base file for " + filename +
+               " because the file is too large.")
+        continue
       checksum = md5.new(content).hexdigest()
       parts = []
       while content:
@@ -703,7 +710,77 @@ class SubversionVCS(VersionControlSystem):
     return content, status[0:5]
 
 
-def RealMain(argv):
+def SplitPatch(data):
+  """Splits a patch into separate pieces for each file.
+  
+  NOTE: this function is duplicated in engine.py, keep them in sync.
+  
+  Args:
+    data: A string containing the output of svn diff.
+
+  Returns:
+    A list of 2-tuple (filename, text) where text is the svn diff output
+      pertaining to filename.
+  """
+  patches = []
+  filename = None
+  diff = []
+  for line in data.splitlines(True):
+    new_filename = None
+    if line.startswith('Index:'):
+      unused, new_filename = line.split(':', 1)
+      new_filename = new_filename.strip()
+    elif line.startswith('Property changes on:'):    
+      unused, temp_filename = line.split(':', 1)
+      # When a file is modified, paths use '/' between directories, however
+      # when a property is modified '\' is used on Windows.  Make them the same
+      # otherwise the file shows up twice.
+      temp_filename = temp_filename.strip().replace('\\', '/')
+      if temp_filename != filename:
+        # File has property changes but no modifications, create a new diff.
+        new_filename = temp_filename
+    if new_filename:      
+      if filename and diff:
+        patches.append((filename, ''.join(diff)))
+      filename = new_filename
+      diff = [line]
+      continue
+    if diff is not None:
+      diff.append(line)
+  if filename and diff:
+    patches.append((filename, ''.join(diff)))
+  return patches
+
+
+def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
+  """Uploads a separate patch for each file in the diff output.
+  
+  Returns a list of [patch_key, filename] for each file.
+  """
+  patches = SplitPatch(data)
+  rv = []
+  for patch in patches:
+    if len(patch[1]) > MAX_UPLOAD_SIZE:
+      print ("Not uploading the patch for " + patch[0] +
+             " because the file is too large.")
+      continue
+    form_fields = [("filename", patch[0])]
+    if options.local_base:
+      form_fields.append(("content_upload", "1"))
+    files = [("data", "data.diff", patch[1])]
+    ctype, body = EncodeMultipartFormData(form_fields, files)
+    url = "/%d/upload_patch/%d" % (int(issue), int(patchset))
+    print "Uploading patch for " + patch[0]
+    response_body = rpc_server.Send(url, body, content_type=ctype)
+    lines = response_body.splitlines()
+    if not lines or lines[0] != "OK":
+      StatusUpdate("  --> %s" % response_body)
+      sys.exit(False)
+    rv.append([lines[1], patch[0]])
+  return rv
+
+
+def RealMain(argv, data=None):
   logging.basicConfig(format=("%(asctime).19s %(levelname)s %(filename)s:"
                               "%(lineno)s %(message)s "))
   os.environ['LC_ALL'] = 'C'
@@ -718,7 +795,8 @@ def RealMain(argv):
   base = vcs.GuessBase(not options.local_base)
   if not options.assume_yes:
     vcs.CheckForUnknownFiles()
-  data = vcs.GenerateDiff(args)
+  if not data:
+    data = vcs.GenerateDiff(args)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
   if options.issue:
@@ -761,12 +839,17 @@ def RealMain(argv):
     form_fields.append(("send_mail", "1"))
   if options.local_base:
     form_fields.append(("content_upload", "1"))
-  ctype, body = EncodeMultipartFormData(form_fields,
-                                        [("data", "data.diff", data)])
+  if len(data) > MAX_UPLOAD_SIZE:
+    print "Patch is large, so uploading file patches separately."
+    files = []
+    form_fields.append(("separate_patches", "1"))
+  else:
+    files = [("data", "data.diff", data)]
+  ctype, body = EncodeMultipartFormData(form_fields, files)
   response_body = rpc_server.Send("/upload", body, content_type=ctype)
-  if options.local_base:
+  if options.local_base or not files:
     lines = response_body.splitlines()
-    if len(lines) > 2:
+    if len(lines) >= 2:
       msg = lines[0]
       patchset = lines[1].strip()
       patches = [x.split(" ", 1) for x in lines[2:]]
@@ -779,6 +862,12 @@ def RealMain(argv):
   not response_body.startswith("Issue updated."):
     sys.exit(0)
   issue = msg[msg.rfind("/")+1:]
+
+  if not files:
+    rv = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
+    if options.local_base:
+      patches = rv
+
   if options.local_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
     if options.send_mail:

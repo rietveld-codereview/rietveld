@@ -39,18 +39,22 @@ class FetchError(Exception):
   """Exception raised by FetchBase() when a URL problem occurs."""
 
 
-def ParsePatchSet(patchset):
-  """Patch a patch set into individual patches.
-
+def SplitPatch(data):
+  """Splits a patch into separate pieces for each file.
+  
+  NOTE: this function is duplicated in upload.py, keep them in sync.
+  
   Args:
-    patchset: a models.PatchSet instance.
+    data: A string containing the output of svn diff.
 
   Returns:
-    A list of models.Patch instances.
+    A list of 2-tuple (filename, text) where text is the svn diff output
+      pertaining to filename.
   """
   patches = []
-  filename = lines = None
-  for line in patchset.data.splitlines(True):
+  filename = None
+  diff = []
+  for line in data.splitlines(True):
     new_filename = None
     if line.startswith('Index:'):
       unused, new_filename = line.split(':', 1)
@@ -62,22 +66,34 @@ def ParsePatchSet(patchset):
       # otherwise the file shows up twice.
       temp_filename = temp_filename.strip().replace('\\', '/')
       if temp_filename != filename:
-        # File has property changes but no modifications, create a new patch.
+        # File has property changes but no modifications, create a new diff.
         new_filename = temp_filename
     if new_filename:      
-      if filename and lines:
-        patch = models.Patch(patchset=patchset, text=_ToText(lines),
-                             filename=filename, parent=patchset)
-        patches.append(patch)
+      if filename and diff:
+        patches.append((filename, ''.join(diff)))
       filename = new_filename
-      lines = [line]
+      diff = [line]
       continue
-    if lines is not None:
-      lines.append(line)
-  if filename and lines:
-    patch = models.Patch(patchset=patchset, text=_ToText(lines),
-                         filename=filename, parent=patchset)
-    patches.append(patch)
+    if diff is not None:
+      diff.append(line)
+  if filename and diff:
+    patches.append((filename, ''.join(diff)))
+  return patches
+
+
+def ParsePatchSet(patchset):
+  """Patch a patch set into individual patches.
+
+  Args:
+    patchset: a models.PatchSet instance.
+
+  Returns:
+    A list of models.Patch instances.
+  """
+  patches = []
+  for filename, text in SplitPatch(patchset.data):
+    patches.append(models.Patch(patchset=patchset, text=ToText(text),
+                   filename=filename, parent=patchset))
   return patches
 
 
@@ -118,7 +134,7 @@ def FetchBase(base, patch):
     msg = 'Error fetching %s: HTTP status %s' % (url, result.status_code)
     logging.error(msg)
     raise FetchError(msg)
-  return models.Content(text=_ToText([result.content]), parent=patch,
+  return models.Content(text=ToText(result.content), parent=patch,
                         is_complete=True)
 
 
@@ -708,16 +724,15 @@ def _ExpandTemplate(name, **params):
   return loader.render_to_string(name, params)
 
 
-def _ToText(lines):
-  """Helper to turn a list of lines into a db.Text instance.
+def ToText(text):
+  """Helper to turn a string into a db.Text instance.
 
   Args:
-    lines: list of strings.
+    text: a string.
 
   Returns:
     A db.Text instance.
   """
-  text = ''.join(lines)
   try:
     return db.Text(text, encoding='utf-8')
   except UnicodeDecodeError:

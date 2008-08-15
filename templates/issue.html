@@ -58,11 +58,13 @@
           {%ifnotequal patchset.owner issue.owner%}
           by <b>{{patchset.owner|nickname}}</b>{%endifnotequal%}
         </div>
+        {%if patchset.data%}
         <div style="float: right;">
           <a href="{%url codereview.views.download issue.key.id,patchset.key.id%}">
             Download raw patch set
           </a>
         </div>
+        {%endif%}
         <div style="clear:both;"></div>
       </div>
  
