@@ -75,6 +75,17 @@ class Issue(db.Model):
   cc = db.ListProperty(db.Email)
   closed = db.BooleanProperty(default=False)
 
+  _is_starred = None
+
+  @property
+  def is_starred(self):
+    """Whether the current user has this issue starred."""
+    if self._is_starred is not None:
+      return self._is_starred
+    acct = Account.current_user_account
+    self._is_starred = acct is not None and self.key().id() in acct.stars
+    return self._is_starred
+
   _num_comments = None
 
   @property
@@ -409,7 +420,7 @@ class Branch(db.Model):
 
 
 class Account(db.Model):
-  """Maps a user or email address to a user-selected nickname.
+  """Maps a user or email address to a user-selected nickname, and more.
 
   Nicknames do not have to be unique.
 
@@ -417,6 +428,13 @@ class Account(db.Model):
   stripping the first '@' sign and everything after it.  The email
   should not be empty nor should it start with '@' (AssertionError
   error is raised if either of these happens).
+
+  This also holds a list of ids of starred issues.  The expectation
+  that you won't have more than a dozen or so starred issues (a few
+  hundred in extreme cases) and the memory used up by a list of
+  integers of that size is very modest, so this is an efficient
+  solution.  (If someone found a use case for having thousands of
+  starred issues we'd have to think of a different approach.)
   """
 
   user = db.UserProperty(required=True)
@@ -426,6 +444,10 @@ class Account(db.Model):
                                        choices=CONTEXT_CHOICES)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
+  stars = db.ListProperty(int)  # Issue ids of all starred issues
+
+  # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
+  current_user_account = None
 
   @classmethod
   def get_account_for_user(cls, user):

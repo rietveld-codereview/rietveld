@@ -9,7 +9,9 @@ document.onkeypress = keyPressIntermediary;
 // -->
 </script>
 <div style="float: left;">
-  <h2 style="margin-bottom: 0em; margin-top: 0em;">Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');" id="upCL">{{issue.key.id}}</a>:
+  <h2 style="margin-bottom: 0em; margin-top: 0em;">
+    {%include "issue_star.html"%}
+    Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');" id="upCL">{{issue.key.id}}</a>:
   {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</h2>
   <h3>Unified Diff</h3>
   <div style=""><b>File: {{patch.filename}}</b></div>

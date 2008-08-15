@@ -13,7 +13,9 @@
     <a href="{%url codereview.views.mine%}">My Issues</a>
     |
     <a href="{%url codereview.views.all%}">Recent Issues</a>
-    {%else%}
+    |
+    <a href="{%url codereview.views.starred%}">Starred Issues</a>
+  {%else%}
     <a class="novisit" href="{%url codereview.views.index%}">Recent Issues</a>
     |
     <a class="novisit" href="{{sign_in}}">Sign in</a>
@@ -24,7 +26,9 @@
 
 
 {%block body%}
-  <h2>Issue <a href="{%url codereview.views.show issue.key.id%}"
+  <h2>
+    {%include "issue_star.html"%}
+    Issue <a href="{%url codereview.views.show issue.key.id%}"
                onmouseover="M_showPopUp(this, 'popup-issue');">
             {{issue.key.id}}</a>:
     {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}

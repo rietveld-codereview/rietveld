@@ -497,11 +497,24 @@ def all(request):
                   'first': offset+1,
                   'last': len(issues) > 1 and offset+len(issues) or None})
 
+
 @login_required
 def mine(request):
   """/mine - Show a list of issues created by the current user."""
   request.user_to_show = request.user
   return _show_user(request)
+
+
+@login_required
+def starred(request):
+  """/starred - Show a list of issues starred by the current user."""
+  stars = models.Account.current_user_account.stars
+  if not stars:
+    issues = []
+  else:
+    keys = [db.Key.from_path(models.Issue.kind(), id) for id in stars]
+    issues = [issue for issue in models.Issue.get(keys) if issue is not None]
+  return respond(request, 'starred.html', {'issues': issues})
 
 
 @user_key_required
@@ -1602,6 +1615,32 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
                    **kwds)
 
   return msg
+
+
+@issue_required
+@login_required
+def star(request):
+  acct = models.Account.current_user_account
+  if acct.stars is None:
+    acct.stars = []
+  id = request.issue.key().id()
+  if id not in acct.stars:
+    acct.stars.append(id)
+    acct.put()
+  return respond(request, 'issue_star.html', {'issue': request.issue})
+
+
+@issue_required
+@login_required
+def unstar(request):
+  acct = models.Account.current_user_account
+  if acct.stars is None:
+    acct.stars = []
+  id = request.issue.key().id()
+  if id in acct.stars:
+    acct.stars[:] = [i for i in acct.stars if i != id]
+    acct.put()
+  return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
 ### Repositories and Branches ###
