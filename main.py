@@ -53,6 +53,7 @@ sys.path.insert(0, os.path.abspath('django.zip'))
 import django
 logging.info('django.__file__ = %r, django.VERSION = %r',
              django.__file__, django.VERSION)
+assert django.VERSION[0] >= 1,"This Django version is too old"
 
 # AppEngine imports.
 from google.appengine.ext.webapp import util
