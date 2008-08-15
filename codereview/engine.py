@@ -39,11 +39,10 @@ class FetchError(Exception):
   """Exception raised by FetchBase() when a URL problem occurs."""
 
 
+# NOTE: this function is duplicated in upload.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
-  
-  NOTE: this function is duplicated in upload.py, keep them in sync.
-  
+
   Args:
     data: A string containing the output of svn diff.
 

@@ -710,10 +710,9 @@ class SubversionVCS(VersionControlSystem):
     return content, status[0:5]
 
 
+# NOTE: this function is duplicated in engine.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
-  
-  NOTE: this function is duplicated in engine.py, keep them in sync.
   
   Args:
     data: A string containing the output of svn diff.
