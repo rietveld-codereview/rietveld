@@ -53,7 +53,7 @@ To deploy your own instance of the app to Google App Engine:
 
   1. Register your own application ID on the App Engine admin site.
   2. Edit app.yaml to use this app ID instead of 'codereview'.
-  4. Upload using
+  3. Upload using
 
     make update
 
