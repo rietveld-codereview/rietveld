@@ -784,7 +784,7 @@ def _make_new(request, form):
     issue.put()
 
     patchset = models.PatchSet(issue=issue, data=data, url=url,
-                               base=base, owner=request.user, parent=issue)
+                               owner=request.user, parent=issue)
     patchset.put()
     issue.patchset = patchset
 
@@ -877,7 +877,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   data, url, separate_patches = data_url
   message = form.cleaned_data[message_key]
   patchset = models.PatchSet(issue=issue, message=message, data=data, url=url,
-                             base=issue.base, owner=request.user, parent=issue)
+                             owner=request.user, parent=issue)
   patchset.put()
 
   if not separate_patches:
