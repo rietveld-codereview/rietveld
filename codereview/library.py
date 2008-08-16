@@ -66,37 +66,32 @@ def show_user(email, arg=None, autoescape=None, memcache_results=None):
     if user is not None and email == user.email():
       return 'me'
 
-  ret = None
   if memcache_results is not None:
-    if email in memcache_results:
-      ret = memcache_results[email]
-    else:
-      logging.debug('memcache miss for %r', email)
+    ret = memcache_results.get(email)
+  else:
+    ret = memcache.get('show_user:' + email)
 
   if ret is None:
+    logging.debug('memcache miss for %r', email)
     nick = nickname(email, True)
     account = models.Account.get_account_for_email(email)
-    if account:
-      if len(models.Account.get_accounts_for_nickname(account.nickname)) > 1:
-        # The nickname is not unique, fallback to email as key.
-        user_key = email
-      else:
-        user_key = nick
-      # Cache for a longer time, this is likely to remain valid.
-      cache_timeout = 300
+    if (account and
+        len(models.Account.get_accounts_for_nickname(account.nickname)) > 1):
+      # The nickname is not unique, fallback to email as key.
+      user_key = email
     else:
       user_key = nick
-      # Cache likely to become invalid due to user sign up.
-      cache_timeout = 30
 
-    memcache.add('show_user:%s' % email, ret, cache_timeout)
+    ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
+           '%(key)s</a>' % {'key': cgi.escape(user_key)})
+
+    memcache.add('show_user:%s' % email, ret, 300)
 
     # populate the dict with the results, so same user in the list later
     # will have a memcache "hit" on "read".
     if memcache_results is not None:
       memcache_results[email] = ret
-    ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
-           '%(key)s</a>' % {'key': cgi.escape(user_key)})
+
   return django.utils.safestring.mark_safe(ret)
 
 @register.filter
