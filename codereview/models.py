@@ -502,3 +502,17 @@ class Account(db.Model):
     if len(accounts) != 1:
       return None
     return accounts[0].email
+
+  def user_has_selected_nickname(self):
+    """Return True if the user picked the nickname.
+
+    We assume that if the created and modified timestamp are within 2
+    seconds the user hasn't modified it yet.
+
+    TODO(guido): maybe use an explicit flag for this in the future?
+    """
+    delta = self.created - self.modified
+    # Simulate delta = abs(delta)
+    if delta.days < 0:
+      delta = -delta
+    return delta.days != 0 or delta.seconds >= 2

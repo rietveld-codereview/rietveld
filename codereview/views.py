@@ -325,11 +325,8 @@ def respond(request, template, params=None):
     params = {}
   must_choose_nickname = False
   if request.user is not None:
-    account = models.Account.get_account_for_user(request.user)
-    delta = account.created - account.modified
-    if delta.days < 0:
-      delta = -delta
-    must_choose_nickname = delta.days == 0 and delta.seconds < 2
+    account = models.Account.current_user_account
+    must_choose_nickname = not account.user_has_selected_nickname()
   params['request'] = request
   params['counter'] = counter
   params['user'] = request.user
@@ -1138,7 +1135,7 @@ def _get_context_for_user(request):
   engine.DEFAULT_CONTEXT.
   """
   if request.user:
-    account = models.Account.get_account_for_user(request.user)
+    account = models.Account.current_user_account
     default_context = account.default_context
   else:
     default_context = engine.DEFAULT_CONTEXT
@@ -1855,7 +1852,7 @@ def branch_delete(request, branch_id):
 
 @login_required
 def settings(request):
-  account = models.Account.get_account_for_user(request.user)
+  account = models.Account.current_user_account
   if request.method != 'POST':
     nickname = account.nickname
     default_context = account.default_context
