@@ -290,13 +290,13 @@ class Patch(db.Model):
       if self.content is not None:
         if self.content.is_bad:
           msg = 'Bad content. Try to upload again.'
-          logging.error(msg)
+          logging.warn('Patch.get_content: %s', msg)
           raise engine.FetchError(msg)
         if self.content.is_complete:
           return self.content
         else:
           msg = 'Upload in progress.'
-          logging.error(msg)
+          logging.warn('Patch.get_content: %s', msg)
           raise engine.FetchError(msg)
     except db.Error:
       # This may happen when a Content entity was deleted behind our back.

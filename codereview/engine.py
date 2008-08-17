@@ -127,11 +127,11 @@ def FetchBase(base, patch):
     result = urlfetch.fetch(url)
   except Exception, err:
     msg = 'Error fetching %s: %s: %s' % (url, err.__class__.__name__, err)
-    logging.error(msg)
+    logging.warn('FetchBase: %s', msg)
     raise FetchError(msg)
   if result.status_code != 200:
     msg = 'Error fetching %s: HTTP status %s' % (url, result.status_code)
-    logging.error(msg)
+    logging.warn('FetchBase: %s', msg)
     raise FetchError(msg)
   return models.Content(text=ToText(result.content), parent=patch,
                         is_complete=True)
