@@ -16,6 +16,8 @@
 
 from google.appengine.api import users
 
+import models
+
 
 class AddUserToRequestMiddleware(object):
   """Add a user object and a user_is_admin flag to each request."""
@@ -23,3 +25,9 @@ class AddUserToRequestMiddleware(object):
   def process_request(self, request):
     request.user = users.get_current_user()
     request.user_is_admin = users.is_current_user_admin()
+
+    # Update the cached value of the current user's Account
+    acct = None
+    if request.user is not None:
+      acct = models.Account.get_account_for_user(request.user)
+    models.Account.current_user_account = acct

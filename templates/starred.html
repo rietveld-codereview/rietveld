@@ -1,0 +1,30 @@
+{%extends "issue_base.html"%}
+{%block title1%}Starred Issues -{%endblock%}
+{%block body%}
+<script language="JavaScript" type="text/javascript"><!--
+function keyPressIntermediary(evt) {
+  return M_dashboardKeyPress(evt);
+}
+document.onkeypress = keyPressIntermediary;
+-->
+</script>
+<h2>Starred Issues</h2>
+
+<div class="issue-list">
+  <table id="queues">
+    {%if not issues%}
+      <tr><td colspan="9"><span class="disabled">(None)</span></td></tr>
+    {%else%}
+      {%include "issue_heading.html"%}
+      {%for issue in issues%}
+        {%include "issue_row.html"%}
+      {%endfor%}
+    {%endif%}
+  </table>
+</div>
+
+<script language="JavaScript" type="text/javascript"><!--
+var dashboardState = new M_DashboardState(window,'issue');
+-->
+</script>
+{%endblock%}

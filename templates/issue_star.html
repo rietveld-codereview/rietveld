@@ -1,0 +1,11 @@
+<span id="issue-star-{{issue.key.id}}">
+  {%if issue.is_starred%}
+    <a href="javascript:M_removeIssueStar({{issue.key.id}})">
+      <img src="/static/star-lite.gif" width="15" height="15" border="0"></a>
+  {%else%}
+    {%if request.user%}
+      <a href="javascript:M_addIssueStar({{issue.key.id}})">
+	<img src="/static/star-dark.gif" width="15" height="15" border="0"></a>
+    {%endif%}
+  {%endif%}
+</span>

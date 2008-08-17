@@ -2435,7 +2435,7 @@ function M_dashboardKeyPress(evt) {
       if (dashboardState) dashboardState.gotoNext();
     } else if (key == 'o' || key == '\r' || key == '\n') {
       if (dashboardState) {
-	var child = dashboardState.curTR.cells[1].firstChild;
+	var child = dashboardState.curTR.cells[2].firstChild;
 	while (child && child.nodeName != "A") {
 	  child = child.firstChild;
 	}
@@ -2630,3 +2630,40 @@ function M_jumpToPatch(select, issue, patchset, unified) {
   document.location.href = '/'+issue+'/'+part+'/'+patchset+'/'+select.value;
 }
 
+/**
+ * Add or remove a star to/from the given issue.
+ * @param {Integer} id The issue id.
+ * @param {String} url The url fragment to append: "/star" or "/unstar".
+ */
+function M_setIssueStar_(id, url) {
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4) {
+      if (httpreq.status == 200) {
+	  var elem = document.getElementById("issue-star-" + id);
+	  elem.innerHTML = httpreq.responseText;
+      }
+    }
+  }
+  httpreq.open("GET", "/" + id + url, true);
+  httpreq.send(null);
+}
+
+/**
+ * Add a star to the given issue.
+ * @param {Integer} id The issue id.
+ */
+function M_addIssueStar(id) {
+  return M_setIssueStar_(id, "/star");
+}
+
+/**
+ * Remove the star from the given issue.
+ * @param {Integer} id The issue id.
+ */
+function M_removeIssueStar(id) {
+  return M_setIssueStar_(id, "/unstar");
+}

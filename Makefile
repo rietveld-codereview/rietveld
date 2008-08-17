@@ -27,6 +27,7 @@ release: make_release.sh django/.svn
 	sh make_release.sh
 
 update: release
+	@echo "Updating `cat app.yaml | sed -n 's/^application: *//p'`"
 	@echo "This is Rietveld r`svn info | sed -n 's/^Revision: *//p'`" \
 		>templates/live_revision.html
 	$(APPCFG) update release

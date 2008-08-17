@@ -14,6 +14,7 @@
 
 """Django template library for Rietveld."""
 
+import cgi
 import logging
 
 from google.appengine.api import memcache
@@ -56,7 +57,7 @@ def nicknames(email_list, arg=None):
   return ', '.join(nickname(email, arg) for email in email_list)
 
 @register.filter
-def show_user(email, arg=None, autoescape=None):
+def show_user(email, arg=None, autoescape=None, memcache_results=None):
   """Render a link to the user's dashboard, with text being the nickname."""
   if isinstance(email, users.User):
     email = email.email()
@@ -64,34 +65,40 @@ def show_user(email, arg=None, autoescape=None):
     user = users.get_current_user()
     if user is not None and email == user.email():
       return 'me'
-  try:
-    ret = memcache.get('show_user:%s' % email)
-  except KeyError:
-    ret = None
+
+  if memcache_results is not None:
+    ret = memcache_results.get(email)
+  else:
+    ret = memcache.get('show_user:' + email)
+
   if ret is None:
     logging.debug('memcache miss for %r', email)
-    nick = nickname(email, True)
     account = models.Account.get_account_for_email(email)
-    if account:
-      if len(models.Account.get_accounts_for_nickname(account.nickname)) > 1:
-        # The nickname is not unique, fallback to email as key.
-        user_key = email
-      else:
-        user_key = nick
-      # Cache for a longer time, this is likely to remain valid.
-      cache_timeout = 300
+    if account is not None:
+      # It is possible that multiple accounts have the same nickname.
+      # Let's not worry about that -- we'll just link to one of them.
+      ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
+             '%(key)s</a>' % {'key': cgi.escape(account.nickname)})
     else:
-      user_key = nick
-      # Cache likely to become invalid due to user sign up.
-      cache_timeout = 30
+      # No account.  Let's not create a hyperlink.
+      nick = email
+      if '@' in nick:
+        nick = nick.split('@', 1)[0]
+      ret = cgi.escape(nick)
 
-    memcache.add('show_user:%s' % email, ret, cache_timeout)
-    ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
-           '%(key)s</a>' % {'key': user_key})
+    memcache.add('show_user:%s' % email, ret, 300)
+
+    # populate the dict with the results, so same user in the list later
+    # will have a memcache "hit" on "read".
+    if memcache_results is not None:
+      memcache_results[email] = ret
+
   return django.utils.safestring.mark_safe(ret)
 
 @register.filter
 def show_users(email_list, arg=None):
   """Render list of links to each user's dashboard."""
-  return django.utils.safestring.mark_safe(', '.join(show_user(email, arg)
-                                                     for email in email_list))
+  memcache_results = memcache.get_multi(email_list, key_prefix='show_user:')
+  return django.utils.safestring.mark_safe(', '.join(
+      show_user(email, arg, memcache_results=memcache_results)
+      for email in email_list))

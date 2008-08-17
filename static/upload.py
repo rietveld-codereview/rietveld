@@ -47,6 +47,9 @@ except ImportError:
 #  3: Debug logs.
 verbosity = 1
 
+# Max size of patch or base file.
+MAX_UPLOAD_SIZE = 900 * 1024
+
 
 def StatusUpdate(msg):
   """Print a status message to stdout.
@@ -340,56 +343,65 @@ class HttpRpcServer(AbstractRpcServer):
 
 
 parser = optparse.OptionParser(usage="%prog [options] [-- svn_diff_options]")
-parser.add_option("-q", "--quiet", action="store_const", const=0,
-                  dest="verbose", help="Print errors only.")
-parser.add_option("-v", "--verbose", action="store_const", const=2,
-                  dest="verbose", default=1,
-                  help="Print info level logs.")
-parser.add_option("--noisy", action="store_const", const=3,
-                  dest="verbose", help="Print all logs.")
-parser.add_option("-s", "--server", action="store", dest="server",
-                  default="codereview.appspot.com",
-                  metavar="SERVER",
-                  help="The server to upload to. The format is host[:port].")
-parser.add_option("-e", "--email", action="store", dest="email",
-                  metavar="EMAIL", default=None,
-                  help="The username to use. Will prompt if omitted.")
-parser.add_option("-H", "--host", action="store", dest="host",
-                  metavar="HOST", default=None,
-                  help="Overrides the Host header sent with all RPCs.")
-parser.add_option("--no_cookies", action="store_false",
-                  dest="save_cookies", default=True,
-                  help="Do not save authentication cookies to local disk.")
-parser.add_option("-m", "--message", action="store", dest="message",
-                  metavar="MESSAGE", default=None,
-                  help="A message to identify the patch. "
-                       "Will prompt if omitted.")
-parser.add_option("-d", "--description", action="store", dest="description",
-                  metavar="DESCRIPTION", default=None,
-                  help="Optional description when creating an issue.")
-parser.add_option("-f", "--description_file", action="store",
-                  dest="description_file", metavar="DESCRIPTION_FILE",
-                  default=None,
-                  help="Optional path of a file that contains "
-                       "the description when creating an issue.")
-parser.add_option("-i", "--issue", type="int", action="store",
-                  metavar="ISSUE", default=None,
-                  help="Issue number to which to add. Defaults to new issue.")
 parser.add_option("-y", "--assume_yes", action="store_true",
                   dest="assume_yes", default=False,
                   help="Assume that the answer to yes/no questions is 'yes'.")
-parser.add_option("-l", "--local_base", action="store_true",
-                  dest="local_base", default=False,
-                  help="Base files will be uploaded.")
-parser.add_option("-r", "--reviewers", action="store", dest="reviewers",
-                  metavar="REVIEWERS", default=None,
-                  help="Add reviewers (comma separated email addresses).")
-parser.add_option("--cc", action="store", dest="cc",
-                  metavar="CC", default=None,
-                  help="Add CC (comma separated email addresses).")
-parser.add_option("--send_mail", action="store_true",
-                  dest="send_mail", default=False,
-                  help="Send notification email to reviewers.")
+# Logging
+group = parser.add_option_group("Logging options")
+group.add_option("-q", "--quiet", action="store_const", const=0,
+                 dest="verbose", help="Print errors only.")
+group.add_option("-v", "--verbose", action="store_const", const=2,
+                 dest="verbose", default=1,
+                 help="Print info level logs (default).")
+group.add_option("--noisy", action="store_const", const=3,
+                 dest="verbose", help="Print all logs.")
+# Review server
+group = parser.add_option_group("Review server options")
+group.add_option("-s", "--server", action="store", dest="server",
+                 default="codereview.appspot.com",
+                 metavar="SERVER",
+                 help=("The server to upload to. The format is host[:port]. "
+                       "Defaults to 'codereview.appspot.com'."))
+group.add_option("-e", "--email", action="store", dest="email",
+                 metavar="EMAIL", default=None,
+                 help="The username to use. Will prompt if omitted.")
+group.add_option("-H", "--host", action="store", dest="host",
+                 metavar="HOST", default=None,
+                 help="Overrides the Host header sent with all RPCs.")
+group.add_option("--no_cookies", action="store_false",
+                 dest="save_cookies", default=True,
+                 help="Do not save authentication cookies to local disk.")
+# Issue
+group = parser.add_option_group("Issue options")
+group.add_option("-d", "--description", action="store", dest="description",
+                 metavar="DESCRIPTION", default=None,
+                 help="Optional description when creating an issue.")
+group.add_option("-f", "--description_file", action="store",
+                 dest="description_file", metavar="DESCRIPTION_FILE",
+                 default=None,
+                 help="Optional path of a file that contains "
+                      "the description when creating an issue.")
+group.add_option("-r", "--reviewers", action="store", dest="reviewers",
+                 metavar="REVIEWERS", default=None,
+                 help="Add reviewers (comma separated email addresses).")
+group.add_option("--cc", action="store", dest="cc",
+                 metavar="CC", default=None,
+                 help="Add CC (comma separated email addresses).")
+# Upload options
+group = parser.add_option_group("Patch options")
+group.add_option("-m", "--message", action="store", dest="message",
+                 metavar="MESSAGE", default=None,
+                 help="A message to identify the patch. "
+                      "Will prompt if omitted.")
+group.add_option("-i", "--issue", type="int", action="store",
+                 metavar="ISSUE", default=None,
+                 help="Issue number to which to add. Defaults to new issue.")
+group.add_option("-l", "--local_base", action="store_true",
+                 dest="local_base", default=False,
+                 help="Base files will be uploaded.")
+group.add_option("--send_mail", action="store_true",
+                 dest="send_mail", default=False,
+                 help="Send notification email to reviewers.")
 
 
 def GetRpcServer(options):
@@ -478,7 +490,7 @@ def RunShell(command, args=(), silent_ok=False):
   stream = os.popen(command, "r")
   data = stream.read()
   if stream.close():
-    ErrorExit("Got error status from %s" % command)
+    ErrorExit("Got error status from %s" % (command + str(args)))
   if not silent_ok and not data:
     ErrorExit("No output from %s" % command)
   return data
@@ -530,6 +542,10 @@ class VersionControlSystem(object):
     [patches.setdefault(v, k) for k, v in patch_list]
     for filename in patches.keys():
       content, status = self.GetBaseFile(filename)
+      if len(content) > MAX_UPLOAD_SIZE:
+        print ("Not uploading the base file for " + filename +
+               " because the file is too large.")
+        continue
       checksum = md5.new(content).hexdigest()
       parts = []
       while content:
@@ -694,7 +710,76 @@ class SubversionVCS(VersionControlSystem):
     return content, status[0:5]
 
 
-def RealMain(argv):
+# NOTE: this function is duplicated in engine.py, keep them in sync.
+def SplitPatch(data):
+  """Splits a patch into separate pieces for each file.
+  
+  Args:
+    data: A string containing the output of svn diff.
+
+  Returns:
+    A list of 2-tuple (filename, text) where text is the svn diff output
+      pertaining to filename.
+  """
+  patches = []
+  filename = None
+  diff = []
+  for line in data.splitlines(True):
+    new_filename = None
+    if line.startswith('Index:'):
+      unused, new_filename = line.split(':', 1)
+      new_filename = new_filename.strip()
+    elif line.startswith('Property changes on:'):    
+      unused, temp_filename = line.split(':', 1)
+      # When a file is modified, paths use '/' between directories, however
+      # when a property is modified '\' is used on Windows.  Make them the same
+      # otherwise the file shows up twice.
+      temp_filename = temp_filename.strip().replace('\\', '/')
+      if temp_filename != filename:
+        # File has property changes but no modifications, create a new diff.
+        new_filename = temp_filename
+    if new_filename:      
+      if filename and diff:
+        patches.append((filename, ''.join(diff)))
+      filename = new_filename
+      diff = [line]
+      continue
+    if diff is not None:
+      diff.append(line)
+  if filename and diff:
+    patches.append((filename, ''.join(diff)))
+  return patches
+
+
+def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
+  """Uploads a separate patch for each file in the diff output.
+  
+  Returns a list of [patch_key, filename] for each file.
+  """
+  patches = SplitPatch(data)
+  rv = []
+  for patch in patches:
+    if len(patch[1]) > MAX_UPLOAD_SIZE:
+      print ("Not uploading the patch for " + patch[0] +
+             " because the file is too large.")
+      continue
+    form_fields = [("filename", patch[0])]
+    if options.local_base:
+      form_fields.append(("content_upload", "1"))
+    files = [("data", "data.diff", patch[1])]
+    ctype, body = EncodeMultipartFormData(form_fields, files)
+    url = "/%d/upload_patch/%d" % (int(issue), int(patchset))
+    print "Uploading patch for " + patch[0]
+    response_body = rpc_server.Send(url, body, content_type=ctype)
+    lines = response_body.splitlines()
+    if not lines or lines[0] != "OK":
+      StatusUpdate("  --> %s" % response_body)
+      sys.exit(False)
+    rv.append([lines[1], patch[0]])
+  return rv
+
+
+def RealMain(argv, data=None):
   logging.basicConfig(format=("%(asctime).19s %(levelname)s %(filename)s:"
                               "%(lineno)s %(message)s "))
   os.environ['LC_ALL'] = 'C'
@@ -709,7 +794,8 @@ def RealMain(argv):
   base = vcs.GuessBase(not options.local_base)
   if not options.assume_yes:
     vcs.CheckForUnknownFiles()
-  data = vcs.GenerateDiff(args)
+  if not data:
+    data = vcs.GenerateDiff(args)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
   if options.issue:
@@ -752,12 +838,17 @@ def RealMain(argv):
     form_fields.append(("send_mail", "1"))
   if options.local_base:
     form_fields.append(("content_upload", "1"))
-  ctype, body = EncodeMultipartFormData(form_fields,
-                                        [("data", "data.diff", data)])
+  if len(data) > MAX_UPLOAD_SIZE:
+    print "Patch is large, so uploading file patches separately."
+    files = []
+    form_fields.append(("separate_patches", "1"))
+  else:
+    files = [("data", "data.diff", data)]
+  ctype, body = EncodeMultipartFormData(form_fields, files)
   response_body = rpc_server.Send("/upload", body, content_type=ctype)
-  if options.local_base:
+  if options.local_base or not files:
     lines = response_body.splitlines()
-    if len(lines) > 2:
+    if len(lines) >= 2:
       msg = lines[0]
       patchset = lines[1].strip()
       patches = [x.split(" ", 1) for x in lines[2:]]
@@ -770,6 +861,12 @@ def RealMain(argv):
   not response_body.startswith("Issue updated."):
     sys.exit(0)
   issue = msg[msg.rfind("/")+1:]
+
+  if not files:
+    rv = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
+    if options.local_base:
+      patches = rv
+
   if options.local_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
     if options.send_mail:
