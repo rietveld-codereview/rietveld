@@ -73,17 +73,18 @@ def show_user(email, arg=None, autoescape=None, memcache_results=None):
 
   if ret is None:
     logging.debug('memcache miss for %r', email)
-    nick = nickname(email, True)
     account = models.Account.get_account_for_email(email)
-    if (account and
-        len(models.Account.get_accounts_for_nickname(account.nickname)) > 1):
-      # The nickname is not unique, fallback to email as key.
-      user_key = email
+    if account is not None:
+      # It is possible that multiple accounts have the same nickname.
+      # Let's not worry about that -- we'll just link to one of them.
+      ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
+             '%(key)s</a>' % {'key': cgi.escape(account.nickname)})
     else:
-      user_key = nick
-
-    ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
-           '%(key)s</a>' % {'key': cgi.escape(user_key)})
+      # No account.  Let's not create a hyperlink.
+      nick = email
+      if '@' in nick:
+        nick = nick.split('@', 1)[0]
+      ret = cgi.escape(nick)
 
     memcache.add('show_user:%s' % email, ret, 300)
 
