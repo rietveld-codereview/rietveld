@@ -92,7 +92,7 @@ def ParsePatchSet(patchset):
   patches = []
   for filename, text in SplitPatch(patchset.data):
     patches.append(models.Patch(patchset=patchset, text=ToText(text),
-                   filename=filename, parent=patchset))
+                                filename=filename, parent=patchset))
   return patches
 
 

@@ -161,8 +161,7 @@ class UploadForm(forms.Form):
   subject = forms.CharField(max_length=100)
   description = forms.CharField(max_length=10000, required=False)
   content_upload = forms.BooleanField(required=False)
-  separate_patches = forms.BooleanField(required=False,
-                                        widget=forms.HiddenInput())
+  separate_patches = forms.BooleanField(required=False)
   base = forms.CharField(max_length=2000, required=False)
   data = forms.FileField(required=False)
   issue = forms.IntegerField(required=False)
@@ -209,6 +208,7 @@ class UploadContentForm(forms.Form):
 class UploadPatchForm(forms.Form):
   filename = forms.CharField(max_length=255)
   content_upload = forms.BooleanField(required=False)
+
   def get_uploaded_patch(self):
     return self.files['data'].read()
 

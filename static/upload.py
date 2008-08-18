@@ -490,7 +490,7 @@ def RunShell(command, args=(), silent_ok=False):
   stream = os.popen(command, "r")
   data = stream.read()
   if stream.close():
-    ErrorExit("Got error status from %s" % (command + str(args)))
+    ErrorExit("Got error status from %s" % command)
   if not silent_ok and not data:
     ErrorExit("No output from %s" % command)
   return data
@@ -886,9 +886,9 @@ def RealMain(argv, data=None):
   issue = msg[msg.rfind("/")+1:]
 
   if not files:
-    rv = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
+    result = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
     if options.local_base:
-      patches = rv
+      patches = result
 
   if options.local_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
