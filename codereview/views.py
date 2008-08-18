@@ -332,8 +332,8 @@ def respond(request, template, params=None):
   params['user'] = request.user
   params['is_admin'] = request.user_is_admin
   params['is_dev'] = IS_DEV
-  params['sign_in'] = users.create_login_url(request.path)
-  params['sign_out'] = users.create_logout_url(request.path)
+  params['sign_in'] = users.create_login_url(request.get_full_path())
+  params['sign_out'] = users.create_logout_url(request.get_full_path())
   params['must_choose_nickname'] = must_choose_nickname
   try:
     return render_to_response(template, params)
@@ -360,7 +360,7 @@ def login_required(func):
   """Decorator that redirects to the login page if you're not logged in."""
   def login_wrapper(request, *args, **kwds):
     if request.user is None:
-      return HttpResponseRedirect(users.create_login_url(request.path))
+      return HttpResponseRedirect(users.create_login_url(request.get_full_path()))
     return func(request, *args, **kwds)
   return login_wrapper
 
@@ -369,7 +369,7 @@ def admin_required(func):
   def admin_wrapper(request, *args, **kwds):
     """Decorator that insists that you're logged in as administratior."""
     if request.user is None:
-      return HttpResponseRedirect(users.create_login_url(request.path))
+      return HttpResponseRedirect(users.create_login_url(request.get_full_path()))
     if not request.user_is_admin:
       return HttpResponseForbidden('You must be admin in for this function')
     return func(request, *args, **kwds)
