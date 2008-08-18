@@ -217,7 +217,7 @@ class AbstractRpcServer(object):
               "Please go to\n"
               "https://www.google.com/accounts/DisplayUnlockCaptcha\n"
               "and verify you are a human.  Then try again.")
-          break;
+          break
         if e.reason == "NotVerified":
           print >>sys.stderr, "Account not verified."
           break
@@ -527,7 +527,7 @@ class VersionControlSystem(object):
 
   def GetBaseFile(self, filename):
     """Get the content of the upstream version of a file.
-    
+
     Returns:
       A tuple (content, status) representing the file content and the status of
       the file.
@@ -713,7 +713,7 @@ class SubversionVCS(VersionControlSystem):
 # NOTE: this function is duplicated in engine.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
-  
+
   Args:
     data: A string containing the output of svn diff.
 
@@ -729,7 +729,7 @@ def SplitPatch(data):
     if line.startswith('Index:'):
       unused, new_filename = line.split(':', 1)
       new_filename = new_filename.strip()
-    elif line.startswith('Property changes on:'):    
+    elif line.startswith('Property changes on:'):
       unused, temp_filename = line.split(':', 1)
       # When a file is modified, paths use '/' between directories, however
       # when a property is modified '\' is used on Windows.  Make them the same
@@ -738,7 +738,7 @@ def SplitPatch(data):
       if temp_filename != filename:
         # File has property changes but no modifications, create a new diff.
         new_filename = temp_filename
-    if new_filename:      
+    if new_filename:
       if filename and diff:
         patches.append((filename, ''.join(diff)))
       filename = new_filename
@@ -753,7 +753,7 @@ def SplitPatch(data):
 
 def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
   """Uploads a separate patch for each file in the diff output.
-  
+
   Returns a list of [patch_key, filename] for each file.
   """
   patches = SplitPatch(data)
@@ -779,6 +779,19 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
   return rv
 
 
+def GuessVCS():
+  """Helper to guess the version control system.
+
+  Returns:
+    A VersionControlSystem instance. Exits if the VCS can't be guessed.
+  """
+  if os.path.isdir('.svn'):
+    logging.info("Guessed VCS = Subversion")
+    return SubversionVCS()
+  ErrorExit(("Could not guess version control system. "
+             "Are you in a working copy directory?"))
+
+
 def RealMain(argv, data=None):
   logging.basicConfig(format=("%(asctime).19s %(levelname)s %(filename)s:"
                               "%(lineno)s %(message)s "))
@@ -790,8 +803,18 @@ def RealMain(argv, data=None):
     logging.getLogger().setLevel(logging.DEBUG)
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
-  vcs = SubversionVCS()
-  base = vcs.GuessBase(not options.local_base)
+  vcs = GuessVCS()
+  if isinstance(vcs, SubversionVCS):
+    # base field is only allowed for Subversion.
+    # Note: Fetching base files may become deprecated in future releases.
+    base = vcs.GuessBase(not options.local_base)
+  else:
+    base = None
+  if not base and not options.local_base:
+    # TODO(andi): Enable local_base for other VCS by default.
+    # For future use. SubversionVCS.GuessBase() already checks this
+    # condition.
+    ErrorExit("Use '--local_base' to upload base files.")
   if not options.assume_yes:
     vcs.CheckForUnknownFiles()
   if not data:
@@ -829,7 +852,7 @@ def RealMain(argv, data=None):
       ErrorExit("Can't specify description and description_file")
     file = open(options.description_file, 'r')
     description = file.read()
-    file.close()    
+    file.close()
   if description:
     form_fields.append(("description", description))
   # If we're uploading base files, don't send the email before the uploads, so
