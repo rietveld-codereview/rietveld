@@ -1,10 +1,10 @@
 {%autoescape off%}Reviewers: {{to_nicknames}},
 
 {%if message%}Message:
-{{message|wordwrap:"80"}}
+{{message|wordwrap:"72"}}
 
 {%endif%}{%if description%}Description:
-{{description|wordwrap:"80"}}{%endif%}
+{{description|wordwrap:"72"}}{%endif%}
 
 Please review this at {{url}}{%if files%}
 
