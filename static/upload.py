@@ -592,6 +592,9 @@ class SubversionVCS(VersionControlSystem):
       if len(words) == 2 and words[0] == "URL:":
         url = words[1]
         scheme, netloc, path, params, query, fragment = urlparse.urlparse(url)
+        username, netloc = urllib.splituser(netloc)
+        if username:
+          logging.info("Removed username from base URL")
         if netloc.endswith("svn.python.org"):
           if netloc == "svn.python.org":
             if path.startswith("/projects/"):
@@ -606,12 +609,14 @@ class SubversionVCS(VersionControlSystem):
           base = "http://svn.collab.net/viewvc/*checkout*%s/" % path
           logging.info("Guessed CollabNet base = %s", base)
         elif netloc.endswith(".googlecode.com"):
-          base = url + "/"
-          if base.startswith("https"):
-            base = "http" + base[5:]
+          path = path + "/"
+          base = urlparse.urlunparse(("http", netloc, path, params,
+                                      query, fragment))
           logging.info("Guessed Google Code base = %s", base)
         else:
-          base = url + "/"
+          path = path + "/"
+          base = urlparse.urlunparse((scheme, netloc, path, params,
+                                      query, fragment))
           logging.info("Guessed base = %s", base)
         return base
     if required:
