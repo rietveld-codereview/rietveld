@@ -90,50 +90,50 @@ class zipimporter:
       zipfile with optional prefix.
     """
     # Analyze the path_entry.
-    zipfilename = path_entry
+    archive = path_entry
     prefix = ''
     # Strip trailing sections until an existing path is found
-    while not os.path.lexists(zipfilename):
-      head, tail = os.path.split(zipfilename)
-      if head == zipfilename:
+    while not os.path.lexists(archive):
+      head, tail = os.path.split(archive)
+      if head == archive:
         msg = 'Nothing found for %r' % path_entry
         ##logging.debug(msg)
         raise ZipImportError(msg)
-      zipfilename = head
+      archive = head
       prefix = os.path.join(tail, prefix)
-    if not os.path.isfile(zipfilename):
-      msg = 'Non-file %r found for %r' % (zipfilename, path_entry)
+    if not os.path.isfile(archive):
+      msg = 'Non-file %r found for %r' % (archive, path_entry)
       ##logging.debug(msg)
       raise ZipImportError(msg)
     # Initialize the zipimporter instance.
-    self.zipfilename = zipfilename
+    self.archive = archive
     self.prefix = os.path.join(prefix, '')
     # Try to get the zipfile from the cache.
-    self.zipfile = _zipfile_cache.get(zipfilename)
+    self.zipfile = _zipfile_cache.get(archive)
     if self.zipfile is None:
       # Open the zip file and read the index.
       try:
-        self.zipfile = zipfile.ZipFile(self.zipfilename)
+        self.zipfile = zipfile.ZipFile(self.archive)
       except (EnvironmentError, zipfile.BadZipfile), err:
         # This is logged as a warning since it means we failed to open
         # what appears to be an existing zipfile.
-        msg = 'Can\'t open zipfile %s: %s: %s' % (self.zipfilename,
+        msg = 'Can\'t open zipfile %s: %s: %s' % (self.archive,
                                                   err.__class__.__name__, err)
         import logging
         logging.warn(msg)
         raise ZipImportError(msg)
       else:
         # Update the cache.
-        _zipfile_cache[zipfilename] = self.zipfile
+        _zipfile_cache[archive] = self.zipfile
         # This is logged as info since it represents a significant
         # result.  This log message appears only during the initial
         # process initialization, not for subsequent requests.
         import logging
-        logging.info('zipimporter(%r, %r)', zipfilename, prefix)
+        logging.info('zipimporter(%r, %r)', archive, prefix)
 
   def __repr__(self):
     """Return a string representation matching zipimport.c."""
-    name = self.zipfilename
+    name = self.archive
     if self.prefix:
       name = os.path.join(name, self.prefix)
     return '<zipimporter object "%s">' % name
@@ -164,7 +164,7 @@ class zipimporter:
       else:
         return submodname, is_package, relpath
     msg = ('Can\'t find module %s in zipfile %s with prefix %r' %
-           (fullmodname, self.zipfilename, self.prefix))
+           (fullmodname, self.archive, self.prefix))
     ##logging.debug(msg)
     raise ZipImportError(msg)
 
@@ -186,7 +186,7 @@ class zipimporter:
       ImportError if the module is not found in the archive.
     """
     submodname, is_package, relpath = self._get_info(fullmodname)
-    fullpath = '%s/%s' % (self.zipfilename, relpath)
+    fullpath = '%s/%s' % (self.archive, relpath)
     source = self.zipfile.read(relpath)
     source = source.replace('\r\n', '\n')
     source = source.replace('\r', '\n')
@@ -243,7 +243,7 @@ class zipimporter:
 
   def get_data(self, fullpath):
     """Return (binary) content of a data file in the zipfile."""
-    required_prefix = os.path.join(self.zipfilename, '')
+    required_prefix = os.path.join(self.archive, '')
     if not fullpath.startswith(required_prefix):
       raise IOError('Path %r doesn\'t start with zipfile name %r' %
                     (fullpath, required_prefix))
@@ -252,7 +252,7 @@ class zipimporter:
       return self.zipfile.read(relpath)
     except KeyError:
       raise IOError('Path %r not found in zipfile %r' %
-                    (relpath, self.zipfilename))
+                    (relpath, self.archive))
 
   def is_package(self, fullmodname):
     """Return whether a module is a package."""
