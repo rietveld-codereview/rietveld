@@ -188,7 +188,9 @@ def ParsePatch(lines, name="<patch>"):
           if last_rest.endswith("\n"):
             raw_chunk[-1] = (last_tag, last_rest[:-1])
       else:
-        logging.warn("%s:%d: indecypherable input: %r", name, lineno, line)
+        # Only log if it's a non-blank line.  Blank lines we see a lot.
+        if line and line.strip():
+          logging.warn("%s:%d: indecypherable input: %r", name, lineno, line)
         if chunks or raw_chunk:
           break  # Trailing garbage isn't so bad
         return None
