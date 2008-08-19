@@ -332,8 +332,10 @@ def respond(request, template, params=None):
   params['user'] = request.user
   params['is_admin'] = request.user_is_admin
   params['is_dev'] = IS_DEV
-  params['sign_in'] = users.create_login_url(request.get_full_path())
-  params['sign_out'] = users.create_logout_url(request.get_full_path())
+  if request.user is None:
+    params['sign_in'] = users.create_login_url(request.get_full_path())
+  else:
+    params['sign_out'] = users.create_logout_url(request.get_full_path())
   params['must_choose_nickname'] = must_choose_nickname
   try:
     return render_to_response(template, params)
@@ -1688,26 +1690,26 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
 @issue_required
 @login_required
 def star(request):
-  acct = models.Account.current_user_account
-  if acct.stars is None:
-    acct.stars = []
+  account = models.Account.current_user_account
+  if account.stars is None:
+    account.stars = []
   id = request.issue.key().id()
-  if id not in acct.stars:
-    acct.stars.append(id)
-    acct.put()
+  if id not in account.stars:
+    account.stars.append(id)
+    account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
 @issue_required
 @login_required
 def unstar(request):
-  acct = models.Account.current_user_account
-  if acct.stars is None:
-    acct.stars = []
+  account = models.Account.current_user_account
+  if account.stars is None:
+    account.stars = []
   id = request.issue.key().id()
-  if id in acct.stars:
-    acct.stars[:] = [i for i in acct.stars if i != id]
-    acct.put()
+  if id in account.stars:
+    account.stars[:] = [i for i in account.stars if i != id]
+    account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 

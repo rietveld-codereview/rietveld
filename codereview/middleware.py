@@ -27,7 +27,7 @@ class AddUserToRequestMiddleware(object):
     request.user_is_admin = users.is_current_user_admin()
 
     # Update the cached value of the current user's Account
-    acct = None
+    account = None
     if request.user is not None:
-      acct = models.Account.get_account_for_user(request.user)
-    models.Account.current_user_account = acct
+      account = models.Account.get_account_for_user(request.user)
+    models.Account.current_user_account = account

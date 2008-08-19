@@ -82,8 +82,8 @@ class Issue(db.Model):
     """Whether the current user has this issue starred."""
     if self._is_starred is not None:
       return self._is_starred
-    acct = Account.current_user_account
-    self._is_starred = acct is not None and self.key().id() in acct.stars
+    account = Account.current_user_account
+    self._is_starred = account is not None and self.key().id() in account.stars
     return self._is_starred
 
   _num_comments = None
@@ -455,6 +455,11 @@ class Account(db.Model):
     email = user.email()
     assert email
     key = '<%s>' % email
+    # Since usually the account already exists, first try getting it
+    # without the transaction implied by get_or_insert().
+    account = cls.get(db.Key.from_path(cls.kind(), key))
+    if account is not None:
+      return account
     nickname = user.nickname()
     if '@' in nickname:
       nickname = nickname.split('@', 1)[0]
