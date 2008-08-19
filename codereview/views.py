@@ -538,10 +538,10 @@ def _show_user(request):
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC',
       user))
-  review_issues = list(db.GqlQuery(
+  review_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
-      user.email()))
+      user.email()) if issue.owner != user]
   closed_issues = list(db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
@@ -779,7 +779,8 @@ def _make_new(request, form):
                          base=base,
                          reviewers=reviewers,
                          cc=cc,
-                         owner=request.user)
+                         owner=request.user,
+                         n_comments=0)
     issue.put()
 
     patchset = models.PatchSet(issue=issue, data=data, url=url,
@@ -1524,6 +1525,7 @@ def publish(request):
   else:
     tbd = []
     comments = None
+  issue.update_comment_count(len(comments))
   tbd.append(issue)
 
   if comments:

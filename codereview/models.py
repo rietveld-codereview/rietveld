@@ -74,6 +74,7 @@ class Issue(db.Model):
   reviewers = db.ListProperty(db.Email)
   cc = db.ListProperty(db.Email)
   closed = db.BooleanProperty(default=False)
+  n_comments = db.IntegerProperty()
 
   _is_starred = None
 
@@ -86,19 +87,34 @@ class Issue(db.Model):
     self._is_starred = account is not None and self.key().id() in account.stars
     return self._is_starred
 
-  _num_comments = None
+  def update_comment_count(self, n):
+    """Increment the n_comments property by n.
+
+    If n_comments in None, compute the count through a query.  (This
+    is a transitional strategy while the database contains Issues
+    created using a previous version of the schema.)
+    """
+    if self.n_comments is None:
+      self.n_comments = self._get_num_comments()
+    self.n_comments += n
 
   @property
   def num_comments(self):
-    """The number of (non-draft) comments for this issue.
+    """The number of non-draft comments for this issue.
 
-    The value is expensive to compute, so it is cached.
+    This is almost an alias for self.n_comments, except that if
+    n_comments is None, it is computed through a query, and stored,
+    using n_comments as a cache.
     """
-    if self._num_comments is None:
-      self._num_comments = gql(Comment,
-          'WHERE ANCESTOR IS :1 AND draft = FALSE',
-          self).count()
-    return self._num_comments
+    if self.n_comments is None:
+      self.n_comments = self._get_num_comments()
+    return self.n_comments
+
+  def _get_num_comments(self):
+    """Helper to compute the number of comments through a query."""
+    return gql(Comment,
+               'WHERE ANCESTOR IS :1 AND draft = FALSE',
+               self).count()
 
   _num_drafts = None
 
