@@ -799,7 +799,7 @@ def _make_new(request, form):
   except EmptyPatchSet:
     errkey = url and 'url' or 'data'
     form.errors[errkey] = ['Patch set contains no recognizable patches']
-    issue = None
+    return None
 
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, '', '', True)
