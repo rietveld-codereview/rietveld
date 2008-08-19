@@ -1693,6 +1693,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
 @login_required
 def star(request):
   account = models.Account.current_user_account
+  account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
     account.stars = []
   id = request.issue.key().id()
@@ -1706,6 +1707,7 @@ def star(request):
 @login_required
 def unstar(request):
   account = models.Account.current_user_account
+  account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
     account.stars = []
   id = request.issue.key().id()
@@ -1882,6 +1884,7 @@ def settings(request):
       else:
         account.nickname = nickname
         account.default_context = form.cleaned_data.get("context")
+        account.fresh = False
         account.put()
   if not form.is_valid():
     return respond(request, 'settings.html', {'form': form})

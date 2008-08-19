@@ -461,6 +461,7 @@ class Account(db.Model):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   stars = db.ListProperty(int)  # Issue ids of all starred issues
+  fresh = db.BooleanProperty()
 
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
@@ -480,7 +481,8 @@ class Account(db.Model):
     if '@' in nickname:
       nickname = nickname.split('@', 1)[0]
     assert nickname
-    return cls.get_or_insert(key, user=user, email=email, nickname=nickname)
+    return cls.get_or_insert(key, user=user, email=email, nickname=nickname,
+                             fresh=True)
 
   @classmethod
   def get_nickname_for_user(cls, user):
@@ -527,13 +529,17 @@ class Account(db.Model):
   def user_has_selected_nickname(self):
     """Return True if the user picked the nickname.
 
-    We assume that if the created and modified timestamp are within 2
-    seconds the user hasn't modified it yet.
-
-    TODO(guido): maybe use an explicit flag for this in the future?
+    Normally this returns 'not self.fresh', but if that property is
+    None, we assume that if the created and modified timestamp are
+    within 2 seconds, the account is fresh (i.e. the user hasn't
+    selected a nickname yet).  We then also update self.fresh, so it
+    is used as a cache and may even be written back if we're lucky.
     """
-    delta = self.created - self.modified
-    # Simulate delta = abs(delta)
-    if delta.days < 0:
-      delta = -delta
-    return delta.days != 0 or delta.seconds >= 2
+    if self.fresh is None:
+      logging.debug('COMPUTING FRESHNESS MANUALLY')
+      delta = self.created - self.modified
+      # Simulate delta = abs(delta)
+      if delta.days < 0:
+        delta = -delta
+      self.fresh = (delta.days == 0 and delta.seconds < 2)
+    return not self.fresh
