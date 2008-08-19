@@ -457,7 +457,7 @@ class Account(db.Model):
     key = '<%s>' % email
     # Since usually the account already exists, first try getting it
     # without the transaction implied by get_or_insert().
-    account = cls.get(db.Key.from_path(cls.kind(), key))
+    account = cls.get_by_key_name(key)
     if account is not None:
       return account
     nickname = user.nickname()
