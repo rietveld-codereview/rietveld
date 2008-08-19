@@ -536,7 +536,6 @@ class Account(db.Model):
     is used as a cache and may even be written back if we're lucky.
     """
     if self.fresh is None:
-      logging.debug('COMPUTING FRESHNESS MANUALLY')
       delta = self.created - self.modified
       # Simulate delta = abs(delta)
       if delta.days < 0:
