@@ -1524,7 +1524,7 @@ def publish(request):
     tbd, comments = _get_draft_comments(request, issue)
   else:
     tbd = []
-    comments = None
+    comments = []
   issue.update_comment_count(len(comments))
   tbd.append(issue)
 
