@@ -14,9 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for uploading subversion diffs to the codereview app.
+"""Tool for uploading diffs from a version control system to the codereview app.
 
-Usage summary: upload.py [options] [-- svn_diff_options]
+Usage summary: upload.py [options] [-- diff_options]
+
+Diff options are passed to the diff command of the underlying system.
+
+Supported version control systems:
+  Git
+  Subversion
+
+(It is important for Git users to specify a tree-ish to diff against.)
 """
 # This code is derived from appcfg.py in the App Engine SDK (open source),
 # and from ASPN recipe #146306.
@@ -30,6 +38,7 @@ import optparse
 import os
 import re
 import socket
+import subprocess
 import sys
 import urllib
 import urllib2
@@ -342,7 +351,7 @@ class HttpRpcServer(AbstractRpcServer):
     return opener
 
 
-parser = optparse.OptionParser(usage="%prog [options] [-- svn_diff_options]")
+parser = optparse.OptionParser(usage="%prog [options] [-- diff_options]")
 parser.add_option("-y", "--assume_yes", action="store_true",
                   dest="assume_yes", default=False,
                   help="Assume that the answer to yes/no questions is 'yes'.")
@@ -715,6 +724,51 @@ class SubversionVCS(VersionControlSystem):
     return content, status[0:5]
 
 
+class GitVCS(VersionControlSystem):
+  """Implementation of the VersionControlSystem interface for Git."""
+
+  def __init__(self):
+    # Map of filename -> hash of base file.
+    self.base_hashes = {}
+
+  def GenerateDiff(self, extra_args):
+    # This is more complicated than svn's GenerateDiff because we must convert
+    # the diff output to include an svn-style "Index:" line as well as record
+    # the hashes of the base files, so we can upload them along with our diff.
+    gitdiff = RunShell("git diff", ["--full-index"] + extra_args)
+    svndiff = []
+    filecount = 0
+    filename = None
+    for line in gitdiff.splitlines():
+      match = re.match(r"diff --git a/(.*) b/.*$", line)
+      if match:
+        filecount += 1
+        filename = match.group(1)
+        svndiff.append("Index: %s\n" % filename)
+      else:
+        # The "index" line in a git diff looks like this (long hashes elided):
+        #   index 82c0d44..b2cee3f 100755
+        # We want to save the left hash, as that identifies the base file.
+        match = re.match(r"index (\w+)\.\.", line)
+        if match:
+          self.base_hashes[filename] = match.group(1)
+      svndiff.append(line + "\n")
+    if not filecount:
+      ErrorExit("No valid patches found in output from git diff")
+    return "".join(svndiff)
+
+  def GetUnknownFiles(self):
+    status = RunShell("git ls-files --others", silent_ok=True)
+    return status.splitlines()
+
+  def GetBaseFile(self, filename):
+    hash = self.base_hashes[filename]
+    if hash == "0" * 40:  # All-zero hash indicates no base file.
+      return ("", "A")
+    else:
+      return (RunShell("git show", [hash]), "M")
+
+
 # NOTE: this function is duplicated in engine.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
@@ -787,12 +841,29 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
 def GuessVCS():
   """Helper to guess the version control system.
 
+  This examines the current directory, guesses which VersionControlSystem
+  we're using, and returns an instance of the appropriate class.  Exit with an
+  error if we can't figure it out.
+
   Returns:
     A VersionControlSystem instance. Exits if the VCS can't be guessed.
   """
+  # Subversion has a .svn in all working directories.
   if os.path.isdir('.svn'):
     logging.info("Guessed VCS = Subversion")
     return SubversionVCS()
+
+  # Git has a command to test if you're in a git tree.
+  # Try running it, but don't die if we don't have git installed.
+  try:
+    subproc = subprocess.Popen(["git", "rev-parse", "--is-inside-work-tree"],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if subproc.wait() == 0:
+      return GitVCS()
+  except OSError, (errno, message):
+    if errno != 2:  # ENOENT -- they don't have git installed.
+      raise
+
   ErrorExit(("Could not guess version control system. "
              "Are you in a working copy directory?"))
 
@@ -816,10 +887,8 @@ def RealMain(argv, data=None):
   else:
     base = None
   if not base and not options.local_base:
-    # TODO(andi): Enable local_base for other VCS by default.
-    # For future use. SubversionVCS.GuessBase() already checks this
-    # condition.
-    ErrorExit("Use '--local_base' to upload base files.")
+    options.local_base = True
+    logging.info("Enabled upload of base file")
   if not options.assume_yes:
     vcs.CheckForUnknownFiles()
   if not data:
