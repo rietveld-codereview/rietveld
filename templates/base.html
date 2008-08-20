@@ -3,6 +3,9 @@
 <html>
 <head>
   <title>
+    {%if is_dev%}
+      (DEV)
+    {%endif%}
     {%block title1%}
       {%if patch%}{{patch.filename}} -{%endif%}
     {%endblock%}
@@ -10,9 +13,6 @@
       {%if issue%}Issue {{issue.key.id}}: {{issue.subject}} -{%endif%}
     {%endblock%}
     Code Review
-    {%if is_dev%}
-      (DEV)
-    {%endif%}
   </title>
   <link type="text/css" rel="stylesheet" href="/static/styles.css">
   <script type="text/javascript" src="/static/script.js"></script>
