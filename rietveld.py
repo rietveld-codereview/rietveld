@@ -167,7 +167,8 @@ def GetApplicationName():
   file = open("app.yaml", "r")
   result = file.read()
   file.close()
-  return re.compile(".*?application: (\w+)", re.DOTALL).match(result).group(1)
+  APP_REGEXP = ".*?application: ([\w\-]+)"
+  return re.compile(APP_REGEXP, re.DOTALL).match(result).group(1)
 
 
 def Update(args):
@@ -177,8 +178,9 @@ def Update(args):
                         re.DOTALL).match(output).group(1)
   revision_file = os.path.join("templates", "live_revision.html")
   file = open(revision_file, "w")
-  file.write("This is Rietveld r" + revision)
+  file.write("This is <a class=\"novisit\" href=\"http://code.google.com/p/rietveld/\">Rietveld</a> r" + revision)
   file.close()
+  CreateRelease()
   appcfg_args = [APPCFG, "update", RELEASE] + args
   # Use os.system here because input might be required, and that doesn't work
   # through subprocess.Popen.
@@ -209,7 +211,6 @@ def main(argv=None):
   elif command == "release":
     CreateRelease()
   elif command in ("update", "upload"):
-    CreateRelease()
     Update(argv[2:])
   elif command == "update_indexes":
     RunShell([APPCFG, "update_indexes", "."], True)
