@@ -500,11 +500,34 @@ def all(request):
   if offset > limit:
     newest = '/all?limit=%d' % limit
 
+  _optimize_draft_counts(issues)
   return respond(request, 'all.html',
                  {'issues': issues, 'limit': limit,
                   'newest': newest, 'prev': prev, 'next': next,
                   'first': offset+1,
                   'last': len(issues) > 1 and offset+len(issues) or None})
+
+
+def _optimize_draft_counts(issues):
+  """Force _num_drafts to zero for issues that are known to have no drafts.
+
+  Args:
+    issues: list of model.Issue instances.
+
+  This inspects the drafts attribute of the current user's Account
+  instance, and forces the draft count to zero of those issues in the
+  list that aren't mentioned there.
+
+  If there is no current user, all draft counts are forced to 0.
+  """
+  account = models.Account.current_user_account
+  if account is None:
+    issue_ids = None
+  else:
+    issue_ids = account.drafts
+  for issue in issues:
+    if issue_ids is None or issue.key().id() not in issue_ids:
+      issue._num_drafts = 0
 
 
 @login_required
@@ -521,8 +544,9 @@ def starred(request):
   if not stars:
     issues = []
   else:
-    keys = [db.Key.from_path(models.Issue.kind(), id) for id in stars]
-    issues = [issue for issue in models.Issue.get(keys) if issue is not None]
+    issues = [issue for issue in models.Issue.get_by_id(stars) 
+                    if issue is not None]
+    _optimize_draft_counts(issues)
   return respond(request, 'starred.html', {'issues': issues})
 
 
@@ -547,6 +571,7 @@ def _show_user(request):
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
       'ORDER BY modified DESC',
       datetime.datetime.now() - datetime.timedelta(days=7), user))
+  _optimize_draft_counts(my_issues + review_issues + closed_issues)
   return respond(request, 'user.html',
                  {'email':user.email(),
                   'my_issues': my_issues,
@@ -1392,6 +1417,8 @@ def _inline_draft(request):
       assert comment.draft and comment.author == request.user
       comment.delete()  # Deletion
       comment = None
+      # Re-query the comment count.
+      models.Account.current_user_account.update_drafts(issue)
   else:
     if comment is None:
       comment = models.Comment(key_name=message_id, parent=patch)
@@ -1402,6 +1429,9 @@ def _inline_draft(request):
     comment.text = db.Text(text)
     comment.message_id = message_id
     comment.put()
+    # The actual count doesn't matter, just that there's at least one.
+    models.Account.current_user_account.update_drafts(issue, 1)
+
   query = models.Comment.gql(
       'WHERE patch = :patch AND lineno = :lineno AND left = :left '
       'ORDER BY date',
@@ -1538,6 +1568,9 @@ def publish(request):
 
   for obj in tbd:
     db.put(obj)
+
+  # There are now no comments here (modulo race conditions)
+  models.Account.current_user_account.update_drafts(issue, 0)
   return HttpResponseRedirect('/%s' % issue.key().id())
 
 
@@ -1903,7 +1936,7 @@ def user_popup(request):
 
 def _user_popup(request):
   user = request.user_to_show
-  popup_html = memcache.get("user_popup:" + user.email())
+  popup_html = memcache.get('user_popup:' + user.email())
   if popup_html is None:
     num_issues_created = db.GqlQuery(
       'SELECT * FROM Issue '
@@ -1920,5 +1953,5 @@ def _user_popup(request):
                              'num_issues_created': num_issues_created,
                              'num_issues_reviewed': num_issues_reviewed})
     # Use time expired cache because the number of issues will change over time
-    memcache.add("user_popup:" + user.email(), popup_html, 60)
+    memcache.add('user_popup:' + user.email(), popup_html, 60)
   return popup_html

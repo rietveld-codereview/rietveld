@@ -19,8 +19,8 @@ import logging
 import re
 
 # AppEngine imports
-from google.appengine.api import users
 from google.appengine.ext import db
+from google.appengine.api import memcache
 
 # Local imports
 import engine
@@ -125,13 +125,13 @@ class Issue(db.Model):
     The value is expensive to compute, so it is cached.
     """
     if self._num_drafts is None:
-      user = users.get_current_user()
-      if user is None:
+      account = Account.current_user_account
+      if account is None:
         self._num_drafts = 0
       else:
         query = gql(Comment,
             'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-            self, user)
+            self, account.user)
         self._num_drafts = query.count()
     return self._num_drafts
 
@@ -281,13 +281,13 @@ class Patch(db.Model):
     The value is expensive to compute, so it is cached.
     """
     if self._num_drafts is None:
-      user = users.get_current_user()
+      user = Account.current_user_account
       if user is None:
         self._num_drafts = 0
       else:
         query = gql(Comment,
                     'WHERE patch = :1 AND draft = TRUE AND author = :2',
-                    self, user)
+                    self, account.user)
         self._num_drafts = query.count()
     return self._num_drafts
 
@@ -542,3 +542,71 @@ class Account(db.Model):
         delta = -delta
       self.fresh = (delta.days == 0 and delta.seconds < 2)
     return not self.fresh
+
+  _drafts = None
+
+  @property
+  def drafts(self):
+    """A list of issue ids that have drafts by this user.
+
+    This is cached in memcache.
+    """
+    if self._drafts is None:
+      if self._initialize_drafts():
+        self._save_drafts()
+    return self._drafts
+
+  def update_drafts(self, issue, have_drafts=None):
+    """Update the user's draft status for this issue.
+
+    Args:
+      issue: an Issue instance.
+      have_drafts: optional bool forcing the draft status.  By default,
+          issue.num_drafts is inspected (which may query the datastore).
+
+    The Account is written to the datastore if necessary.
+    """
+    dirty = False
+    if self._drafts is None:
+      dirty = self._initialize_drafts()
+    id = issue.key().id()
+    if have_drafts is None:
+      have_drafts = bool(issue.num_drafts)  # Beware, this may do a query.
+    if have_drafts:
+      if id not in self._drafts:
+        self._drafts.append(id)
+        dirty = True
+    else:
+      if id in self._drafts:
+        self._drafts.remove(id)
+        dirty = True
+    if dirty:
+      self._save_drafts()
+
+  def _initialize_drafts(self):
+    """Initialize self._drafts from scratch.
+
+    This mostly exists as a schema conversion utility.
+
+    Returns:
+      True if the user should call self._save_drafts(), False if not.
+    """
+    drafts = memcache.get('user_drafts:' + self.email)
+    if drafts is not None:
+      self._drafts = drafts
+      logging.info('HIT: %s -> %s', self.email, self._drafts)
+      return False
+    # We're looking for the Issue key id.  The ancestry of comments goes:
+    # Issue -> PatchSet -> Patch -> Comment.
+    issue_ids = set(comment.key().parent().parent().parent().id()
+                    for comment in gql(Comment,
+                                       'WHERE author = :1 AND draft = TRUE',
+                                       self.user))
+    self._drafts = list(issue_ids)
+    logging.info('INITIALIZED: %s -> %s', self.email, self._drafts)
+    return True
+
+  def _save_drafts(self):
+    """Save self._drafts to memcache."""
+    logging.info('SAVING: %s -> %s', self.email, self._drafts)
+    memcache.set('user_drafts:' + self.email, self._drafts, 3600)
