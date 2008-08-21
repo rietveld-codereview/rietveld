@@ -728,7 +728,10 @@ class SubversionVCS(VersionControlSystem):
       else:
         # On Windows svn cat gives \r\n, and calling subprocess.Popen turns
         # them into \r\r\n, so use universal newlines to avoid the extra \r.
-        nl = True if sys.platform.startswith("win") else False
+        if sys.platform.startswith("win"):
+          nl = True
+        else:
+          nl = False
         content = RunShell(["svn", "cat", filename], universal_newlines=nl)
       keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
                            filename],
