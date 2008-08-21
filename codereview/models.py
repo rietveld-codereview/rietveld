@@ -594,7 +594,7 @@ class Account(db.Model):
     drafts = memcache.get('user_drafts:' + self.email)
     if drafts is not None:
       self._drafts = drafts
-      logging.info('HIT: %s -> %s', self.email, self._drafts)
+      ##logging.info('HIT: %s -> %s', self.email, self._drafts)
       return False
     # We're looking for the Issue key id.  The ancestry of comments goes:
     # Issue -> PatchSet -> Patch -> Comment.
@@ -603,10 +603,10 @@ class Account(db.Model):
                                        'WHERE author = :1 AND draft = TRUE',
                                        self.user))
     self._drafts = list(issue_ids)
-    logging.info('INITIALIZED: %s -> %s', self.email, self._drafts)
+    ##logging.info('INITIALIZED: %s -> %s', self.email, self._drafts)
     return True
 
   def _save_drafts(self):
     """Save self._drafts to memcache."""
-    logging.info('SAVING: %s -> %s', self.email, self._drafts)
+    ##logging.info('SAVING: %s -> %s', self.email, self._drafts)
     memcache.set('user_drafts:' + self.email, self._drafts, 3600)
