@@ -187,7 +187,7 @@ def RenderDiffTableRows(request, old_lines, chunks, patch,
   Args:
     request: Django Request object.
     old_lines: List of lines representing the original file.
-    chunks: List of chunks as returned by patching.ParsePatch().
+    chunks: List of chunks as returned by patching.ParsePatchToChunks().
     patch: A models.Patch instance.
     colwidth: Optional column width (default 80).
     debug: Optional debugging flag (default False).
@@ -345,6 +345,35 @@ def _GenerateTriples(old_lines, new_lines):
     yield tag, old_lines[i1:i2], new_lines[j1:j2]
 
 
+def _GetComments(request):
+  """Helper that returns comments for a patch.
+
+  Args:
+    request: Django Request object.
+
+  Returns:
+    A 2-tuple of (old, new) where old/new are dictionaries that holds comments
+      for that file, mapping from line number to a Comment entity.
+  """
+  old_dict = {}
+  new_dict = {}
+  # XXX GQL doesn't support OR yet...  Otherwise we'd be using
+  # .gql('WHERE patch = :1 AND (draft = FALSE OR author = :2) ORDER BY data',
+  #      patch, request.user)
+  for comment in models.Comment.gql('WHERE patch = :1 ORDER BY date',
+                                    request.patch):
+    if comment.draft and comment.author != request.user:
+      continue  # Only show your own drafts
+    comment.complete(request.patch)
+    if comment.left:
+      dct = old_dict
+    else:
+      dct = new_dict
+    dct.setdefault(comment.lineno, []).append(comment)
+  return old_dict, new_dict
+    
+  
+
 def _RenderDiffTableRows(request, old_lines, chunks, patch,
                          colwidth=80, debug=False):
   """Internal version of RenderDiffTableRows().
@@ -358,19 +387,7 @@ def _RenderDiffTableRows(request, old_lines, chunks, patch,
   old_dict = {}
   new_dict = {}
   if patch:
-    # XXX GQL doesn't support OR yet...  Otherwise we'd be using
-    # .gql('WHERE patch = :1 AND (draft = FALSE OR author = :2) ORDER BY data',
-    #      patch, request.user)
-    for comment in models.Comment.gql('WHERE patch = :1 ORDER BY date', patch):
-      if comment.draft and comment.author != request.user:
-        continue  # Only show your own drafts
-      comment.complete(patch)
-      if comment.left:
-        dct = old_dict
-      else:
-        dct = new_dict
-      lst = dct.setdefault(comment.lineno, [])
-      lst.append(comment)
+    old_dict, new_dict = _GetComments(request)
   old_max, new_max = _ComputeLineCounts(old_lines, chunks)
   return _TableRowGenerator(patch, old_dict, old_max, 'old',
                             patch, new_dict, new_max, 'new',
@@ -676,12 +693,60 @@ def _RenderInlineComments(line_valid, lineno, data, user,
   return ''.join(comments)
 
 
+def RenderUnifiedTableRows(request, parsed_lines):
+  """Render the HTML table rows for a unified diff for a patch.
+
+  Args:
+    request: Django Request object.
+    parsed_lines: List of tuples for each line that contain the line number,
+      if they exist, for the old and new file.
+
+  Returns:
+    A list of html table rows.
+  """
+  old_dict, new_dict = _GetComments(request)
+
+  rows = []
+  for old_line_no, new_line_no, line_text in parsed_lines:
+    row1_id = row2_id = ''
+    # When a line is unchanged (i.e. both old_line_no and new_line_no aren't 0)
+    # pick the old column line numbers when adding a comment.
+    if old_line_no:
+      row1_id = 'id="oldcode%d"' % old_line_no
+      row2_id = 'id="old-line-%d"' % old_line_no
+    elif new_line_no:
+      row1_id = 'id="newcode%d"' % new_line_no
+      row2_id = 'id="new-line-%d"' % new_line_no
+    rows.append('<tr><td class="udiff" %s>%s</td></tr>' %
+                (row1_id, cgi.escape(line_text)))
+
+    frags = []
+    if old_line_no in old_dict or new_line_no in new_dict:
+      frags.append('<tr class="inline-comments" name="hook">')
+      if old_line_no in old_dict:
+        dct = old_dict
+        line_no = old_line_no
+        snapshot = 'old'
+      else:
+        dct = new_dict
+        line_no = new_line_no
+        snapshot = 'new'
+      frags.append(_RenderInlineComments(True, line_no, dct, request.user,
+                   request.patch, snapshot, snapshot))
+    else:
+      frags.append('<tr class="inline-comments">')
+      frags.append('<td ' + row2_id +'></td>')
+    frags.append('</tr>')
+    rows.append(''.join(frags))
+  return rows
+
+
 def _ComputeLineCounts(old_lines, chunks):
   """Compute the length of the old and new sides of a diff.
 
   Args:
     old_lines: List of lines representing the original file.
-    chunks: List of chunks as returned by patching.ParsePatch().
+    chunks: List of chunks as returned by patching.ParsePatchToChunks().
 
   Returns:
     A tuple (old_len, new_len) representing len(old_lines) and

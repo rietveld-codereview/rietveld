@@ -551,10 +551,12 @@ class VersionControlSystem(object):
     [patches.setdefault(v, k) for k, v in patch_list]
     for filename in patches.keys():
       content, status = self.GetBaseFile(filename)
+      no_base_file = False
       if len(content) > MAX_UPLOAD_SIZE:
         print ("Not uploading the base file for " + filename +
                " because the file is too large.")
-        continue
+        no_base_file = True
+        content = ""
       checksum = md5.new(content).hexdigest()
       parts = []
       while content:
@@ -574,6 +576,8 @@ class VersionControlSystem(object):
                        ("checksum", checksum),
                        ("current_part", str(part)),
                        ("current_checksum", current_checksum),]
+        if no_base_file:
+          form_fields.append(("no_base_file", "1"))
         if options.email:
           form_fields.append(("user", options.email))
         ctype, body = EncodeMultipartFormData(form_fields,

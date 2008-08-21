@@ -200,6 +200,7 @@ class Patch(db.Model):
   text = db.TextProperty()
   content = db.ReferenceProperty(Content)
   patched_content = db.ReferenceProperty(Content, collection_name='patch2_set')
+  no_base_file = db.BooleanProperty(required=False, default=False)
 
   _lines = None
 
@@ -344,7 +345,7 @@ class Patch(db.Model):
 
     old_lines = self.get_content().text.splitlines(True)
     logging.info('Creating patched_content for %s', self.filename)
-    chunks = patching.ParsePatch(self.lines, self.filename)
+    chunks = patching.ParsePatchToChunks(self.lines, self.filename)
     new_lines = []
     for tag, old, new in patching.PatchChunks(old_lines, chunks):
       new_lines.extend(new)

@@ -192,6 +192,7 @@ class UploadContentForm(forms.Form):
   checksum = forms.CharField(max_length=32)
   current_part = forms.IntegerField()
   current_checksum = forms.CharField(max_length=32)
+  no_base_file = forms.BooleanField(required=False)
 
   def clean(self):
     # Check presence of 'data'. We cannot use FileField because
@@ -676,6 +677,8 @@ def upload_content(request):
                         content_type='text/plain')
   patch = request.patch
   patch.status = form.cleaned_data['status']
+  if form.cleaned_data['no_base_file']:
+    patch.no_base_file = True
   patch.put()
   try:
     content = patch.get_partial_content()
@@ -1142,10 +1145,33 @@ def description(request):
 @patch_required
 def patch(request):
   """/<issue>/patch/<patchset>/<patch> - View a raw patch."""
+  return patch_helper(request)
+
+
+def patch_helper(request, nav_type='patch'):
+  """Returns a unified diff.
+  
+  Args:
+    request: Django Request object.
+    nav_type: the navigation used in the url (i.e. patch/diff/diff2).  Normally
+      the user looks at either unified or side-by-side diffs at one time, going
+      through all the files in the same mode.  However, if side-by-side is not
+      available for some files, we temporarly switch them to unified view, then
+      switch them back when we can.  This way they don't miss any files.
+
+  Returns:
+    Whatever respond() returns.
+  """
   _add_next_prev(request.patchset, request.patch)
+  request.patch.nav_type = nav_type
+  parsed_lines = patching.ParsePatchToLines(request.patch.lines)
+  if parsed_lines is None:
+    return HttpResponseNotFound('Can\'t parse the patch')
+  rows = engine.RenderUnifiedTableRows(request, parsed_lines)
   return respond(request, 'patch.html',
                  {'patch': request.patch,
                   'patchset': request.patchset,
+                  'rows': rows,
                   'issue': request.issue})
 
 
@@ -1178,7 +1204,12 @@ def _get_context_for_user(request):
 
 @patch_required
 def diff(request):
-  """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff."""
+  """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff"""
+  if request.patch.no_base_file:
+    # Can't show side-by-side diff since we don't have the base file.  Show the
+    # unified diff instead.
+    return patch_helper(request, 'diff')
+
   patchset = request.patchset
   patch = request.patch
 
@@ -1196,7 +1227,7 @@ def diff(request):
 
 def _get_diff_table_rows(request, patch, context):
   """Helper function that returns rendered rows for a patch"""
-  chunks = patching.ParsePatch(patch.lines, patch.filename)
+  chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
     return HttpResponseNotFound('Can\'t parse the patch')
 
@@ -1638,17 +1669,26 @@ def _get_draft_details(request, comments):
                                              c.left and "left" or "right"))
       last_key = (c.patch.filename, c.left)
       patch = c.patch
-      if c.left:
-        old_lines = patch.get_content().text.splitlines(True)
-        linecache[last_key] = old_lines
+      if patch.no_base_file:
+        linecache[last_key] = patching.ParsePatchToLines(patch.lines)
       else:
-        new_lines = patch.get_patched_content().text.splitlines(True)
-        linecache[last_key] = new_lines
+        if c.left:
+          old_lines = patch.get_content().text.splitlines(True)
+          linecache[last_key] = old_lines
+        else:
+          new_lines = patch.get_patched_content().text.splitlines(True)
+          linecache[last_key] = new_lines
     file_lines = linecache.get(last_key, ())
-    if 1 <= c.lineno <= len(file_lines):
-      context = file_lines[c.lineno - 1].strip()
+    context = ''
+    if patch.no_base_file:
+      for old_line_no, new_line_no, line_text in file_lines:
+        if ((c.lineno == old_line_no and c.left) or
+            (c.lineno == new_line_no and not c.left)):
+          context = line_text.strip()
+          break
     else:
-      context = ''
+      if 1 <= c.lineno <= len(file_lines):
+        context = file_lines[c.lineno - 1].strip()
     url = request.build_absolute_uri('/%d/diff/%d/%d#%scode%d' %
                                      (request.issue.key().id(),
                                       c.patch.patchset.key().id(),

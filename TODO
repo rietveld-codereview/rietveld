@@ -47,7 +47,6 @@ Commenting
 
 Add stars
 Add non-inline comments per file, per patchset, per issue
-Support inline comments in patch (unified diff) view
 Keyboard shortcut for entering a comment at the blue line
     (isn't this already in the JS code?)
 
@@ -75,4 +74,3 @@ Software Engineering
 --------------------
 
 Unittests
-Make the deployment procedure work on Windows
