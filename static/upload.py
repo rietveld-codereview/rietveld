@@ -493,12 +493,19 @@ def GetContentType(filename):
   return mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
 
-def RunShell(command, args=(), silent_ok=False):
-  command = "%s %s" % (command, " ".join(args))
+# Use a shell for subcommands on Windows to get a PATH search.
+use_shell = sys.platform.startswith("win")
+
+
+def RunShell(command, silent_ok=False, universal_newlines=False):
   logging.info("Running %s", command)
-  stream = os.popen(command, "r")
-  data = stream.read()
-  if stream.close():
+  p = subprocess.Popen(command, stdout=subprocess.PIPE,
+                       stderr=subprocess.STDOUT, shell=use_shell,
+                       universal_newlines=universal_newlines)
+  data = p.stdout.read()
+  p.wait()
+  p.stdout.close()
+  if p.returncode:
     ErrorExit("Got error status from %s" % command)
   if not silent_ok and not data:
     ErrorExit("No output from %s" % command)
@@ -599,7 +606,7 @@ class SubversionVCS(VersionControlSystem):
       required: If true, exits if the url can't be guessed, otherwise None is
         returned.
     """
-    info = RunShell("svn info")
+    info = RunShell(["svn", "info"])
     for line in info.splitlines():
       words = line.split()
       if len(words) == 2 and words[0] == "URL:":
@@ -637,10 +644,11 @@ class SubversionVCS(VersionControlSystem):
     return None
 
   def GenerateDiff(self, args):
-    cmd = "svn diff"
+    cmd = ["svn", "diff"]
     if not sys.platform.startswith("win"):
-      cmd += " --diff-cmd=diff"
-    data = RunShell(cmd, args)
+      cmd.append("--diff-cmd=diff")
+    cmd.extend(args)
+    data = RunShell(cmd)
     count = 0
     for line in data.splitlines():
       if line.startswith("Index:") or line.startswith("Property changes on:"):
@@ -681,7 +689,7 @@ class SubversionVCS(VersionControlSystem):
     return re.sub(r"\$(%s):(:?)([^\$]+)\$" % '|'.join(keywords), repl, content)
 
   def GetUnknownFiles(self):
-    status = RunShell("svn status --ignore-externals", silent_ok=True)
+    status = RunShell(["svn", "status", "--ignore-externals"], silent_ok=True)
     unknown_files = []
     for line in status.split("\n"):
       if line and line[0] == "?":
@@ -689,7 +697,7 @@ class SubversionVCS(VersionControlSystem):
     return unknown_files
 
   def GetBaseFile(self, filename):
-    status = RunShell("svn status --ignore-externals", [filename])
+    status = RunShell(["svn", "status", "--ignore-externals", filename])
     if not status:
       StatusUpdate("svn status returned no output for %s" % filename)
       sys.exit(False)
@@ -712,13 +720,18 @@ class SubversionVCS(VersionControlSystem):
       content = ""
     elif (status[0] in ("M", "D", "R") or
           (status[0] == "A" and status[3] == "+")):
-      mimetype = RunShell("svn -rBASE propget svn:mime-type", [filename],
+      mimetype = RunShell(["svn", "-rBASE", "propget", "svn:mime-type",
+                           filename],
                           silent_ok=True)
       if mimetype.startswith("application/octet-stream"):
         content = ""
       else:
-        content = RunShell("svn cat", [filename])
-      keywords = RunShell("svn -rBASE propget svn:keywords", [filename],
+        # On Windows svn cat gives \r\n, and calling subprocess.Popen turns
+        # them into \r\r\n, so use universal newlines to avoid the extra \r.
+        nl = True if sys.platform.startswith("win") else False
+        content = RunShell(["svn", "cat", filename], universal_newlines=nl)
+      keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
+                           filename],
                           silent_ok=True)
       if keywords:
         content = self._CollapseKeywords(content, keywords)

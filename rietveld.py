@@ -53,10 +53,8 @@ use_shell = sys.platform.startswith("win")
 
 def RunShell(command, print_output=False):
   """Executes a command and returns the output."""
-  # Use a shell for subcommands to get a PATH search.
   p = subprocess.Popen(command, stdout=subprocess.PIPE,
-                       stderr=subprocess.STDOUT, shell=use_shell,
-                       universal_newlines=True)
+                       stderr=subprocess.STDOUT, shell=use_shell)
   output = ""
   while True:
     line = p.stdout.readline()
