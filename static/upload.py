@@ -908,7 +908,7 @@ def RealMain(argv, data=None):
     logging.info("Enabled upload of base file")
   if not options.assume_yes:
     vcs.CheckForUnknownFiles()
-  if not data:
+  if data is None:
     data = vcs.GenerateDiff(args)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
