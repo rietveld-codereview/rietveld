@@ -104,7 +104,7 @@ def ParseRevision(lines):
   return 0
 
 
-_NO_NEWLINE_MESSAGE = " No newline at end of file\n"
+_NO_NEWLINE_MESSAGE = "\\ No newline at end of file"
 
 
 def ParsePatchToChunks(lines, name="<patch>"):
@@ -182,7 +182,7 @@ def ParsePatchToChunks(lines, name="<patch>"):
       tag, rest = line[0], line[1:]
       if tag in (" ", "-", "+"):
         raw_chunk.append((tag, rest))
-      elif tag == "\\" and rest == _NO_NEWLINE_MESSAGE:
+      elif line.startswith(_NO_NEWLINE_MESSAGE):
         # TODO(guido): need to check that no more lines follow for this file
         if raw_chunk:
           last_tag, last_rest = raw_chunk[-1]
@@ -242,17 +242,19 @@ def ParsePatchToLines(lines):
       old_ln = int(match.groups()[0])
       new_ln = int(match.groups()[2])
     else:
-      if line[0] not in ("+", "-", " "):
-        logging.warn("ParsePatchToLines unknown line %s", line)
-        return None
       if line[0] == "-":
         result.append((old_ln, 0, line))
         old_ln += 1
       elif line[0] == "+":
         result.append((0, new_ln, line))
         new_ln += 1
-      else:
+      elif line[0] == " ":
         result.append((old_ln, new_ln, line))
         old_ln += 1
         new_ln += 1
+      elif line.startswith(_NO_NEWLINE_MESSAGE):
+        continue
+      else:
+        logging.warn("ParsePatchToLines unknown line %s", line)
+        return None
   return result
