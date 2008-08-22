@@ -173,12 +173,8 @@ class Content(db.Model):
 
   # parent => Patch
   text = db.TextProperty()
-  partial_upload = db.BlobProperty()
   is_uploaded = db.BooleanProperty(default=False)
-  is_complete = db.BooleanProperty(default=True)
   is_bad = db.BooleanProperty(default=False)
-  num_parts = db.IntegerProperty()
-  last_part = db.IntegerProperty()
 
   @property
   def lines(self):
@@ -309,12 +305,12 @@ class Patch(db.Model):
           msg = 'Bad content. Try to upload again.'
           logging.warn('Patch.get_content: %s', msg)
           raise engine.FetchError(msg)
-        if self.content.is_complete:
-          return self.content
-        else:
-          msg = 'Upload in progress.'
-          logging.warn('Patch.get_content: %s', msg)
+        if self.content.is_uploaded and self.content.text == None:
+          msg = 'Upload in progress.'	
+          logging.warn('Patch.get_content: %s', msg)	
           raise engine.FetchError(msg)
+        else:
+          return self.content
     except db.Error:
       # This may happen when a Content entity was deleted behind our back.
       self.content = None
@@ -355,21 +351,6 @@ class Patch(db.Model):
     self.patched_content = patched_content
     self.put()
     return patched_content
-
-  def get_partial_content(self):
-    """Get self.content to append uploaded parts.
-
-    Returns:
-      a Context instance.
-
-    Raises:
-      engine.FetchError: If there is a problem with the content.
-    """
-    if not self.content:
-      raise engine.FetchError('Content not initialized.')
-    if self.content.is_complete:
-      raise engine.FetchError('Content is already complete.')
-    return self.content
 
 
 class Comment(db.Model):

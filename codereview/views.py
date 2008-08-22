@@ -188,10 +188,7 @@ class UploadForm(forms.Form):
 class UploadContentForm(forms.Form):
   filename = forms.CharField(max_length=255)
   status = forms.CharField(required=False, max_length=20)
-  num_parts = forms.IntegerField()
   checksum = forms.CharField(max_length=32)
-  current_part = forms.IntegerField()
-  current_checksum = forms.CharField(max_length=32)
   no_base_file = forms.BooleanField(required=False)
 
   def clean(self):
@@ -655,8 +652,7 @@ def upload(request):
         issue.put()
         
         for patch in patchset.patch_set:
-          content = models.Content(text=db.Text(''), is_uploaded=True,
-                                   is_complete=False, parent=patch)
+          content = models.Content(is_uploaded=True, parent=patch)
           content.put()
           patch.content = content
           patch.put()
@@ -680,10 +676,7 @@ def upload_content(request):
   if form.cleaned_data['no_base_file']:
     patch.no_base_file = True
   patch.put()
-  try:
-    content = patch.get_partial_content()
-  except engine.FetchError, err:
-    return HttpResponse('ERROR: %s' % err, content_type='text/plain')
+  content = patch.content
   if request.user is None:
     if IS_DEV:
       request.user = users.User(request.POST.get('user', 'test@example.com'))
@@ -692,42 +685,14 @@ def upload_content(request):
   if request.user != request.issue.owner:
     return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                         (request.user, request.issue.key().id()))
-  current_part = form.cleaned_data['current_part']
-  # Reset Content instance when we've got part 0. Enables retry from upload.py.
-  if current_part == 0:
-    content.num_parts = form.cleaned_data['num_parts']
-    content.last_part = -1
-    content.is_bad = False
-    content.partial_upload = db.Blob()
-  if current_part != content.last_part+1:
-    msg = ('ERROR: Expected part %d of %d. '
-           'Got part %d instead.' % (content.last_part+2, content.num_parts,
-                                     current_part+1))
-    return HttpResponse(msg, content_type='text/plain')
+
   data = form.get_uploaded_content()
-  if not md5.new(data).hexdigest() == form.cleaned_data['current_checksum']:
+  checksum = md5.new(data).hexdigest()
+  if checksum != request.POST.get('checksum'):
     content.is_bad = True
-    content.partial_upload = db.Blob()
-    content.last_part = -1
     content.put()
     return HttpResponse('ERROR: Checksum mismatch.', content_type='text/plain')
-  if not content.partial_upload:
-    content.partial_upload = data
-  else:
-    content.partial_upload += data
-  content.last_part = current_part
-  if current_part+1 == content.num_parts:
-    content.is_complete = True
-    content.text = engine.ToText(content.partial_upload)
-    checksum = md5.new(content.partial_upload).hexdigest()
-    content.partial_upload = db.Blob()
-    if checksum != request.POST.get('checksum'):
-      content.is_bad = True
-      content.text = db.Text('')
-      content.last_part = -1
-      content.put()
-      return HttpResponse('ERROR: Checksum mismatch.',
-                          content_type='text/plain')
+  content.text = engine.ToText(data)
   content.put()
   return HttpResponse('OK', content_type='text/plain')
 
@@ -762,8 +727,7 @@ def upload_patch(request):
                        filename=form.cleaned_data['filename'], parent=patchset)
   patch.put()
   if form.cleaned_data.get('content_upload'):
-    content = models.Content(text=db.Text(''), is_uploaded=True,
-                             is_complete=False, parent=patch)
+    content = models.Content(is_uploaded=True, parent=patch)
     content.put()
     patch.content = content
     patch.put()
@@ -1242,7 +1206,7 @@ def _get_diff_table_rows(request, patch, context):
   if rows and rows[-1] is None:
     del rows[-1]
     # Get rid of content, which may be bad
-    if content.is_uploaded:
+    if content.is_uploaded and content.text != None:
       # Don't delete uploaded content, otherwise get_content()
       # will fetch it.
       content.is_bad = True

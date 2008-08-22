@@ -565,35 +565,23 @@ class VersionControlSystem(object):
         no_base_file = True
         content = ""
       checksum = md5.new(content).hexdigest()
-      parts = []
-      while content:
-        parts.append(content[:800000])
-        content = content[800000:]
-      if not parts:
-        parts = [""] # empty file
-      for part, data in enumerate(parts):
-        if options.verbose > 0:
-          print "Uploading %s (%d/%d)" % (filename, part+1, len(parts))
-        url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset),
-                                            int(patches.get(filename)))
-        current_checksum = md5.new(data).hexdigest()
-        form_fields = [("filename", filename),
-                       ("status", status),
-                       ("num_parts", str(len(parts))),
-                       ("checksum", checksum),
-                       ("current_part", str(part)),
-                       ("current_checksum", current_checksum),]
-        if no_base_file:
-          form_fields.append(("no_base_file", "1"))
-        if options.email:
-          form_fields.append(("user", options.email))
-        ctype, body = EncodeMultipartFormData(form_fields,
-                                              [("data", filename, data)])
-        response_body = rpc_server.Send(url, body,
-                                        content_type=ctype)
-        if not response_body.startswith("OK"):
-          StatusUpdate("  --> %s" % response_body)
-          sys.exit(False)
+      if options.verbose > 0:
+        print "Uploading %s" % filename
+      url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset),
+                                          int(patches.get(filename)))
+      form_fields = [("filename", filename),
+                     ("status", status),
+                     ("checksum", checksum),]
+      if no_base_file:
+        form_fields.append(("no_base_file", "1"))
+      if options.email:
+        form_fields.append(("user", options.email))
+      ctype, body = EncodeMultipartFormData(form_fields,
+                                            [("data", filename, content)])
+      response_body = rpc_server.Send(url, body, content_type=ctype)
+      if not response_body.startswith("OK"):
+        StatusUpdate("  --> %s" % response_body)
+        sys.exit(False)
 
 
 class SubversionVCS(VersionControlSystem):
