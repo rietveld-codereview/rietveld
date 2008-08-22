@@ -84,7 +84,7 @@ def Help():
 
 def CreateRelease():
   """ Creates a "release" subdirectory.
-  
+
   This is a subdirectory containing a bunch of symlinks, from which the app can
   be updated.  The main reason for this is to import Django from a zipfile,
   which saves dramatically in upload time: statting and computing the SHA1 for
@@ -94,7 +94,7 @@ def CreateRelease():
 
   def GetDjangoFiles():
     """Return a list of Django files to send to the server.
-    
+
     We prune:
      - .svn subdirectories for obvious reasons.
      - the other directories are huge and unneeded.
@@ -176,7 +176,9 @@ def Update(args):
                         re.DOTALL).match(output).group(1)
   revision_file = os.path.join("templates", "live_revision.html")
   file = open(revision_file, "w")
-  file.write("This is <a class=\"novisit\" href=\"http://code.google.com/p/rietveld/\">Rietveld</a> r" + revision)
+  file.write('This is <a class="novisit" '
+             'href="http://code.google.com/p/rietveld/">Rietveld</a> r' +
+             revision)
   file.close()
   CreateRelease()
   appcfg_args = [APPCFG, "update", RELEASE] + args

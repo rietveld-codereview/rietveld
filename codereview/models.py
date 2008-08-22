@@ -220,7 +220,7 @@ class Patch(db.Model):
   @property
   def property_changes(self):
     """The property changes split into lines.
-    
+
     The value is cached.
     """
     if self._property_changes != None:
@@ -306,8 +306,8 @@ class Patch(db.Model):
           logging.warn('Patch.get_content: %s', msg)
           raise engine.FetchError(msg)
         if self.content.is_uploaded and self.content.text == None:
-          msg = 'Upload in progress.'	
-          logging.warn('Patch.get_content: %s', msg)	
+          msg = 'Upload in progress.'
+          logging.warn('Patch.get_content: %s', msg)
           raise engine.FetchError(msg)
         else:
           return self.content

@@ -58,7 +58,7 @@ def SplitPatch(data):
     if line.startswith('Index:'):
       unused, new_filename = line.split(':', 1)
       new_filename = new_filename.strip()
-    elif line.startswith('Property changes on:'):    
+    elif line.startswith('Property changes on:'):
       unused, temp_filename = line.split(':', 1)
       # When a file is modified, paths use '/' between directories, however
       # when a property is modified '\' is used on Windows.  Make them the same
@@ -67,7 +67,7 @@ def SplitPatch(data):
       if temp_filename != filename:
         # File has property changes but no modifications, create a new diff.
         new_filename = temp_filename
-    if new_filename:      
+    if new_filename:
       if filename and diff:
         patches.append((filename, ''.join(diff)))
       filename = new_filename
@@ -371,8 +371,7 @@ def _GetComments(request):
       dct = new_dict
     dct.setdefault(comment.lineno, []).append(comment)
   return old_dict, new_dict
-    
-  
+
 
 def _RenderDiffTableRows(request, old_lines, chunks, patch,
                          colwidth=80, debug=False):

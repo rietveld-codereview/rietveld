@@ -360,7 +360,8 @@ def login_required(func):
   """Decorator that redirects to the login page if you're not logged in."""
   def login_wrapper(request, *args, **kwds):
     if request.user is None:
-      return HttpResponseRedirect(users.create_login_url(request.get_full_path()))
+      return HttpResponseRedirect(
+          users.create_login_url(request.get_full_path()))
     return func(request, *args, **kwds)
   return login_wrapper
 
@@ -369,7 +370,8 @@ def admin_required(func):
   def admin_wrapper(request, *args, **kwds):
     """Decorator that insists that you're logged in as administratior."""
     if request.user is None:
-      return HttpResponseRedirect(users.create_login_url(request.get_full_path()))
+      return HttpResponseRedirect(
+          users.create_login_url(request.get_full_path()))
     if not request.user_is_admin:
       return HttpResponseForbidden('You must be admin in for this function')
     return func(request, *args, **kwds)
@@ -542,7 +544,7 @@ def starred(request):
   if not stars:
     issues = []
   else:
-    issues = [issue for issue in models.Issue.get_by_id(stars) 
+    issues = [issue for issue in models.Issue.get_by_id(stars)
                     if issue is not None]
     _optimize_draft_counts(issues)
   return respond(request, 'starred.html', {'issues': issues})
@@ -646,11 +648,11 @@ def upload(request):
         form.cleaned_data.get('separate_patches')):
       # Extend the response message: 2nd line is patchset id.
       msg +="\n%d" % patchset.key().id()
-      if form.cleaned_data.get('content_upload'): 
+      if form.cleaned_data.get('content_upload'):
         # Extend the response: additional lines are the expected filenames.
         issue.local_base = True
         issue.put()
-        
+
         for patch in patchset.patch_set:
           content = models.Content(is_uploaded=True, parent=patch)
           content.put()
@@ -802,17 +804,17 @@ def _make_new(request, form):
 
 def _get_data_url(form):
   """Helper for _make_new() above and add() below.
-  
+
   Args:
     form: Django form object.
-  
+
   Returns:
     3-tuple (data, url, separate_patches).
       data: the diff content, if available.
       url: the url of the diff, if given.
       separate_patches: True iff the patches will be uploaded separately for
         each file.
-  
+
   """
   cleaned_data = form.cleaned_data
 
@@ -1114,7 +1116,7 @@ def patch(request):
 
 def patch_helper(request, nav_type='patch'):
   """Returns a unified diff.
-  
+
   Args:
     request: Django Request object.
     nav_type: the navigation used in the url (i.e. patch/diff/diff2).  Normally
@@ -1482,7 +1484,7 @@ def _get_affected_files(issue):
 
 def _get_mail_template(issue):
   """Helper to return the template and context for an email.
-  
+
   If this is the first email for this issue, a template that lists the
   reviewers, description and files is used.
   """
