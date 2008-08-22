@@ -9,6 +9,10 @@ handlers:
   static_files: static/\1
   upload: static/(robots.txt|favicon.ico)
 
+- url: /google7db36eb2cc527940.html
+  static_files: static/robots.txt
+  upload: static/robots.txt
+
 - url: /static
   static_dir: static
 
