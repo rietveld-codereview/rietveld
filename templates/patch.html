@@ -99,24 +99,35 @@ login_warned = false;
 </div>
 <div style="clear: both;"></div>
 
-<div class="code" style="margin-top: .8em; display: table; margin-left: auto; margin-right: auto;">
+<div class="code" style="margin-top: 1.3em; display: table; margin-left: auto; margin-right: auto;">
+
 <div class="codenav">
 {%comment%}
 For some reason,
-{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}
+{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}
 doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {%endcomment%}
 {%if patch.prev%}
-<a id="prevFile"
-   href="/{{issue.key.id}}/{{patch.nav_type}}/{{patchset.key.id}}/{{patch.prev.key.id}}">
+<a id="prevFile" 
+   href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
-   href="/{{issue.key.id}}/{{patch.nav_type}}/{{patchset.key.id}}/{{patch.next.key.id}}">
+   href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.next.key.id%}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
+|
+<a href="javascript:M_expandAllInlineComments()">Expand Comments</a> ('e')
+|
+<a href="javascript:M_collapseAllInlineComments()">Collapse Comments</a> ('c')
+|
+<a id="show-all-inline"
+   style="display:none"
+   href="javascript:M_showAllInlineComments()">Show Comments</a>
+<a id="hide-all-inline"
+   href="javascript:M_hideAllInlineComments()">Hide Comments</a> ('s')
 </div>
 
 <div style="position:relative" id="table-top">
@@ -132,13 +143,13 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 <div class="codenav">
 {%if patch.prev%}
 <a id="prevFile"
-   href="/{{issue.key.id}}/{{patch.nav_type}}/{{patchset.key.id}}/{{patch.prev.key.id}}">
+   href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
-   href="/{{issue.key.id}}/{{patch.nav_type}}/{{patchset.key.id}}/{{patch.next.key.id}}">
+   href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.next.key.id%}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 </div>
