@@ -254,7 +254,6 @@ def ParsePatchToLines(lines):
         new_ln += 1
       elif line.startswith(_NO_NEWLINE_MESSAGE):
         continue
-      else:
-        logging.warn("ParsePatchToLines unknown line %s", line)
-        return None
+      else:  # Something else, could be property changes etc.
+        result.append((0, 0, line))
   return result
