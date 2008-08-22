@@ -102,20 +102,15 @@ login_warned = false;
 <div class="code" style="margin-top: 1.3em; display: table; margin-left: auto; margin-right: auto;">
 
 <div class="codenav">
-{%comment%}
-For some reason,
-{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}
-doesn't work.  Go figure.  Bleah.  So use absolute URLs.
-{%endcomment%}
 {%if patch.prev%}
 <a id="prevFile" 
-   href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}">
+   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
-   href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.next.key.id%}">
+   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |
@@ -143,13 +138,13 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 <div class="codenav">
 {%if patch.prev%}
 <a id="prevFile"
-   href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}">
+   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
-   href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.next.key.id%}">
+   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 </div>
