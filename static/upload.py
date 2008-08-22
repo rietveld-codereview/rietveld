@@ -755,7 +755,7 @@ class GitVCS(VersionControlSystem):
     # This is more complicated than svn's GenerateDiff because we must convert
     # the diff output to include an svn-style "Index:" line as well as record
     # the hashes of the base files, so we can upload them along with our diff.
-    gitdiff = RunShell("git diff", ["--full-index"] + extra_args)
+    gitdiff = RunShell(["git", "diff", "--full-index"] + extra_args)
     svndiff = []
     filecount = 0
     filename = None
@@ -778,7 +778,7 @@ class GitVCS(VersionControlSystem):
     return "".join(svndiff)
 
   def GetUnknownFiles(self):
-    status = RunShell("git ls-files --others", silent_ok=True)
+    status = RunShell(["git", "ls-files", "--others"], silent_ok=True)
     return status.splitlines()
 
   def GetBaseFile(self, filename):
@@ -786,7 +786,7 @@ class GitVCS(VersionControlSystem):
     if hash == "0" * 40:  # All-zero hash indicates no base file.
       return ("", "A")
     else:
-      return (RunShell("git show", [hash]), "M")
+      return (RunShell(["git", "show", hash]), "M")
 
 
 # NOTE: this function is duplicated in engine.py, keep them in sync.
