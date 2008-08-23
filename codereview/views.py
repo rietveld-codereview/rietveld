@@ -609,6 +609,10 @@ def upload(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpResponse('Login required', status=401)
+  # Check against old upload.py usage.
+  if request.POST.get('num_parts') > 1:
+    return HttpResponse('Upload.py is too old, get the latest version.',
+                        content_type='text/plain')
   form = UploadForm(request.POST, request.FILES)
   issue = None
   patchset = None
