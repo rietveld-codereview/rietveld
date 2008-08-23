@@ -653,12 +653,17 @@ def upload(request):
         issue.local_base = True
         issue.put()
 
-        for patch in patchset.patch_set:
+        new_content_entities = []
+        patches = list(patchset.patch_set)
+        for patch in patches:
           content = models.Content(is_uploaded=True, parent=patch)
-          content.put()
-          patch.content = content
-          patch.put()
+          new_content_entities.append(content)
+        db.put(new_content_entities)
+
+        for patch, content_entity in zip(patches, new_content_entities):
+          patch.content = content_entity
           msg += "\n%d %s" % (patch.key().id(), patch.filename)
+        db.put(patches)
   return HttpResponse(msg, content_type='text/plain')
 
 
