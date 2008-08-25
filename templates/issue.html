@@ -103,24 +103,17 @@
               </a>
               {%endif%}
             </td>
-            <td>{%spaceless%}
-              {%if not patch.no_base_file%}
-                {%for other in patchsets%}
-                  {%ifnotequal other patchset%}
-                    {%for opatch in other.patches%}
-                      {%if not opatch.no_base_file%}
-                        {%ifequal opatch.filename patch.filename%}
-                          {%ifnotequal opatch.text patch.text%}
-                            <a href="/{{issue.key.id}}/diff2/{{other.key.id}}:{{patchset.key.id}}/{{patch.key.id}}"
-                               title="Delta from patch set {{forloop.parentloop.counter}}">{{forloop.parentloop.counter}}</a>&nbsp;
-                          {%endifnotequal%}
-                        {%endifequal%}
-                      {%endif%}
-                    {%endfor%}
-                  {%endifnotequal%}
-                {%endfor%}
-              {%endif%}
-            {%endspaceless%}</td>
+            <td>
+            {%comment%}
+              The lines below are put together to avoid too much space.
+              %spaceless% only removes whitespace between html tags, but not
+              between django statements.
+            {%endcomment%}            
+              {%if not patch.no_base_file%}{%for other in patchsets%}{%ifnotequal other patchset%}{%for opatch in other.patches%}{%if not opatch.no_base_file%}{%ifequal opatch.filename patch.filename%}{%ifnotequal opatch.text patch.text%}
+                <a href="/{{issue.key.id}}/diff2/{{other.key.id}}:{{patchset.key.id}}/{{patch.key.id}}"
+                   title="Delta from patch set {{forloop.parentloop.counter}}">{{forloop.parentloop.counter}}</a>
+              {%endifnotequal%}{%endifequal%}{%endif%}{%endfor%}{%endifnotequal%}{%endfor%}{%endif%}
+            </td>
             <td>{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
             <td>{{patch.num_lines}} line{{patch.num_lines|pluralize}}</td>
             <td>
