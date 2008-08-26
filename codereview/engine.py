@@ -133,8 +133,7 @@ def FetchBase(base, patch):
     msg = 'Error fetching %s: HTTP status %s' % (url, result.status_code)
     logging.warn('FetchBase: %s', msg)
     raise FetchError(msg)
-  return models.Content(text=ToText(result.content), parent=patch,
-                        is_complete=True)
+  return models.Content(text=ToText(result.content), parent=patch)
 
 
 def _MakeUrl(base, filename, rev):
