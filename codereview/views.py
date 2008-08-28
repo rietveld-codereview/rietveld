@@ -1064,6 +1064,8 @@ def _delete_cached_contents(patch_set):
 @issue_owner_required
 def delete(request):
   """/<issue>/delete - Delete an issue.  There is no way back."""
+  if request.method != 'POST':
+    return HttpResponse('Method not allowed.', status=405)
   issue = request.issue
   tbd = [issue]
   for cls in [models.PatchSet, models.Patch, models.Comment,
