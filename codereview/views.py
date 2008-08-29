@@ -357,6 +357,15 @@ def _random_bytes(n):
 ### Decorators for request handlers ###
 
 
+def post_required(func):
+  """Decorator that returns an error unless request.method == 'POST'."""
+  def post_wrapper(request, *args, **kwds):
+    if request.method != 'POST':
+      return HttpResponse('This requires a POST request.', status=405)
+    return func(request, *args, **kwds)
+  return post_wrapper
+
+
 def login_required(func):
   """Decorator that redirects to the login page if you're not logged in."""
   def login_wrapper(request, *args, **kwds):
@@ -410,8 +419,8 @@ def user_key_required(func):
 
 def issue_owner_required(func):
   """Decorator that processes the issue_id argument and insists you own it."""
-  @issue_required
   @login_required
+  @issue_required
   def issue_owner_wrapper(request, *args, **kwds):
     if request.issue.owner != request.user:
       return HttpResponseForbidden('You do not own this issue')
@@ -600,6 +609,7 @@ def new(request):
     return HttpResponseRedirect('/%s' % issue.key().id())
 
 
+@post_required
 def upload(request):
   """/upload - Like new() or add(), but from the upload.py script.
 
@@ -672,13 +682,12 @@ def upload(request):
   return HttpResponse(msg, content_type='text/plain')
 
 
+@post_required
 @patch_required
 def upload_content(request):
   """/<issue>/upload_content/<patchset>/<patch> - Upload base file contents.
 
   Used by upload.py to upload base files."""
-  if request.method != 'POST':
-    return HttpResponse('Method not allowed.', status=405)
   form = UploadContentForm(request.POST, request.FILES)
   if not form.is_valid():
     return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
@@ -709,6 +718,7 @@ def upload_content(request):
   return HttpResponse('OK', content_type='text/plain')
 
 
+@post_required
 @patchset_required
 def upload_patch(request):
   """/<issue>/upload_patch/<patchset> - Upload patch to patchset.
@@ -716,8 +726,6 @@ def upload_patch(request):
   Used by upload.py to upload a patch when the diff is too large to upload all
   together.
   """
-  if request.method != 'POST':
-    return HttpResponse('Method not allowed.', status=405)
   if request.user is None:
     if IS_DEV:
       request.user = users.User(request.POST.get('user', 'test@example.com'))
@@ -860,6 +868,7 @@ def _get_data_url(form):
   return data, url, separate_patches
 
 
+@post_required
 @issue_owner_required
 def add(request):
   """/<issue>/add - Add a new PatchSet to an existing Issue."""
@@ -1061,11 +1070,10 @@ def _delete_cached_contents(patch_set):
     db.put(patches)
 
 
+@post_required
 @issue_owner_required
 def delete(request):
   """/<issue>/delete - Delete an issue.  There is no way back."""
-  if request.method != 'POST':
-    return HttpResponse('Method not allowed.', status=405)
   issue = request.issue
   tbd = [issue]
   for cls in [models.PatchSet, models.Patch, models.Comment,
@@ -1075,6 +1083,7 @@ def delete(request):
   return HttpResponseRedirect('/mine')
 
 
+@post_required
 @issue_required
 def close(request):
   """/<issue>/close - Close an issue."""
@@ -1087,6 +1096,7 @@ def close(request):
   return HttpResponse('Closed', content_type='text/plain')
 
 
+@post_required
 @issue_required
 def mailissue(request):
   """/<issue>/mail - Send mail for an issue."""
@@ -1370,6 +1380,7 @@ def _add_next_prev(patchset, patch):
     last = p
 
 
+@post_required
 def inline_draft(request):
   """/inline_draft - Ajax handler to submit an in-line draft comment.
 
@@ -1510,8 +1521,8 @@ def _get_mail_template(issue):
   return template, context
 
 
-@issue_required
 @login_required
+@issue_required
 def publish(request):
   """ /<issue>/publish - Publish draft comments and send mail."""
   issue = request.issue
@@ -1740,8 +1751,9 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
   return msg
 
 
-@issue_required
+@post_required
 @login_required
+@issue_required
 def star(request):
   account = models.Account.current_user_account
   account.user_has_selected_nickname()  # This will preserve account.fresh.
@@ -1754,8 +1766,9 @@ def star(request):
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
-@issue_required
+@post_required
 @login_required
+@issue_required
 def unstar(request):
   account = models.Account.current_user_account
   account.user_has_selected_nickname()  # This will preserve account.fresh.
@@ -1888,6 +1901,7 @@ def branch_edit(request, branch_id):
   return HttpResponseRedirect('/repos')
 
 
+@post_required
 @login_required
 def branch_delete(request, branch_id):
   """/branch_delete/<branch> - Delete a Branch record."""

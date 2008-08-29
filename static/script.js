@@ -2648,7 +2648,7 @@ function M_setIssueStar_(id, url) {
       }
     }
   }
-  httpreq.open("GET", "/" + id + url, true);
+  httpreq.open("POST", "/" + id + url, true);
   httpreq.send(null);
 }
 
