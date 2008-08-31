@@ -2649,7 +2649,7 @@ function M_setIssueStar_(id, url) {
     }
   }
   httpreq.open("POST", "/" + id + url, true);
-  httpreq.send(null);
+  httpreq.send("");
 }
 
 /**
