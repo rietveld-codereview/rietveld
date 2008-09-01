@@ -119,7 +119,7 @@ def FetchBase(base, patch):
     base = db.Link(base)
   except db.BadValueError:
     msg = 'Invalid base URL: %s' % base
-    logging.error(msg)
+    logging.warn(msg)
     raise FetchError(msg)
   url = _MakeUrl(base, filename, rev)
   logging.info('Fetching %s', url)

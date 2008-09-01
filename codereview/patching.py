@@ -75,7 +75,7 @@ def PatchChunks(old_lines, chunks):
     old_pos = old_i
     # Check that the patch matches the target file
     if old_lines[old_i:old_j] != old_chunk:
-      logging.error("mismatch:%s.%s.", old_lines[old_i:old_j], old_chunk)
+      logging.warn("mismatch:%s.%s.", old_lines[old_i:old_j], old_chunk)
       yield ("error: old chunk mismatch", old_lines[old_i:old_j], old_chunk)
       return
     # TODO(guido): ParsePatch knows the diff details, but throws the info away
