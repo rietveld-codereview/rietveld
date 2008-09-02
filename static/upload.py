@@ -156,7 +156,7 @@ class AbstractRpcServer(object):
             "Passwd": password,
             "service": "ah",
             "source": "rietveld-codereview-upload",
-            "accountType": "HOSTED_OR_GOOGLE",
+            "accountType": "GOOGLE",
         })
     )
     try:
