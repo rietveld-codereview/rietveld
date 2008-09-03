@@ -118,7 +118,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 {%if is_dev%}
 <div style="float:left; color:green; font-weight:bold">DEVELOPMENT SERVER</div>
 {%else%}
-<div style="float:left; font-weight:bold"><i>Rietveld</i> Code Review Tool</div>
+<div style="float:left; font-size:x-large"><img style="vertical-align:middle" src="/static/chromium-24.png" /> Chromium Code Reviews</div>
 {%endif%}
 {%if user%}
 <b>{{user.email}} ({{user|nickname:"x"}})</b>
@@ -134,6 +134,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 {%endif%}
 <a class="novisit" target="_blank"
    href="http://code.google.com/p/rietveld/wiki/CodeReviewHelp">Help</a>
+{%comment%}
 |
 <a class="novisit" target="_blank"
    href="http://code.google.com/p/rietveld/issues/list">Bug tracker</a>
@@ -143,6 +144,9 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 |
 <a class="novisit" target="_blank"
    href="http://code.google.com/p/rietveld">Source code</a>
+{%endcomment%}
+|
+<a class="novisit" href="http://www.chromium.org/">Chromium Project</a>
 |
 {%if user%}
 <a class="novisit" href="{{sign_out}}">Sign out</a>
@@ -150,12 +154,14 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 <a class="novisit" href="{{sign_in}}">Sign in</a>
 {%endif%}
 </div>
-
 <div class="counter">({{counter}})</div>
+<br />
 <div class="mainmenu">
   {%block mainmenu%}
+{%comment%}
   <a href="{%url codereview.views.index%}">Issues</a>
   <a href="{%url codereview.views.repos %}">Repositories</a>
+{%endcomment%}
   {%endblock%}
 </div>
 <div class="mainmenu2">

@@ -1,4 +1,4 @@
-application: codereview
+application: chromiumcodereview
 version: 2
 runtime: python
 api_version: 1
