@@ -1092,6 +1092,10 @@ def close(request):
       return HttpResponse('Login required', status=401)
   issue = request.issue
   issue.closed = True
+  if request.method == 'POST':
+    new_description = request.POST.get('description')
+    if new_description:
+      issue.description = new_description
   issue.put()
   return HttpResponse('Closed', content_type='text/plain')
 
@@ -1953,7 +1957,7 @@ def settings(request):
         account.put()
   if not form.is_valid():
     return respond(request, 'settings.html', {'form': form})
-  return HttpResponseRedirect('/settings')
+  return HttpResponseRedirect('/mine')
 
 
 @user_key_required
