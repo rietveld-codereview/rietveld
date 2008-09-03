@@ -1,0 +1,21 @@
+<tr {%if issue.num_drafts%}style="color:red"{%endif%} name="issue">
+  <td class="first" width="14"><img src="/static/closedtriangle.gif" 
+    style="visibility: hidden;" width="12" height="9" /></td>
+  <td width="17" align="center">{%include "issue_star.html"%}</td>
+  <td align="right"><div class="subject"><a class="noul"
+         href="{%url codereview.views.show issue.key.id%}">{{issue.key.id}}</a>
+     </div>
+  </td>
+  <td>
+    <div class="subject">
+      <a class="noul" href="{%url codereview.views.show issue.key.id%}">
+        {{issue.subject}}</a>
+      {%if issue.closed and not closed_issues %} (Closed) {%endif%}
+    </div>
+  </td>
+  <td><div class="users">{{issue.owner|show_user}}</div></td>
+  <td><div class="users">{{issue.reviewers|show_users}}</div></td>
+  <td align="center">{%firstof issue.num_comments%}</td>
+  <td align="center"><b>{%firstof issue.num_drafts%}</b></td>
+  <td class="last"><div class="date">{{issue.modified|timesince}}</div></td>
+</tr>

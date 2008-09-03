@@ -1,0 +1,42 @@
+{%extends "issue_base.html"%}
+{%block title1%}Publish+Mail -{%endblock%}
+{%block issue_body%}
+<h2>Publish + Mail Draft Comments</h2>
+
+<div>
+  <form action="{%url codereview.views.publish issue.key.id%}"
+        method="post" id="publish-form">
+  <table>
+  {%ifnotequal user issue.owner%}
+  <tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
+  {%endifnotequal%}
+  {{form}}
+  <tr>
+    <td></td>
+    <td><i>The message will be included in the email sent (if any).</i></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>
+      <input type="submit" value="Publish All My Drafts">
+     </td>
+  </tr>
+  </table>
+  </form>
+
+  <a id="resizer" style="display:none;cursor:pointer">
+  <img src="/static/zippyplus.gif"></a>
+  <script language="JavaScript" type="text/javascript"><!--
+  M_addTextResizer_(document.getElementById("publish-form"));
+  --></script>
+
+</div>
+{%if preview%}
+<div style="margin-top: 3em;">
+  <h3>Unpublished Drafts:</h3>
+  <pre class="description">{{preview|wordwrap:"80"|urlize}}</pre>
+</div>
+{%endif%}
+<div style="clear:both"></div>
+
+{%endblock%}

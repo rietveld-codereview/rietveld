@@ -1,0 +1,55 @@
+{%extends "issue_base.html"%}
+{%block title1%}Recent Issues -{%endblock%}
+{%block body%}
+<script language="JavaScript" type="text/javascript"><!--
+function keyPressIntermediary(evt) {
+  return M_dashboardKeyPress(evt);
+}
+document.onkeypress = keyPressIntermediary;
+-->
+</script>
+<h2>Recent Issues</h2>
+
+<div class="issue-list">
+  <div class="pagination">
+    {%if newest%}
+      <a class="novisit" href="{{newest}}">&laquo; Newest</a>
+    {%endif%}
+    {%if prev%}
+      <a class="novisit" href="{{prev}}">&lsaquo; Newer</a>
+    {%endif%}
+    <b>{{first}}{%if last%} - {{last}}{%endif%}</b>
+    {%if next%}<a class="novisit" href="{{next}}">Older &rsaquo;</a>
+    {%else%}<span style="color:gray">Older &rsaquo;</span>{%endif%}
+  </div>
+
+  <table id="queues">
+    {%if not issues%}
+      <tr><td colspan="9"><span class="disabled">(None)</span></td></tr>
+    {%else%}
+      {%include "issue_heading.html"%}
+      {%for issue in issues%}
+        {%include "issue_row.html"%}
+      {%endfor%}
+    {%endif%}
+  </table>
+
+  <div class="pagination">
+    {%if newest%}
+      <a class="novisit" href="{{newest}}">&laquo; Newest</a>
+    {%endif%}
+    {%if prev%}
+      <a class="novisit" href="{{prev}}">&lsaquo; Newer</a>
+    {%endif%}
+    <b>{{first}}{%if last%} - {{last}}{%endif%}</b>
+    {%if next%}<a class="novisit" href="{{next}}">Older &rsaquo;</a>
+    {%else%}<span style="color:gray">Older &rsaquo;</span>{%endif%}
+  </div>
+
+</div>
+
+<script language="JavaScript" type="text/javascript"><!--
+var dashboardState = new M_DashboardState(window,'issue');
+-->
+</script>
+{%endblock%}

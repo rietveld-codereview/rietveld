@@ -1,0 +1,16 @@
+{%extends "base.html"%}
+{%block title1%}Settings -{%endblock%}
+{%block body%}
+<h2>Settings for {{user|nickname:"x"}}</h2>
+
+<p>You can change your nickname.  This affects how your name is
+displayed to other users.</p>
+
+<form action="{%url codereview.views.settings%}" method="post">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Update Settings"></td></tr>
+</table>
+</form>
+
+{%endblock%}

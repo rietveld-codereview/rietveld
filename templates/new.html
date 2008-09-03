@@ -1,0 +1,31 @@
+{%extends "issue_base.html"%}
+{%block title1%}Create Issue -{%endblock%}
+{%block body%}
+
+{%if form.errors%}
+<h2>There Were Errors!</h2>
+{%else%}
+<h2>Create New Issue</h2>
+{%endif%}
+
+<form action="{%url codereview.views.new%}"
+      method="post" enctype="multipart/form-data" id="create-form">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Create Issue"></td></tr>
+</table>
+</form>
+
+<a id="resizer" style="display:none;cursor:pointer">
+<img src="/static/zippyplus.gif"></a>
+<script language="JavaScript" type="text/javascript"><!--
+M_addTextResizer_(document.getElementById("create-form"));
+--></script>
+
+<h2>Upload Utility</h2>
+
+<p>Tired of uploading files through this form? 
+Download <a href="/static/upload.py">upload.py</a>, a simple utility
+that will invoke "svn diff" and upload the output for you.
+
+{%endblock%}

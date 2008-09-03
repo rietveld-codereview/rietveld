@@ -1,0 +1,76 @@
+{%extends "issue_base.html"%}
+{%block title1%}Issues for {{email|nickname}} -{%endblock%}
+{%block body%}
+<script language="JavaScript" type="text/javascript"><!--
+function keyPressIntermediary(evt) {
+  return M_dashboardKeyPress(evt);
+}
+document.onkeypress = keyPressIntermediary;
+-->
+</script>
+<h2>Issues for {{email|nickname}}</h2>
+<div class="issue-list">
+  <table id="queues">
+  
+  <tr>
+    <td colspan="9" class="header">
+      <h3>Issues Created by {{email|nickname}} ({{my_issues|length}})</h3>
+    </td>
+  </tr>
+  {%if not my_issues%}
+    <tr>
+      <td colspan="9" class="first last">
+        <span class="disabled">(None)</span>
+      </td>
+    </tr>
+  {%else%}
+    {%include "issue_heading.html"%}
+    {%for issue in my_issues%}
+      {%include "issue_row.html"%}
+    {%endfor%}
+  {%endif%}
+
+  <tr>
+    <td colspan="9" class="header">
+      <h3>Issues Reviewable by {{email|nickname}} ({{review_issues|length}})</h3>
+    </td>
+  </tr>
+  {%if not review_issues%}
+    <tr>
+      <td colspan="9" class="first last">
+        <span class="disabled">(None)</span>
+      </td>
+    </tr>
+  {%else%}
+    {%include "issue_heading.html"%}
+    {%for issue in review_issues%}
+      {%include "issue_row.html"%}
+    {%endfor%}
+  {%endif%}
+
+
+  <tr>
+    <td colspan="9" class="header">
+      <h3>Issues Closed Recently ({{closed_issues|length}})</h3>
+    </td>
+  </tr>
+  {%if not closed_issues%}
+    <tr>
+      <td colspan="9" class="first last">
+        <span class="disabled">(None)</span>
+      </td>
+    </tr>
+  {%else%}
+    {%include "issue_heading.html"%}
+    {%for issue in closed_issues%}
+      {%include "issue_row.html"%}
+    {%endfor%}
+  {%endif%}
+  </table>
+</div>
+
+<script language="JavaScript" type="text/javascript"><!--
+var dashboardState = new M_DashboardState(window,'issue', 'M_myDashboardIssueMarker');
+-->
+</script>
+{%endblock%}
