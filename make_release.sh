@@ -10,7 +10,7 @@
 
 ZIPFILE=django.zip
 RELEASE=release
-FILES="app.yaml index.yaml __init__.py py_zipimport.py main.py settings.py"
+FILES="app.yaml index.yaml __init__.py main.py settings.py"
 DIRS="static templates codereview"
 
 # Remove old $ZIPFILE file.
