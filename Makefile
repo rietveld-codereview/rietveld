@@ -4,8 +4,7 @@
 DEV_APPSERVER=	dev_appserver.py
 APPCFG=	appcfg.py
 
-default:
-	@echo "Use 'make help' to see available commands."
+default: help
 
 help:
 	@echo "Available commands:"

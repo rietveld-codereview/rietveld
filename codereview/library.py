@@ -74,9 +74,7 @@ def show_user(email, arg=None, autoescape=None, memcache_results=None):
   if ret is None:
     logging.debug('memcache miss for %r', email)
     account = models.Account.get_account_for_email(email)
-    if account is not None:
-      # It is possible that multiple accounts have the same nickname.
-      # Let's not worry about that -- we'll just link to one of them.
+    if account is not None and account.user_has_selected_nickname:
       ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
              '%(key)s</a>' % {'key': cgi.escape(account.nickname)})
     else:

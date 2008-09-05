@@ -47,9 +47,9 @@ def PatchLines(old_lines, patch_lines, name="<patch>"):
   tuples are yielded.  It is possible that consecutive "equal" tuples
   are yielded.
   """
-  chunks = ParsePatch(patch_lines, name)
+  chunks = ParsePatchToChunks(patch_lines, name)
   if chunks is None:
-    return iter([("error: ParsePatch failed", [], [])])
+    return iter([("error: ParsePatchToChunks failed", [], [])])
   return PatchChunks(old_lines, chunks)
 
 
@@ -75,6 +75,7 @@ def PatchChunks(old_lines, chunks):
     old_pos = old_i
     # Check that the patch matches the target file
     if old_lines[old_i:old_j] != old_chunk:
+      logging.warn("mismatch:%s.%s.", old_lines[old_i:old_j], old_chunk)
       yield ("error: old chunk mismatch", old_lines[old_i:old_j], old_chunk)
       return
     # TODO(guido): ParsePatch knows the diff details, but throws the info away
@@ -103,10 +104,10 @@ def ParseRevision(lines):
   return 0
 
 
-_NO_NEWLINE_MESSAGE = " No newline at end of file\n"
+_NO_NEWLINE_MESSAGE = "\\ No newline at end of file"
 
 
-def ParsePatch(lines, name="<patch>"):
+def ParsePatchToChunks(lines, name="<patch>"):
   """Parses a patch from a list of lines.
 
   Return a list of chunks, where each chunk is a tuple:
@@ -181,14 +182,16 @@ def ParsePatch(lines, name="<patch>"):
       tag, rest = line[0], line[1:]
       if tag in (" ", "-", "+"):
         raw_chunk.append((tag, rest))
-      elif tag == "\\" and rest == _NO_NEWLINE_MESSAGE:
+      elif line.startswith(_NO_NEWLINE_MESSAGE):
         # TODO(guido): need to check that no more lines follow for this file
         if raw_chunk:
           last_tag, last_rest = raw_chunk[-1]
           if last_rest.endswith("\n"):
             raw_chunk[-1] = (last_tag, last_rest[:-1])
       else:
-        logging.warn("%s:%d: indecypherable input: %r", name, lineno, line)
+        # Only log if it's a non-blank line.  Blank lines we see a lot.
+        if line and line.strip():
+          logging.warn("%s:%d: indecypherable input: %r", name, lineno, line)
         if chunks or raw_chunk:
           break  # Trailing garbage isn't so bad
         return None
@@ -211,3 +214,46 @@ def ParsePatch(lines, name="<patch>"):
     chunks.append((old_range, new_range, old_chunk, new_chunk))
     raw_chunk = []
   return chunks
+
+
+# TODO: can we share some of this code with ParsePatchToChunks?
+def ParsePatchToLines(lines):
+  """Parses a patch from a list of lines.
+
+  Returns None on error, otherwise a list of 3-tuples:
+    (old_line_no, new_line_no, line)
+
+    A line number can be 0 if it doesn't exist in the old/new file.
+  """
+  result = []
+  in_prelude = True
+  for line in lines:
+    if in_prelude:
+      result.append((0, 0, line))
+      # Skip leading lines until after we've seen one starting with '+++'
+      if line.startswith("+++"):
+        in_prelude = False
+    elif line.startswith("@"):
+      result.append((0, 0, line))
+      match = _CHUNK_RE.match(line)
+      if not match:
+        logging.warn("ParsePatchToLines match failed on %s", line)
+        return None
+      old_ln = int(match.groups()[0])
+      new_ln = int(match.groups()[2])
+    else:
+      if line[0] == "-":
+        result.append((old_ln, 0, line))
+        old_ln += 1
+      elif line[0] == "+":
+        result.append((0, new_ln, line))
+        new_ln += 1
+      elif line[0] == " ":
+        result.append((old_ln, new_ln, line))
+        old_ln += 1
+        new_ln += 1
+      elif line.startswith(_NO_NEWLINE_MESSAGE):
+        continue
+      else:  # Something else, could be property changes etc.
+        result.append((0, 0, line))
+  return result

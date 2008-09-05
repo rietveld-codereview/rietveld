@@ -14,9 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for uploading subversion diffs to the codereview app.
+"""Tool for uploading diffs from a version control system to the codereview app.
 
-Usage summary: upload.py [options] [-- svn_diff_options]
+Usage summary: upload.py [options] [-- diff_options]
+
+Diff options are passed to the diff command of the underlying system.
+
+Supported version control systems:
+  Git
+  Subversion
+
+(It is important for Git users to specify a tree-ish to diff against.)
 """
 # This code is derived from appcfg.py in the App Engine SDK (open source),
 # and from ASPN recipe #146306.
@@ -30,6 +38,7 @@ import optparse
 import os
 import re
 import socket
+import subprocess
 import sys
 import urllib
 import urllib2
@@ -147,7 +156,7 @@ class AbstractRpcServer(object):
             "Passwd": password,
             "service": "ah",
             "source": "rietveld-codereview-upload",
-            "accountType": "HOSTED_OR_GOOGLE",
+            "accountType": "GOOGLE",
         })
     )
     try:
@@ -217,7 +226,7 @@ class AbstractRpcServer(object):
               "Please go to\n"
               "https://www.google.com/accounts/DisplayUnlockCaptcha\n"
               "and verify you are a human.  Then try again.")
-          break;
+          break
         if e.reason == "NotVerified":
           print >>sys.stderr, "Account not verified."
           break
@@ -342,7 +351,7 @@ class HttpRpcServer(AbstractRpcServer):
     return opener
 
 
-parser = optparse.OptionParser(usage="%prog [options] [-- svn_diff_options]")
+parser = optparse.OptionParser(usage="%prog [options] [-- diff_options]")
 parser.add_option("-y", "--assume_yes", action="store_true",
                   dest="assume_yes", default=False,
                   help="Assume that the answer to yes/no questions is 'yes'.")
@@ -484,13 +493,20 @@ def GetContentType(filename):
   return mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
 
-def RunShell(command, args=(), silent_ok=False):
-  command = "%s %s" % (command, " ".join(args))
+# Use a shell for subcommands on Windows to get a PATH search.
+use_shell = sys.platform.startswith("win")
+
+
+def RunShell(command, silent_ok=False, universal_newlines=False):
   logging.info("Running %s", command)
-  stream = os.popen(command, "r")
-  data = stream.read()
-  if stream.close():
-    ErrorExit("Got error status from %s" % (command + str(args)))
+  p = subprocess.Popen(command, stdout=subprocess.PIPE,
+                       stderr=subprocess.STDOUT, shell=use_shell,
+                       universal_newlines=universal_newlines)
+  data = p.stdout.read()
+  p.wait()
+  p.stdout.close()
+  if p.returncode:
+    ErrorExit("Got error status from %s" % command)
   if not silent_ok and not data:
     ErrorExit("No output from %s" % command)
   return data
@@ -527,7 +543,7 @@ class VersionControlSystem(object):
 
   def GetBaseFile(self, filename):
     """Get the content of the upstream version of a file.
-    
+
     Returns:
       A tuple (content, status) representing the file content and the status of
       the file.
@@ -542,38 +558,30 @@ class VersionControlSystem(object):
     [patches.setdefault(v, k) for k, v in patch_list]
     for filename in patches.keys():
       content, status = self.GetBaseFile(filename)
+      no_base_file = False
       if len(content) > MAX_UPLOAD_SIZE:
         print ("Not uploading the base file for " + filename +
                " because the file is too large.")
-        continue
+        no_base_file = True
+        content = ""
       checksum = md5.new(content).hexdigest()
-      parts = []
-      while content:
-        parts.append(content[:800000])
-        content = content[800000:]
-      if not parts:
-        parts = [""] # empty file
-      for part, data in enumerate(parts):
-        if options.verbose > 0:
-          print "Uploading %s (%d/%d)" % (filename, part+1, len(parts))
-        url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset),
-                                            int(patches.get(filename)))
-        current_checksum = md5.new(data).hexdigest()
-        form_fields = [("filename", filename),
-                       ("status", status),
-                       ("num_parts", str(len(parts))),
-                       ("checksum", checksum),
-                       ("current_part", str(part)),
-                       ("current_checksum", current_checksum),]
-        if options.email:
-          form_fields.append(("user", options.email))
-        ctype, body = EncodeMultipartFormData(form_fields,
-                                              [("data", filename, data)])
-        response_body = rpc_server.Send(url, body,
-                                        content_type=ctype)
-        if not response_body.startswith("OK"):
-          StatusUpdate("  --> %s" % response_body)
-          sys.exit(False)
+      if options.verbose > 0:
+        print "Uploading %s" % filename
+      url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset),
+                                          int(patches.get(filename)))
+      form_fields = [("filename", filename),
+                     ("status", status),
+                     ("checksum", checksum),]
+      if no_base_file:
+        form_fields.append(("no_base_file", "1"))
+      if options.email:
+        form_fields.append(("user", options.email))
+      ctype, body = EncodeMultipartFormData(form_fields,
+                                            [("data", filename, content)])
+      response_body = rpc_server.Send(url, body, content_type=ctype)
+      if not response_body.startswith("OK"):
+        StatusUpdate("  --> %s" % response_body)
+        sys.exit(False)
 
 
 class SubversionVCS(VersionControlSystem):
@@ -586,12 +594,15 @@ class SubversionVCS(VersionControlSystem):
       required: If true, exits if the url can't be guessed, otherwise None is
         returned.
     """
-    info = RunShell("svn info")
+    info = RunShell(["svn", "info"])
     for line in info.splitlines():
       words = line.split()
       if len(words) == 2 and words[0] == "URL:":
         url = words[1]
         scheme, netloc, path, params, query, fragment = urlparse.urlparse(url)
+        username, netloc = urllib.splituser(netloc)
+        if username:
+          logging.info("Removed username from base URL")
         if netloc.endswith("svn.python.org"):
           if netloc == "svn.python.org":
             if path.startswith("/projects/"):
@@ -606,12 +617,14 @@ class SubversionVCS(VersionControlSystem):
           base = "http://svn.collab.net/viewvc/*checkout*%s/" % path
           logging.info("Guessed CollabNet base = %s", base)
         elif netloc.endswith(".googlecode.com"):
-          base = url + "/"
-          if base.startswith("https"):
-            base = "http" + base[5:]
+          path = path + "/"
+          base = urlparse.urlunparse(("http", netloc, path, params,
+                                      query, fragment))
           logging.info("Guessed Google Code base = %s", base)
         else:
-          base = url + "/"
+          path = path + "/"
+          base = urlparse.urlunparse((scheme, netloc, path, params,
+                                      query, fragment))
           logging.info("Guessed base = %s", base)
         return base
     if required:
@@ -619,10 +632,11 @@ class SubversionVCS(VersionControlSystem):
     return None
 
   def GenerateDiff(self, args):
-    cmd = "svn diff"
+    cmd = ["svn", "diff"]
     if not sys.platform.startswith("win"):
-      cmd += " --diff-cmd=diff"
-    data = RunShell(cmd, args)
+      cmd.append("--diff-cmd=diff")
+    cmd.extend(args)
+    data = RunShell(cmd)
     count = 0
     for line in data.splitlines():
       if line.startswith("Index:") or line.startswith("Property changes on:"):
@@ -663,7 +677,7 @@ class SubversionVCS(VersionControlSystem):
     return re.sub(r"\$(%s):(:?)([^\$]+)\$" % '|'.join(keywords), repl, content)
 
   def GetUnknownFiles(self):
-    status = RunShell("svn status --ignore-externals", silent_ok=True)
+    status = RunShell(["svn", "status", "--ignore-externals"], silent_ok=True)
     unknown_files = []
     for line in status.split("\n"):
       if line and line[0] == "?":
@@ -671,7 +685,7 @@ class SubversionVCS(VersionControlSystem):
     return unknown_files
 
   def GetBaseFile(self, filename):
-    status = RunShell("svn status --ignore-externals", [filename])
+    status = RunShell(["svn", "status", "--ignore-externals", filename])
     if not status:
       StatusUpdate("svn status returned no output for %s" % filename)
       sys.exit(False)
@@ -694,13 +708,21 @@ class SubversionVCS(VersionControlSystem):
       content = ""
     elif (status[0] in ("M", "D", "R") or
           (status[0] == "A" and status[3] == "+")):
-      mimetype = RunShell("svn -rBASE propget svn:mime-type", [filename],
+      mimetype = RunShell(["svn", "-rBASE", "propget", "svn:mime-type",
+                           filename],
                           silent_ok=True)
       if mimetype.startswith("application/octet-stream"):
         content = ""
       else:
-        content = RunShell("svn cat", [filename])
-      keywords = RunShell("svn -rBASE propget svn:keywords", [filename],
+        # On Windows svn cat gives \r\n, and calling subprocess.Popen turns
+        # them into \r\r\n, so use universal newlines to avoid the extra \r.
+        if sys.platform.startswith("win"):
+          nl = True
+        else:
+          nl = False
+        content = RunShell(["svn", "cat", filename], universal_newlines=nl)
+      keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
+                           filename],
                           silent_ok=True)
       if keywords:
         content = self._CollapseKeywords(content, keywords)
@@ -710,10 +732,56 @@ class SubversionVCS(VersionControlSystem):
     return content, status[0:5]
 
 
+class GitVCS(VersionControlSystem):
+  """Implementation of the VersionControlSystem interface for Git."""
+
+  def __init__(self):
+    # Map of filename -> hash of base file.
+    self.base_hashes = {}
+
+  def GenerateDiff(self, extra_args):
+    # This is more complicated than svn's GenerateDiff because we must convert
+    # the diff output to include an svn-style "Index:" line as well as record
+    # the hashes of the base files, so we can upload them along with our diff.
+    gitdiff = RunShell(["git", "diff", "--full-index"] + extra_args)
+    svndiff = []
+    filecount = 0
+    filename = None
+    for line in gitdiff.splitlines():
+      match = re.match(r"diff --git a/(.*) b/.*$", line)
+      if match:
+        filecount += 1
+        filename = match.group(1)
+        svndiff.append("Index: %s\n" % filename)
+      else:
+        # The "index" line in a git diff looks like this (long hashes elided):
+        #   index 82c0d44..b2cee3f 100755
+        # We want to save the left hash, as that identifies the base file.
+        match = re.match(r"index (\w+)\.\.", line)
+        if match:
+          self.base_hashes[filename] = match.group(1)
+      svndiff.append(line + "\n")
+    if not filecount:
+      ErrorExit("No valid patches found in output from git diff")
+    return "".join(svndiff)
+
+  def GetUnknownFiles(self):
+    status = RunShell(["git", "ls-files", "--exclude-standard", "--others"],
+                      silent_ok=True)
+    return status.splitlines()
+
+  def GetBaseFile(self, filename):
+    hash = self.base_hashes[filename]
+    if hash == "0" * 40:  # All-zero hash indicates no base file.
+      return ("", "A")
+    else:
+      return (RunShell(["git", "show", hash]), "M")
+
+
 # NOTE: this function is duplicated in engine.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
-  
+
   Args:
     data: A string containing the output of svn diff.
 
@@ -729,7 +797,7 @@ def SplitPatch(data):
     if line.startswith('Index:'):
       unused, new_filename = line.split(':', 1)
       new_filename = new_filename.strip()
-    elif line.startswith('Property changes on:'):    
+    elif line.startswith('Property changes on:'):
       unused, temp_filename = line.split(':', 1)
       # When a file is modified, paths use '/' between directories, however
       # when a property is modified '\' is used on Windows.  Make them the same
@@ -738,7 +806,7 @@ def SplitPatch(data):
       if temp_filename != filename:
         # File has property changes but no modifications, create a new diff.
         new_filename = temp_filename
-    if new_filename:      
+    if new_filename:
       if filename and diff:
         patches.append((filename, ''.join(diff)))
       filename = new_filename
@@ -753,7 +821,7 @@ def SplitPatch(data):
 
 def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
   """Uploads a separate patch for each file in the diff output.
-  
+
   Returns a list of [patch_key, filename] for each file.
   """
   patches = SplitPatch(data)
@@ -779,6 +847,36 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
   return rv
 
 
+def GuessVCS():
+  """Helper to guess the version control system.
+
+  This examines the current directory, guesses which VersionControlSystem
+  we're using, and returns an instance of the appropriate class.  Exit with an
+  error if we can't figure it out.
+
+  Returns:
+    A VersionControlSystem instance. Exits if the VCS can't be guessed.
+  """
+  # Subversion has a .svn in all working directories.
+  if os.path.isdir('.svn'):
+    logging.info("Guessed VCS = Subversion")
+    return SubversionVCS()
+
+  # Git has a command to test if you're in a git tree.
+  # Try running it, but don't die if we don't have git installed.
+  try:
+    subproc = subprocess.Popen(["git", "rev-parse", "--is-inside-work-tree"],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if subproc.wait() == 0:
+      return GitVCS()
+  except OSError, (errno, message):
+    if errno != 2:  # ENOENT -- they don't have git installed.
+      raise
+
+  ErrorExit(("Could not guess version control system. "
+             "Are you in a working copy directory?"))
+
+
 def RealMain(argv, data=None):
   logging.basicConfig(format=("%(asctime).19s %(levelname)s %(filename)s:"
                               "%(lineno)s %(message)s "))
@@ -790,11 +888,19 @@ def RealMain(argv, data=None):
     logging.getLogger().setLevel(logging.DEBUG)
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
-  vcs = SubversionVCS()
-  base = vcs.GuessBase(not options.local_base)
+  vcs = GuessVCS()
+  if isinstance(vcs, SubversionVCS):
+    # base field is only allowed for Subversion.
+    # Note: Fetching base files may become deprecated in future releases.
+    base = vcs.GuessBase(not options.local_base)
+  else:
+    base = None
+  if not base and not options.local_base:
+    options.local_base = True
+    logging.info("Enabled upload of base file")
   if not options.assume_yes:
     vcs.CheckForUnknownFiles()
-  if not data:
+  if data is None:
     data = vcs.GenerateDiff(args)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
@@ -829,7 +935,7 @@ def RealMain(argv, data=None):
       ErrorExit("Can't specify description and description_file")
     file = open(options.description_file, 'r')
     description = file.read()
-    file.close()    
+    file.close()
   if description:
     form_fields.append(("description", description))
   # If we're uploading base files, don't send the email before the uploads, so
@@ -863,9 +969,9 @@ def RealMain(argv, data=None):
   issue = msg[msg.rfind("/")+1:]
 
   if not files:
-    rv = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
+    result = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
     if options.local_base:
-      patches = rv
+      patches = result
 
   if options.local_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)

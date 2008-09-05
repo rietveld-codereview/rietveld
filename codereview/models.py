@@ -19,8 +19,8 @@ import logging
 import re
 
 # AppEngine imports
-from google.appengine.api import users
 from google.appengine.ext import db
+from google.appengine.api import memcache
 
 # Local imports
 from appengine_django.models import BaseModel
@@ -75,6 +75,7 @@ class Issue(BaseModel):
   reviewers = db.ListProperty(db.Email)
   cc = db.ListProperty(db.Email)
   closed = db.BooleanProperty(default=False)
+  n_comments = db.IntegerProperty()
 
   _is_starred = None
 
@@ -83,23 +84,38 @@ class Issue(BaseModel):
     """Whether the current user has this issue starred."""
     if self._is_starred is not None:
       return self._is_starred
-    acct = Account.current_user_account
-    self._is_starred = acct is not None and self.key().id() in acct.stars
+    account = Account.current_user_account
+    self._is_starred = account is not None and self.key().id() in account.stars
     return self._is_starred
 
-  _num_comments = None
+  def update_comment_count(self, n):
+    """Increment the n_comments property by n.
+
+    If n_comments in None, compute the count through a query.  (This
+    is a transitional strategy while the database contains Issues
+    created using a previous version of the schema.)
+    """
+    if self.n_comments is None:
+      self.n_comments = self._get_num_comments()
+    self.n_comments += n
 
   @property
   def num_comments(self):
-    """The number of (non-draft) comments for this issue.
+    """The number of non-draft comments for this issue.
 
-    The value is expensive to compute, so it is cached.
+    This is almost an alias for self.n_comments, except that if
+    n_comments is None, it is computed through a query, and stored,
+    using n_comments as a cache.
     """
-    if self._num_comments is None:
-      self._num_comments = gql(Comment,
-          'WHERE ANCESTOR IS :1 AND draft = FALSE',
-          self).count()
-    return self._num_comments
+    if self.n_comments is None:
+      self.n_comments = self._get_num_comments()
+    return self.n_comments
+
+  def _get_num_comments(self):
+    """Helper to compute the number of comments through a query."""
+    return gql(Comment,
+               'WHERE ANCESTOR IS :1 AND draft = FALSE',
+               self).count()
 
   _num_drafts = None
 
@@ -110,13 +126,13 @@ class Issue(BaseModel):
     The value is expensive to compute, so it is cached.
     """
     if self._num_drafts is None:
-      user = users.get_current_user()
-      if user is None:
+      account = Account.current_user_account
+      if account is None:
         self._num_drafts = 0
       else:
         query = gql(Comment,
             'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-            self, user)
+            self, account.user)
         self._num_drafts = query.count()
     return self._num_drafts
 
@@ -158,12 +174,8 @@ class Content(BaseModel):
 
   # parent => Patch
   text = db.TextProperty()
-  partial_upload = db.BlobProperty()
   is_uploaded = db.BooleanProperty(default=False)
-  is_complete = db.BooleanProperty(default=True)
   is_bad = db.BooleanProperty(default=False)
-  num_parts = db.IntegerProperty()
-  last_part = db.IntegerProperty()
 
   @property
   def lines(self):
@@ -185,6 +197,7 @@ class Patch(BaseModel):
   text = db.TextProperty()
   content = db.ReferenceProperty(Content)
   patched_content = db.ReferenceProperty(Content, collection_name='patch2_set')
+  no_base_file = db.BooleanProperty(required=False, default=False)
 
   _lines = None
 
@@ -208,7 +221,7 @@ class Patch(BaseModel):
   @property
   def property_changes(self):
     """The property changes split into lines.
-    
+
     The value is cached.
     """
     if self._property_changes != None:
@@ -266,13 +279,13 @@ class Patch(BaseModel):
     The value is expensive to compute, so it is cached.
     """
     if self._num_drafts is None:
-      user = users.get_current_user()
+      user = Account.current_user_account
       if user is None:
         self._num_drafts = 0
       else:
         query = gql(Comment,
                     'WHERE patch = :1 AND draft = TRUE AND author = :2',
-                    self, user)
+                    self, account.user)
         self._num_drafts = query.count()
     return self._num_drafts
 
@@ -291,14 +304,14 @@ class Patch(BaseModel):
       if self.content is not None:
         if self.content.is_bad:
           msg = 'Bad content. Try to upload again.'
-          logging.error(msg)
+          logging.warn('Patch.get_content: %s', msg)
           raise engine.FetchError(msg)
-        if self.content.is_complete:
-          return self.content
-        else:
+        if self.content.is_uploaded and self.content.text == None:
           msg = 'Upload in progress.'
-          logging.error(msg)
+          logging.warn('Patch.get_content: %s', msg)
           raise engine.FetchError(msg)
+        else:
+          return self.content
     except db.Error:
       # This may happen when a Content entity was deleted behind our back.
       self.content = None
@@ -329,7 +342,7 @@ class Patch(BaseModel):
 
     old_lines = self.get_content().text.splitlines(True)
     logging.info('Creating patched_content for %s', self.filename)
-    chunks = patching.ParsePatch(self.lines, self.filename)
+    chunks = patching.ParsePatchToChunks(self.lines, self.filename)
     new_lines = []
     for tag, old, new in patching.PatchChunks(old_lines, chunks):
       new_lines.extend(new)
@@ -339,21 +352,6 @@ class Patch(BaseModel):
     self.patched_content = patched_content
     self.put()
     return patched_content
-
-  def get_partial_content(self):
-    """Get self.content to append uploaded parts.
-
-    Returns:
-      a Context instance.
-
-    Raises:
-      engine.FetchError: If there is a problem with the content.
-    """
-    if not self.content:
-      raise engine.FetchError('Content not initialized.')
-    if self.content.is_complete:
-      raise engine.FetchError('Content is already complete.')
-    return self.content
 
 
 class Comment(BaseModel):
@@ -447,6 +445,7 @@ class Account(BaseModel):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   stars = db.ListProperty(int)  # Issue ids of all starred issues
+  fresh = db.BooleanProperty()
 
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
@@ -457,11 +456,17 @@ class Account(BaseModel):
     email = user.email()
     assert email
     key = '<%s>' % email
+    # Since usually the account already exists, first try getting it
+    # without the transaction implied by get_or_insert().
+    account = cls.get_by_key_name(key)
+    if account is not None:
+      return account
     nickname = user.nickname()
     if '@' in nickname:
       nickname = nickname.split('@', 1)[0]
     assert nickname
-    return cls.get_or_insert(key, user=user, email=email, nickname=nickname)
+    return cls.get_or_insert(key, user=user, email=email, nickname=nickname,
+                             fresh=True)
 
   @classmethod
   def get_nickname_for_user(cls, user):
@@ -504,3 +509,88 @@ class Account(BaseModel):
     if len(accounts) != 1:
       return None
     return accounts[0].email
+
+  def user_has_selected_nickname(self):
+    """Return True if the user picked the nickname.
+
+    Normally this returns 'not self.fresh', but if that property is
+    None, we assume that if the created and modified timestamp are
+    within 2 seconds, the account is fresh (i.e. the user hasn't
+    selected a nickname yet).  We then also update self.fresh, so it
+    is used as a cache and may even be written back if we're lucky.
+    """
+    if self.fresh is None:
+      delta = self.created - self.modified
+      # Simulate delta = abs(delta)
+      if delta.days < 0:
+        delta = -delta
+      self.fresh = (delta.days == 0 and delta.seconds < 2)
+    return not self.fresh
+
+  _drafts = None
+
+  @property
+  def drafts(self):
+    """A list of issue ids that have drafts by this user.
+
+    This is cached in memcache.
+    """
+    if self._drafts is None:
+      if self._initialize_drafts():
+        self._save_drafts()
+    return self._drafts
+
+  def update_drafts(self, issue, have_drafts=None):
+    """Update the user's draft status for this issue.
+
+    Args:
+      issue: an Issue instance.
+      have_drafts: optional bool forcing the draft status.  By default,
+          issue.num_drafts is inspected (which may query the datastore).
+
+    The Account is written to the datastore if necessary.
+    """
+    dirty = False
+    if self._drafts is None:
+      dirty = self._initialize_drafts()
+    id = issue.key().id()
+    if have_drafts is None:
+      have_drafts = bool(issue.num_drafts)  # Beware, this may do a query.
+    if have_drafts:
+      if id not in self._drafts:
+        self._drafts.append(id)
+        dirty = True
+    else:
+      if id in self._drafts:
+        self._drafts.remove(id)
+        dirty = True
+    if dirty:
+      self._save_drafts()
+
+  def _initialize_drafts(self):
+    """Initialize self._drafts from scratch.
+
+    This mostly exists as a schema conversion utility.
+
+    Returns:
+      True if the user should call self._save_drafts(), False if not.
+    """
+    drafts = memcache.get('user_drafts:' + self.email)
+    if drafts is not None:
+      self._drafts = drafts
+      ##logging.info('HIT: %s -> %s', self.email, self._drafts)
+      return False
+    # We're looking for the Issue key id.  The ancestry of comments goes:
+    # Issue -> PatchSet -> Patch -> Comment.
+    issue_ids = set(comment.key().parent().parent().parent().id()
+                    for comment in gql(Comment,
+                                       'WHERE author = :1 AND draft = TRUE',
+                                       self.user))
+    self._drafts = list(issue_ids)
+    ##logging.info('INITIALIZED: %s -> %s', self.email, self._drafts)
+    return True
+
+  def _save_drafts(self):
+    """Save self._drafts to memcache."""
+    ##logging.info('SAVING: %s -> %s', self.email, self._drafts)
+    memcache.set('user_drafts:' + self.email, self._drafts, 3600)

@@ -1,8 +1,6 @@
 {%extends "issue_base.html"%}
 {%block title1%}Edit Issue -{%endblock%}
 {%block issue_body%}
-<h2>Edit Issue: {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}</h2>
-
 <form action="{%url codereview.views.edit issue.key.id%}"
       method="post" id="edit-form">
 <table>

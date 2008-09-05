@@ -161,8 +161,7 @@ class UploadForm(forms.Form):
   subject = forms.CharField(max_length=100)
   description = forms.CharField(max_length=10000, required=False)
   content_upload = forms.BooleanField(required=False)
-  separate_patches = forms.BooleanField(required=False,
-                                        widget=forms.HiddenInput())
+  separate_patches = forms.BooleanField(required=False)
   base = forms.CharField(max_length=2000, required=False)
   data = forms.FileField(required=False)
   issue = forms.IntegerField(required=False)
@@ -189,10 +188,8 @@ class UploadForm(forms.Form):
 class UploadContentForm(forms.Form):
   filename = forms.CharField(max_length=255)
   status = forms.CharField(required=False, max_length=20)
-  num_parts = forms.IntegerField()
   checksum = forms.CharField(max_length=32)
-  current_part = forms.IntegerField()
-  current_checksum = forms.CharField(max_length=32)
+  no_base_file = forms.BooleanField(required=False)
 
   def clean(self):
     # Check presence of 'data'. We cannot use FileField because
@@ -209,6 +206,7 @@ class UploadContentForm(forms.Form):
 class UploadPatchForm(forms.Form):
   filename = forms.CharField(max_length=255)
   content_upload = forms.BooleanField(required=False)
+
   def get_uploaded_patch(self):
     return self.files['data'].read()
 
@@ -325,18 +323,18 @@ def respond(request, template, params=None):
     params = {}
   must_choose_nickname = False
   if request.user is not None:
-    account = models.Account.get_account_for_user(request.user)
-    delta = account.created - account.modified
-    if delta.days < 0:
-      delta = -delta
-    must_choose_nickname = delta.days == 0 and delta.seconds < 2
+    account = models.Account.current_user_account
+    must_choose_nickname = not account.user_has_selected_nickname()
   params['request'] = request
   params['counter'] = counter
   params['user'] = request.user
   params['is_admin'] = request.user_is_admin
   params['is_dev'] = IS_DEV
-  params['sign_in'] = users.create_login_url(request.path)
-  params['sign_out'] = users.create_logout_url(request.path)
+  full_path = request.get_full_path().encode('utf-8')
+  if request.user is None:
+    params['sign_in'] = users.create_login_url(full_path)
+  else:
+    params['sign_out'] = users.create_logout_url(full_path)
   params['must_choose_nickname'] = must_choose_nickname
   try:
     return render_to_response(template, params)
@@ -359,11 +357,21 @@ def _random_bytes(n):
 ### Decorators for request handlers ###
 
 
+def post_required(func):
+  """Decorator that returns an error unless request.method == 'POST'."""
+  def post_wrapper(request, *args, **kwds):
+    if request.method != 'POST':
+      return HttpResponse('This requires a POST request.', status=405)
+    return func(request, *args, **kwds)
+  return post_wrapper
+
+
 def login_required(func):
   """Decorator that redirects to the login page if you're not logged in."""
   def login_wrapper(request, *args, **kwds):
     if request.user is None:
-      return HttpResponseRedirect(users.create_login_url(request.path))
+      return HttpResponseRedirect(
+          users.create_login_url(request.get_full_path().encode('utf-8')))
     return func(request, *args, **kwds)
   return login_wrapper
 
@@ -372,7 +380,8 @@ def admin_required(func):
   def admin_wrapper(request, *args, **kwds):
     """Decorator that insists that you're logged in as administratior."""
     if request.user is None:
-      return HttpResponseRedirect(users.create_login_url(request.path))
+      return HttpResponseRedirect(
+          users.create_login_url(request.get_full_path().encode('utf-8')))
     if not request.user_is_admin:
       return HttpResponseForbidden('You must be admin in for this function')
     return func(request, *args, **kwds)
@@ -410,8 +419,8 @@ def user_key_required(func):
 
 def issue_owner_required(func):
   """Decorator that processes the issue_id argument and insists you own it."""
-  @issue_required
   @login_required
+  @issue_required
   def issue_owner_wrapper(request, *args, **kwds):
     if request.issue.owner != request.user:
       return HttpResponseForbidden('You do not own this issue')
@@ -501,11 +510,34 @@ def all(request):
   if offset > limit:
     newest = '/all?limit=%d' % limit
 
+  _optimize_draft_counts(issues)
   return respond(request, 'all.html',
                  {'issues': issues, 'limit': limit,
                   'newest': newest, 'prev': prev, 'next': next,
                   'first': offset+1,
                   'last': len(issues) > 1 and offset+len(issues) or None})
+
+
+def _optimize_draft_counts(issues):
+  """Force _num_drafts to zero for issues that are known to have no drafts.
+
+  Args:
+    issues: list of model.Issue instances.
+
+  This inspects the drafts attribute of the current user's Account
+  instance, and forces the draft count to zero of those issues in the
+  list that aren't mentioned there.
+
+  If there is no current user, all draft counts are forced to 0.
+  """
+  account = models.Account.current_user_account
+  if account is None:
+    issue_ids = None
+  else:
+    issue_ids = account.drafts
+  for issue in issues:
+    if issue_ids is None or issue.key().id() not in issue_ids:
+      issue._num_drafts = 0
 
 
 @login_required
@@ -522,8 +554,9 @@ def starred(request):
   if not stars:
     issues = []
   else:
-    keys = [db.Key.from_path(models.Issue.kind(), id) for id in stars]
-    issues = [issue for issue in models.Issue.get(keys) if issue is not None]
+    issues = [issue for issue in models.Issue.get_by_id(stars)
+                    if issue is not None]
+    _optimize_draft_counts(issues)
   return respond(request, 'starred.html', {'issues': issues})
 
 
@@ -539,15 +572,16 @@ def _show_user(request):
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC',
       user))
-  review_issues = list(db.GqlQuery(
+  review_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
-      user.email()))
+      user.email()) if issue.owner != user]
   closed_issues = list(db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
       'ORDER BY modified DESC',
       datetime.datetime.now() - datetime.timedelta(days=7), user))
+  _optimize_draft_counts(my_issues + review_issues + closed_issues)
   return respond(request, 'user.html',
                  {'email':user.email(),
                   'my_issues': my_issues,
@@ -575,6 +609,7 @@ def new(request):
     return HttpResponseRedirect('/%s' % issue.key().id())
 
 
+@post_required
 def upload(request):
   """/upload - Like new() or add(), but from the upload.py script.
 
@@ -585,6 +620,10 @@ def upload(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpResponse('Login required', status=401)
+  # Check against old upload.py usage.
+  if request.POST.get('num_parts') > 1:
+    return HttpResponse('Upload.py is too old, get the latest version.',
+                        content_type='text/plain')
   form = UploadForm(request.POST, request.FILES)
   issue = None
   patchset = None
@@ -624,39 +663,41 @@ def upload(request):
         form.cleaned_data.get('separate_patches')):
       # Extend the response message: 2nd line is patchset id.
       msg +="\n%d" % patchset.key().id()
-      if form.cleaned_data.get('content_upload'): 
+      if form.cleaned_data.get('content_upload'):
         # Extend the response: additional lines are the expected filenames.
         issue.local_base = True
         issue.put()
-        
-        for patch in patchset.patch_set:
-          content = models.Content(text=db.Text(''), is_uploaded=True,
-                                   is_complete=False, parent=patch)
-          content.put()
-          patch.content = content
-          patch.put()
+
+        new_content_entities = []
+        patches = list(patchset.patch_set)
+        for patch in patches:
+          content = models.Content(is_uploaded=True, parent=patch)
+          new_content_entities.append(content)
+        db.put(new_content_entities)
+
+        for patch, content_entity in zip(patches, new_content_entities):
+          patch.content = content_entity
           msg += "\n%d %s" % (patch.key().id(), patch.filename)
+        db.put(patches)
   return HttpResponse(msg, content_type='text/plain')
 
 
+@post_required
 @patch_required
 def upload_content(request):
   """/<issue>/upload_content/<patchset>/<patch> - Upload base file contents.
 
   Used by upload.py to upload base files."""
-  if request.method != 'POST':
-    return HttpResponse('Method not allowed.', status=405)
   form = UploadContentForm(request.POST, request.FILES)
   if not form.is_valid():
     return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
                         content_type='text/plain')
   patch = request.patch
   patch.status = form.cleaned_data['status']
+  if form.cleaned_data['no_base_file']:
+    patch.no_base_file = True
   patch.put()
-  try:
-    content = patch.get_partial_content()
-  except engine.FetchError, err:
-    return HttpResponse('ERROR: %s' % err, content_type='text/plain')
+  content = patch.content
   if request.user is None:
     if IS_DEV:
       request.user = users.User(request.POST.get('user', 'test@example.com'))
@@ -665,46 +706,19 @@ def upload_content(request):
   if request.user != request.issue.owner:
     return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                         (request.user, request.issue.key().id()))
-  current_part = form.cleaned_data['current_part']
-  # Reset Content instance when we've got part 0. Enables retry from upload.py.
-  if current_part == 0:
-    content.num_parts = form.cleaned_data['num_parts']
-    content.last_part = -1
-    content.is_bad = False
-    content.partial_upload = db.Blob()
-  if current_part != content.last_part+1:
-    msg = ('ERROR: Expected part %d of %d. '
-           'Got part %d instead.' % (content.last_part+2, content.num_parts,
-                                     current_part+1))
-    return HttpResponse(msg, content_type='text/plain')
+
   data = form.get_uploaded_content()
-  if not md5.new(data).hexdigest() == form.cleaned_data['current_checksum']:
+  checksum = md5.new(data).hexdigest()
+  if checksum != request.POST.get('checksum'):
     content.is_bad = True
-    content.partial_upload = db.Blob()
-    content.last_part = -1
     content.put()
     return HttpResponse('ERROR: Checksum mismatch.', content_type='text/plain')
-  if not content.partial_upload:
-    content.partial_upload = data
-  else:
-    content.partial_upload += data
-  content.last_part = current_part
-  if current_part+1 == content.num_parts:
-    content.is_complete = True
-    content.text = engine.ToText(content.partial_upload)
-    checksum = md5.new(content.partial_upload).hexdigest()
-    content.partial_upload = db.Blob()
-    if checksum != request.POST.get('checksum'):
-      content.is_bad = True
-      content.text = db.Text('')
-      content.last_part = -1
-      content.put()
-      return HttpResponse('ERROR: Checksum mismatch.',
-                          content_type='text/plain')
+  content.text = engine.ToText(data)
   content.put()
   return HttpResponse('OK', content_type='text/plain')
 
 
+@post_required
 @patchset_required
 def upload_patch(request):
   """/<issue>/upload_patch/<patchset> - Upload patch to patchset.
@@ -712,8 +726,6 @@ def upload_patch(request):
   Used by upload.py to upload a patch when the diff is too large to upload all
   together.
   """
-  if request.method != 'POST':
-    return HttpResponse('Method not allowed.', status=405)
   if request.user is None:
     if IS_DEV:
       request.user = users.User(request.POST.get('user', 'test@example.com'))
@@ -735,8 +747,7 @@ def upload_patch(request):
                        filename=form.cleaned_data['filename'], parent=patchset)
   patch.put()
   if form.cleaned_data.get('content_upload'):
-    content = models.Content(text=db.Text(''), is_uploaded=True,
-                             is_complete=False, parent=patch)
+    content = models.Content(is_uploaded=True, parent=patch)
     content.put()
     patch.content = content
     patch.put()
@@ -780,7 +791,8 @@ def _make_new(request, form):
                          base=base,
                          reviewers=reviewers,
                          cc=cc,
-                         owner=request.user)
+                         owner=request.user,
+                         n_comments=0)
     issue.put()
 
     patchset = models.PatchSet(issue=issue, data=data, url=url,
@@ -800,7 +812,7 @@ def _make_new(request, form):
   except EmptyPatchSet:
     errkey = url and 'url' or 'data'
     form.errors[errkey] = ['Patch set contains no recognizable patches']
-    issue = None
+    return None
 
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, '', '', True)
@@ -810,17 +822,17 @@ def _make_new(request, form):
 
 def _get_data_url(form):
   """Helper for _make_new() above and add() below.
-  
+
   Args:
     form: Django form object.
-  
+
   Returns:
     3-tuple (data, url, separate_patches).
       data: the diff content, if available.
       url: the url of the diff, if given.
       separate_patches: True iff the patches will be uploaded separately for
         each file.
-  
+
   """
   cleaned_data = form.cleaned_data
 
@@ -856,6 +868,7 @@ def _get_data_url(form):
   return data, url, separate_patches
 
 
+@post_required
 @issue_owner_required
 def add(request):
   """/<issue>/add - Add a new PatchSet to an existing Issue."""
@@ -1057,6 +1070,7 @@ def _delete_cached_contents(patch_set):
     db.put(patches)
 
 
+@post_required
 @issue_owner_required
 def delete(request):
   """/<issue>/delete - Delete an issue.  There is no way back."""
@@ -1069,6 +1083,7 @@ def delete(request):
   return HttpResponseRedirect('/mine')
 
 
+@post_required
 @issue_required
 def close(request):
   """/<issue>/close - Close an issue."""
@@ -1077,10 +1092,15 @@ def close(request):
       return HttpResponse('Login required', status=401)
   issue = request.issue
   issue.closed = True
+  if request.method == 'POST':
+    new_description = request.POST.get('description')
+    if new_description:
+      issue.description = new_description
   issue.put()
   return HttpResponse('Closed', content_type='text/plain')
 
 
+@post_required
 @issue_required
 def mailissue(request):
   """/<issue>/mail - Send mail for an issue."""
@@ -1117,10 +1137,33 @@ def description(request):
 @patch_required
 def patch(request):
   """/<issue>/patch/<patchset>/<patch> - View a raw patch."""
+  return patch_helper(request)
+
+
+def patch_helper(request, nav_type='patch'):
+  """Returns a unified diff.
+
+  Args:
+    request: Django Request object.
+    nav_type: the navigation used in the url (i.e. patch/diff/diff2).  Normally
+      the user looks at either unified or side-by-side diffs at one time, going
+      through all the files in the same mode.  However, if side-by-side is not
+      available for some files, we temporarly switch them to unified view, then
+      switch them back when we can.  This way they don't miss any files.
+
+  Returns:
+    Whatever respond() returns.
+  """
   _add_next_prev(request.patchset, request.patch)
+  request.patch.nav_type = nav_type
+  parsed_lines = patching.ParsePatchToLines(request.patch.lines)
+  if parsed_lines is None:
+    return HttpResponseNotFound('Can\'t parse the patch')
+  rows = engine.RenderUnifiedTableRows(request, parsed_lines)
   return respond(request, 'patch.html',
                  {'patch': request.patch,
                   'patchset': request.patchset,
+                  'rows': rows,
                   'issue': request.issue})
 
 
@@ -1138,7 +1181,7 @@ def _get_context_for_user(request):
   engine.DEFAULT_CONTEXT.
   """
   if request.user:
-    account = models.Account.get_account_for_user(request.user)
+    account = models.Account.current_user_account
     default_context = account.default_context
   else:
     default_context = engine.DEFAULT_CONTEXT
@@ -1153,7 +1196,12 @@ def _get_context_for_user(request):
 
 @patch_required
 def diff(request):
-  """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff."""
+  """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff"""
+  if request.patch.no_base_file:
+    # Can't show side-by-side diff since we don't have the base file.  Show the
+    # unified diff instead.
+    return patch_helper(request, 'diff')
+
   patchset = request.patchset
   patch = request.patch
 
@@ -1171,7 +1219,7 @@ def diff(request):
 
 def _get_diff_table_rows(request, patch, context):
   """Helper function that returns rendered rows for a patch"""
-  chunks = patching.ParsePatch(patch.lines, patch.filename)
+  chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
     return HttpResponseNotFound('Can\'t parse the patch')
 
@@ -1186,7 +1234,7 @@ def _get_diff_table_rows(request, patch, context):
   if rows and rows[-1] is None:
     del rows[-1]
     # Get rid of content, which may be bad
-    if content.is_uploaded:
+    if content.is_uploaded and content.text != None:
       # Don't delete uploaded content, otherwise get_content()
       # will fetch it.
       content.is_bad = True
@@ -1336,6 +1384,7 @@ def _add_next_prev(patchset, patch):
     last = p
 
 
+@post_required
 def inline_draft(request):
   """/inline_draft - Ajax handler to submit an in-line draft comment.
 
@@ -1392,6 +1441,8 @@ def _inline_draft(request):
       assert comment.draft and comment.author == request.user
       comment.delete()  # Deletion
       comment = None
+      # Re-query the comment count.
+      models.Account.current_user_account.update_drafts(issue)
   else:
     if comment is None:
       comment = models.Comment(key_name=message_id, parent=patch)
@@ -1402,6 +1453,9 @@ def _inline_draft(request):
     comment.text = db.Text(text)
     comment.message_id = message_id
     comment.put()
+    # The actual count doesn't matter, just that there's at least one.
+    models.Account.current_user_account.update_drafts(issue, 1)
+
   query = models.Comment.gql(
       'WHERE patch = :patch AND lineno = :lineno AND left = :left '
       'ORDER BY date',
@@ -1457,7 +1511,7 @@ def _get_affected_files(issue):
 
 def _get_mail_template(issue):
   """Helper to return the template and context for an email.
-  
+
   If this is the first email for this issue, a template that lists the
   reviewers, description and files is used.
   """
@@ -1471,8 +1525,8 @@ def _get_mail_template(issue):
   return template, context
 
 
-@issue_required
 @login_required
+@issue_required
 def publish(request):
   """ /<issue>/publish - Publish draft comments and send mail."""
   issue = request.issue
@@ -1524,7 +1578,8 @@ def publish(request):
     tbd, comments = _get_draft_comments(request, issue)
   else:
     tbd = []
-    comments = None
+    comments = []
+  issue.update_comment_count(len(comments))
   tbd.append(issue)
 
   if comments:
@@ -1537,6 +1592,9 @@ def publish(request):
 
   for obj in tbd:
     db.put(obj)
+
+  # There are now no comments here (modulo race conditions)
+  models.Account.current_user_account.update_drafts(issue, 0)
   return HttpResponseRedirect('/%s' % issue.key().id())
 
 
@@ -1604,17 +1662,26 @@ def _get_draft_details(request, comments):
                                              c.left and "left" or "right"))
       last_key = (c.patch.filename, c.left)
       patch = c.patch
-      if c.left:
-        old_lines = patch.get_content().text.splitlines(True)
-        linecache[last_key] = old_lines
+      if patch.no_base_file:
+        linecache[last_key] = patching.ParsePatchToLines(patch.lines)
       else:
-        new_lines = patch.get_patched_content().text.splitlines(True)
-        linecache[last_key] = new_lines
+        if c.left:
+          old_lines = patch.get_content().text.splitlines(True)
+          linecache[last_key] = old_lines
+        else:
+          new_lines = patch.get_patched_content().text.splitlines(True)
+          linecache[last_key] = new_lines
     file_lines = linecache.get(last_key, ())
-    if 1 <= c.lineno <= len(file_lines):
-      context = file_lines[c.lineno - 1].strip()
+    context = ''
+    if patch.no_base_file:
+      for old_line_no, new_line_no, line_text in file_lines:
+        if ((c.lineno == old_line_no and c.left) or
+            (c.lineno == new_line_no and not c.left)):
+          context = line_text.strip()
+          break
     else:
-      context = ''
+      if 1 <= c.lineno <= len(file_lines):
+        context = file_lines[c.lineno - 1].strip()
     url = request.build_absolute_uri('/%d/diff/%d/%d#%scode%d' %
                                      (request.issue.key().id(),
                                       c.patch.patchset.key().id(),
@@ -1688,29 +1755,33 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
   return msg
 
 
-@issue_required
+@post_required
 @login_required
+@issue_required
 def star(request):
-  acct = models.Account.current_user_account
-  if acct.stars is None:
-    acct.stars = []
+  account = models.Account.current_user_account
+  account.user_has_selected_nickname()  # This will preserve account.fresh.
+  if account.stars is None:
+    account.stars = []
   id = request.issue.key().id()
-  if id not in acct.stars:
-    acct.stars.append(id)
-    acct.put()
+  if id not in account.stars:
+    account.stars.append(id)
+    account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
-@issue_required
+@post_required
 @login_required
+@issue_required
 def unstar(request):
-  acct = models.Account.current_user_account
-  if acct.stars is None:
-    acct.stars = []
+  account = models.Account.current_user_account
+  account.user_has_selected_nickname()  # This will preserve account.fresh.
+  if account.stars is None:
+    account.stars = []
   id = request.issue.key().id()
-  if id in acct.stars:
-    acct.stars[:] = [i for i in acct.stars if i != id]
-    acct.put()
+  if id in account.stars:
+    account.stars[:] = [i for i in account.stars if i != id]
+    account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
@@ -1834,6 +1905,7 @@ def branch_edit(request, branch_id):
   return HttpResponseRedirect('/repos')
 
 
+@post_required
 @login_required
 def branch_delete(request, branch_id):
   """/branch_delete/<branch> - Delete a Branch record."""
@@ -1855,7 +1927,7 @@ def branch_delete(request, branch_id):
 
 @login_required
 def settings(request):
-  account = models.Account.get_account_for_user(request.user)
+  account = models.Account.current_user_account
   if request.method != 'POST':
     nickname = account.nickname
     default_context = account.default_context
@@ -1881,10 +1953,11 @@ def settings(request):
       else:
         account.nickname = nickname
         account.default_context = form.cleaned_data.get("context")
+        account.fresh = False
         account.put()
   if not form.is_valid():
     return respond(request, 'settings.html', {'form': form})
-  return HttpResponseRedirect('/settings')
+  return HttpResponseRedirect('/mine')
 
 
 @user_key_required
@@ -1899,7 +1972,7 @@ def user_popup(request):
 
 def _user_popup(request):
   user = request.user_to_show
-  popup_html = memcache.get("user_popup:" + user.email())
+  popup_html = memcache.get('user_popup:' + user.email())
   if popup_html is None:
     num_issues_created = db.GqlQuery(
       'SELECT * FROM Issue '
@@ -1916,5 +1989,5 @@ def _user_popup(request):
                              'num_issues_created': num_issues_created,
                              'num_issues_reviewed': num_issues_reviewed})
     # Use time expired cache because the number of issues will change over time
-    memcache.add("user_popup:" + user.email(), popup_html, 60)
+    memcache.add('user_popup:' + user.email(), popup_html, 60)
   return popup_html

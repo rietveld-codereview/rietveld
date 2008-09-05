@@ -10,6 +10,7 @@
     <div class="subject">
       <a class="noul" href="{%url codereview.views.show issue.key.id%}">
         {{issue.subject}}</a>
+      {%if issue.closed and not closed_issues %} (Closed) {%endif%}
     </div>
   </td>
   <td><div class="users">{{issue.owner|show_user}}</div></td>
