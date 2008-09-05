@@ -766,7 +766,8 @@ class GitVCS(VersionControlSystem):
     return "".join(svndiff)
 
   def GetUnknownFiles(self):
-    status = RunShell(["git", "ls-files", "--others"], silent_ok=True)
+    status = RunShell(["git", "ls-files", "--exclude-standard", "--others"],
+                      silent_ok=True)
     return status.splitlines()
 
   def GetBaseFile(self, filename):
