@@ -766,7 +766,8 @@ class GitVCS(VersionControlSystem):
     return "".join(svndiff)
 
   def GetUnknownFiles(self):
-    status = RunShell(["git", "ls-files", "--others"], silent_ok=True)
+    status = RunShell(["git", "ls-files", "--exclude-standard", "--others"],
+                      silent_ok=True)
     return status.splitlines()
 
   def GetBaseFile(self, filename):
@@ -975,7 +976,7 @@ def RealMain(argv, data=None):
   if options.local_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
     if options.send_mail:
-      rpc_server.Send("/" + issue + "/mail")
+      rpc_server.Send("/" + issue + "/mail", payload="")
   return issue
 
 
