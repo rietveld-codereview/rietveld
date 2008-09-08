@@ -940,6 +940,16 @@ def _get_emails(form, label):
   return emails
 
 
+def _reorder_patches_by_filename(patches):
+  """Reorder a list of patches to put C/C++ headers before sources."""
+  splits = [os.path.splitext(patch.filename) for patch in patches]
+  for i in range(len(splits) - 1):
+    if (splits[i][0] == splits[i+1][0] and
+        splits[i][1] in ['.c', '.cc', '.cpp'] and
+        splits[i+1][1] in ['.h', '.hxx', '.hpp']):
+      patches[i:i+2] = [patches[i+1], patches[i]]
+
+
 @issue_required
 def show(request, form=None):
   """/<issue> - Show an issue."""
@@ -959,6 +969,8 @@ def show(request, form=None):
   issue.comment_count = 0
   for patchset in patchsets:
     patchset.patches = list(patchset.patch_set.order('filename'))
+    # Reorder the list of patches to put .h files before .cc.
+    _reorder_patches_by_filename(patchset.patches)
     for patch in patchset.patches:
       patch.patchset = patchset  # Prevent getting these over and over
     patchset.n_comments = 0
