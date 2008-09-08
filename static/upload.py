@@ -497,11 +497,11 @@ def GetContentType(filename):
 use_shell = sys.platform.startswith("win")
 
 
-def RunShell(command, silent_ok=False, universal_newlines=False):
+def RunShell(command, silent_ok=False):
   logging.info("Running %s", command)
   p = subprocess.Popen(command, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, shell=use_shell,
-                       universal_newlines=universal_newlines)
+                       universal_newlines=True)
   data = p.stdout.read()
   p.wait()
   p.stdout.close()
@@ -714,13 +714,7 @@ class SubversionVCS(VersionControlSystem):
       if mimetype.startswith("application/octet-stream"):
         content = ""
       else:
-        # On Windows svn cat gives \r\n, and calling subprocess.Popen turns
-        # them into \r\r\n, so use universal newlines to avoid the extra \r.
-        if sys.platform.startswith("win"):
-          nl = True
-        else:
-          nl = False
-        content = RunShell(["svn", "cat", filename], universal_newlines=nl)
+        content = RunShell(["svn", "cat", filename])
       keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
                            filename],
                           silent_ok=True)
