@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Views for Rietveld.
-
-This requires Django 0.97.pre.
-"""
+"""Views for Rietveld."""
 
 
 ### Imports ###
