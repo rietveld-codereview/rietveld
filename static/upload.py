@@ -426,7 +426,8 @@ def GetRpcServer(options):
     """Prompts the user for a username and password."""
     email = options.email
     if email is None:
-      email = raw_input("Email: ").strip()
+      prompt = "Email (login for uploading to %s): " % options.server
+      email = raw_input(prompt).strip()
     password = getpass.getpass("Password for %s: " % email)
     return (email, password)
 
