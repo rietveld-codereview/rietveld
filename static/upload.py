@@ -405,9 +405,10 @@ group.add_option("-m", "--message", action="store", dest="message",
 group.add_option("-i", "--issue", type="int", action="store",
                  metavar="ISSUE", default=None,
                  help="Issue number to which to add. Defaults to new issue.")
-group.add_option("-l", "--local_base", action="store_true",
-                 dest="local_base", default=False,
-                 help="Base files will be uploaded.")
+group.add_option("--download_base", action="store_true",
+                 dest="download_base", default=False,
+                 help="Base files will be downloaded by the server "
+                 "(side-by-side diffs may not work on files with CRs).")
 group.add_option("--send_mail", action="store_true",
                  dest="send_mail", default=False,
                  help="Send notification email to reviewers.")
@@ -498,11 +499,11 @@ def GetContentType(filename):
 use_shell = sys.platform.startswith("win")
 
 
-def RunShell(command, silent_ok=False, universal_newlines=False):
+def RunShell(command, silent_ok=False):
   logging.info("Running %s", command)
   p = subprocess.Popen(command, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, shell=use_shell,
-                       universal_newlines=universal_newlines)
+                       universal_newlines=True)
   data = p.stdout.read()
   p.wait()
   p.stdout.close()
@@ -717,13 +718,7 @@ class SubversionVCS(VersionControlSystem):
       if mimetype.startswith("application/octet-stream"):
         content = ""
       else:
-        # On Windows svn cat gives \r\n, and calling subprocess.Popen turns
-        # them into \r\r\n, so use universal newlines to avoid the extra \r.
-        if sys.platform.startswith("win"):
-          nl = True
-        else:
-          nl = False
-        content = RunShell(["svn", "cat", filename], universal_newlines=nl)
+        content = RunShell(["svn", "cat", filename])
       keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
                            filename],
                           silent_ok=True)
@@ -835,7 +830,7 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
              " because the file is too large.")
       continue
     form_fields = [("filename", patch[0])]
-    if options.local_base:
+    if not options.download_base:
       form_fields.append(("content_upload", "1"))
     files = [("data", "data.diff", patch[1])]
     ctype, body = EncodeMultipartFormData(form_fields, files)
@@ -895,11 +890,11 @@ def RealMain(argv, data=None):
   if isinstance(vcs, SubversionVCS):
     # base field is only allowed for Subversion.
     # Note: Fetching base files may become deprecated in future releases.
-    base = vcs.GuessBase(not options.local_base)
+    base = vcs.GuessBase(options.download_base)
   else:
     base = None
-  if not base and not options.local_base:
-    options.local_base = True
+  if not base and options.download_base:
+    options.download_base = True
     logging.info("Enabled upload of base file")
   if not options.assume_yes:
     vcs.CheckForUnknownFiles()
@@ -943,9 +938,9 @@ def RealMain(argv, data=None):
     form_fields.append(("description", description))
   # If we're uploading base files, don't send the email before the uploads, so
   # that it contains the file status.
-  if options.send_mail and not options.local_base:
+  if options.send_mail and options.download_base:
     form_fields.append(("send_mail", "1"))
-  if options.local_base:
+  if not options.download_base:
     form_fields.append(("content_upload", "1"))
   if len(data) > MAX_UPLOAD_SIZE:
     print "Patch is large, so uploading file patches separately."
@@ -955,7 +950,7 @@ def RealMain(argv, data=None):
     files = [("data", "data.diff", data)]
   ctype, body = EncodeMultipartFormData(form_fields, files)
   response_body = rpc_server.Send("/upload", body, content_type=ctype)
-  if options.local_base or not files:
+  if not options.download_base or not files:
     lines = response_body.splitlines()
     if len(lines) >= 2:
       msg = lines[0]
@@ -973,10 +968,10 @@ def RealMain(argv, data=None):
 
   if not files:
     result = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
-    if options.local_base:
+    if not options.download_base:
       patches = result
 
-  if options.local_base:
+  if not options.download_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
     if options.send_mail:
       rpc_server.Send("/" + issue + "/mail", payload="")
