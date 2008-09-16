@@ -110,7 +110,6 @@ def CreateRelease():
         result.append(os.path.join(root, file))
     return result
 
-
   def CopyRietveldDirectory(src, dst):
     """Copies a directory used by Rietveld.
 
@@ -127,7 +126,6 @@ def CreateRelease():
       dirs[:] = [d for d in dirs if d not in (".svn")]
       for dir in dirs:
         os.mkdir(os.path.join(dst, root, dir))
-
 
   # Remove old ZIPFILE file.
   if os.path.exists(ZIPFILE):

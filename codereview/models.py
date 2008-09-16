@@ -35,6 +35,7 @@ CONTEXT_CHOICES = (3, 10, 25, 50, 75, 100)
 
 _query_cache = {}
 
+
 def gql(cls, clause, *args, **kwds):
   """Return a query object, from the cache if possible.
 

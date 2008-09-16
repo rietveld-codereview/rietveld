@@ -216,7 +216,6 @@ def ParsePatchToChunks(lines, name="<patch>"):
   return chunks
 
 
-# TODO: can we share some of this code with ParsePatchToChunks?
 def ParsePatchToLines(lines):
   """Parses a patch from a list of lines.
 
@@ -225,6 +224,7 @@ def ParsePatchToLines(lines):
 
     A line number can be 0 if it doesn't exist in the old/new file.
   """
+  # TODO: can we share some of this code with ParsePatchToChunks?
   result = []
   in_prelude = True
   for line in lines:

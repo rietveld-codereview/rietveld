@@ -157,7 +157,7 @@ class AbstractRpcServer(object):
             "service": "ah",
             "source": "rietveld-codereview-upload",
             "accountType": "GOOGLE",
-        })
+        }),
     )
     try:
       response = self.opener.open(req)
@@ -571,7 +571,8 @@ class VersionControlSystem(object):
                                           int(patches.get(filename)))
       form_fields = [("filename", filename),
                      ("status", status),
-                     ("checksum", checksum),]
+                     ("checksum", checksum),
+                     ]
       if no_base_file:
         form_fields.append(("no_base_file", "1"))
       if options.email:
@@ -667,6 +668,7 @@ class SubversionVCS(VersionControlSystem):
       'LastChangedBy':       ['LastChangedBy', 'Author'],
       'URL':                 ['URL', 'HeadURL'],
     }
+
     def repl(m):
        if m.group(2):
          return "$%s::%s$" % (m.group(1), " " * len(m.group(3)))
@@ -778,7 +780,7 @@ class GitVCS(VersionControlSystem):
       return (RunShell(["git", "show", hash]), "M")
 
 
-# NOTE: this function is duplicated in engine.py, keep them in sync.
+# NOTE: The SplitPatch function is duplicated in engine.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
 
