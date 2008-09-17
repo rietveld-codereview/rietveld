@@ -499,11 +499,11 @@ def GetContentType(filename):
 use_shell = sys.platform.startswith("win")
 
 
-def RunShell(command, silent_ok=False):
+def RunShell(command, silent_ok=False, universal_newlines=True):
   logging.info("Running %s", command)
   p = subprocess.Popen(command, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, shell=use_shell,
-                       universal_newlines=True)
+                       universal_newlines=universal_newlines)
   data = p.stdout.read()
   p.wait()
   p.stdout.close()
@@ -547,44 +547,64 @@ class VersionControlSystem(object):
     """Get the content of the upstream version of a file.
 
     Returns:
-      A tuple (content, status) representing the file content and the status of
-      the file.
+      A tuple (base_content, new_content, is_binary, status)
+        base_content: The contents of the base file.
+        new_content: For text files, this is empty.  For binary files, this is
+          the contents of the new file, since the diff output won't contain
+          information to reconstruct the current file.
+        is_binary: True iff the file is binary.
+        status: The status of the file.
     """
 
     raise NotImplementedError(
         "abstract method -- subclass %s must override" % self.__class__)
 
   def UploadBaseFiles(self, issue, rpc_server, patch_list, patchset, options):
-    """Uploads the base files."""
-    patches = dict()
-    [patches.setdefault(v, k) for k, v in patch_list]
-    for filename in patches.keys():
-      content, status = self.GetBaseFile(filename)
-      no_base_file = False
+    """Uploads the base files (and if necessary, the current ones as well)."""
+
+    def UploadFile(filename, file_id, content, is_binary, status, is_base):
+      """Uploads a file to the server."""
+      file_too_large = False
+      if is_base:
+        type = "base"
+      else:
+        type = "current"
       if len(content) > MAX_UPLOAD_SIZE:
-        print ("Not uploading the base file for " + filename +
-               " because the file is too large.")
-        no_base_file = True
+        print ("Not uploading the %s file for %s because it's too large." %
+               (type, filename))
+        file_too_large = True
         content = ""
       checksum = md5.new(content).hexdigest()
-      if options.verbose > 0:
-        print "Uploading %s" % filename
-      url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset),
-                                          int(patches.get(filename)))
+      if options.verbose > 0 and not file_too_large:
+        print "Uploading %s file for %s" % (type, filename)
+      url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset), file_id)
       form_fields = [("filename", filename),
                      ("status", status),
                      ("checksum", checksum),
-                     ]
-      if no_base_file:
-        form_fields.append(("no_base_file", "1"))
+                     ("is_binary", str(is_binary)),
+                     ("is_current", str(not is_base)),
+                    ]
+      if file_too_large:
+        form_fields.append(("file_too_large", "1"))
       if options.email:
         form_fields.append(("user", options.email))
       ctype, body = EncodeMultipartFormData(form_fields,
                                             [("data", filename, content)])
-      response_body = rpc_server.Send(url, body, content_type=ctype)
+      response_body = rpc_server.Send(url, body,
+                                      content_type=ctype)
       if not response_body.startswith("OK"):
         StatusUpdate("  --> %s" % response_body)
-        sys.exit(False)
+        sys.exit(1)
+
+    patches = dict()
+    [patches.setdefault(v, k) for k, v in patch_list]
+    for filename in patches.keys():
+      file_id = int(patches.get(filename))
+      base_content, new_content, is_binary, status = self.GetBaseFile(filename)
+      if base_content:
+        UploadFile(filename, file_id, base_content, is_binary, status, True)
+      if new_content:
+        UploadFile(filename, file_id, new_content, is_binary, status, False)
 
 
 class SubversionVCS(VersionControlSystem):
@@ -688,11 +708,28 @@ class SubversionVCS(VersionControlSystem):
         unknown_files.append(line)
     return unknown_files
 
+  def IsImage(self, filename):
+    """Returns true if the filename has an image extension."""
+    mimetype =  mimetypes.guess_type(filename)[0]
+    if not mimetype:
+      return False
+    return mimetype.startswith("image/")
+
+  def ReadFile(self, filename):
+    """Returns the contents of a file."""
+    file = open(filename, 'rb')
+    result = ""
+    try:
+      result = file.read()
+    finally:
+      file.close()
+    return result
+
   def GetBaseFile(self, filename):
     status = RunShell(["svn", "status", "--ignore-externals", filename])
     if not status:
       StatusUpdate("svn status returned no output for %s" % filename)
-      sys.exit(False)
+      sys.exit(1)
     status_lines = status.splitlines()
     # If file is in a cl, the output will begin with
     # "\n--- Changelist 'cl_name':\n".  See
@@ -703,31 +740,54 @@ class SubversionVCS(VersionControlSystem):
       status = status_lines[2]
     else:
       status = status_lines[0]
+    base_content = ""
+    new_content = ""
+
     # If a file is copied its status will be "A  +", which signifies
     # "addition-with-history".  See "svn st" for more information.  We need to
     # upload the original file or else diff parsing will fail if the file was
     # edited.
-    if ((status[0] == "A" and status[3] != "+") or
-        (status[0] == " " and status[1] == "M")):  # property changed
-      content = ""
+    if status[0] == "A" and status[3] != "+":
+      # We'll need to upload the new content if we're adding a binary file
+      # since diff's output won't contain it.
+      mimetype = RunShell(["svn", "propget", "svn:mime-type", filename],
+                          silent_ok=True)
+      is_binary = mimetype and not mimetype.startswith("text/")
+      if is_binary and self.IsImage(filename):
+        new_content = self.ReadFile(filename)
+    elif status[0] == " " and status[1] == "M":
+      # Property changed, don't need to do anything.
+      pass
     elif (status[0] in ("M", "D", "R") or
           (status[0] == "A" and status[3] == "+")):
       mimetype = RunShell(["svn", "-rBASE", "propget", "svn:mime-type",
                            filename],
                           silent_ok=True)
-      if mimetype.startswith("application/octet-stream"):
-        content = ""
-      else:
-        content = RunShell(["svn", "cat", filename])
-      keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
-                           filename],
-                          silent_ok=True)
-      if keywords:
-        content = self._CollapseKeywords(content, keywords)
+      is_binary = mimetype and not mimetype.startswith("text/")
+      get_base = False
+      if not is_binary:
+        get_base = True
+      elif self.IsImage(filename) and status[0] == "M":          
+        new_content = self.ReadFile(filename)
+        get_base = True
+
+      if get_base:
+        if is_binary:
+          universal_newlines = False
+        else:
+          universal_newlines = True
+        base_content = RunShell(["svn", "cat", filename],
+                                universal_newlines=universal_newlines)
+        if not is_binary:
+          keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
+                               filename],
+                              silent_ok=True)
+          if keywords:
+            base_content = self._CollapseKeywords(base_content, keywords)
     else:
       StatusUpdate("svn status returned unexpected output: %s" % status)
-      sys.exit(False)
-    return content, status[0:5]
+      sys.exit(1)
+    return base_content, new_content, is_binary, status[0:5]
 
 
 class GitVCS(VersionControlSystem):
@@ -770,10 +830,15 @@ class GitVCS(VersionControlSystem):
 
   def GetBaseFile(self, filename):
     hash = self.base_hashes[filename]
+    base_content = ""
+    new_content = ""
+    is_binary = False
     if hash == "0" * 40:  # All-zero hash indicates no base file.
-      return ("", "A")
+      status = "A"
     else:
-      return (RunShell(["git", "show", hash]), "M")
+      status = "M"
+      base_content = RunShell(["git", "show", hash])
+    return (base_content, new_content, is_binary, status)
 
 
 # NOTE: The SplitPatch function is duplicated in engine.py, keep them in sync.
@@ -840,7 +905,7 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
     lines = response_body.splitlines()
     if not lines or lines[0] != "OK":
       StatusUpdate("  --> %s" % response_body)
-      sys.exit(False)
+      sys.exit(1)
     rv.append([lines[1], patch[0]])
   return rv
 

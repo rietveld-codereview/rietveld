@@ -36,6 +36,7 @@ urlpatterns = patterns(
     (r'^download/issue(\d+)_(\d+)\.diff', 'download'),
     (r'^download/issue(\d+)_(\d+)_(\d+)\.diff', 'download_patch'),
     (r'^(\d+)/patch/(\d+)/(\d+)$', 'patch'),
+    (r'^(\d+)/image/(\d+)/(\d+)/(\d+)$', 'image'),
     (r'^(\d+)/diff/(\d+)/(\d+)$', 'diff'),
     (r'^(\d+)/diff2/(\d+):(\d+)/(\d+)$', 'diff2'),
     (r'^(\d+)/diff_skipped_lines/(\d+)/(\d+)/(\d+)/(\d+)/([tb])$',

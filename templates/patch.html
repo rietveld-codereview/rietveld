@@ -127,12 +127,17 @@ login_warned = false;
 
 <div style="position:relative" id="table-top">
 
+{%if patch.is_binary%}
+<img src="{%url codereview.views.image issue.key.id,patchset.key.id,patch.key.id,1%}" />
+</pre>
+{%else%}
 <span id="hook-sel" style="display:none;"></span>
 
 <table style="padding: 5px;" cellpadding="0" cellspacing="0" id="thecode"
        ondblclick="M_handleTableDblClick(event)">
 {%for row in rows%}{{row|safe}}{%endfor%}
 </table>
+{%endif%}
 
 </div>
 <div class="codenav">

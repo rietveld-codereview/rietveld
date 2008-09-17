@@ -51,6 +51,7 @@ except ImportError:
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
 from django import forms
+from django.http import Http404
 from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
@@ -186,7 +187,9 @@ class UploadContentForm(forms.Form):
   filename = forms.CharField(max_length=255)
   status = forms.CharField(required=False, max_length=20)
   checksum = forms.CharField(max_length=32)
-  no_base_file = forms.BooleanField(required=False)
+  file_too_large = forms.BooleanField(required=False)
+  is_binary = forms.BooleanField(required=False)
+  is_current = forms.BooleanField(required=False)
 
   def clean(self):
     # Check presence of 'data'. We cannot use FileField because
@@ -470,6 +473,29 @@ def patch_required(func):
   return patch_wrapper
 
 
+def image_required(func):
+  """Decorator that processes the image argument.
+  
+  Attributes set on the request:
+   content: a Content entity.
+  """
+
+  @patch_required
+  def image_wrapper(request, image_type, *args, **kwds):
+    content = None
+    if image_type == "0":
+      content = request.patch.content
+    elif image_type == "1":
+      content = request.patch.patched_content
+    # Other values are erroneous so request.content won't be set.
+    if not content or not content.data:
+      return HttpResponseRedirect("/static/blank.jpg")
+    request.content = content
+    return func(request, *args, **kwds)
+
+  return image_wrapper
+
+
 ### Request handlers ###
 
 
@@ -709,12 +735,6 @@ def upload_content(request):
   if not form.is_valid():
     return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
                         content_type='text/plain')
-  patch = request.patch
-  patch.status = form.cleaned_data['status']
-  if form.cleaned_data['no_base_file']:
-    patch.no_base_file = True
-  patch.put()
-  content = patch.content
   if request.user is None:
     if IS_DEV:
       request.user = users.User(request.POST.get('user', 'test@example.com'))
@@ -723,14 +743,35 @@ def upload_content(request):
   if request.user != request.issue.owner:
     return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                         (request.user, request.issue.key().id()))
+  patch = request.patch
+  patch.status = form.cleaned_data['status']
+  patch.is_binary = form.cleaned_data['is_binary']
+  patch.put()
 
-  data = form.get_uploaded_content()
-  checksum = md5.new(data).hexdigest()
-  if checksum != request.POST.get('checksum'):
-    content.is_bad = True
+  if form.cleaned_data['is_current']:
+    if patch.patched_content:
+      return HttpResponse('ERROR: Already have current content.')
+    content = models.Content(is_uploaded=True, parent=patch)
     content.put()
-    return HttpResponse('ERROR: Checksum mismatch.', content_type='text/plain')
-  content.text = engine.ToText(data)
+    patch.patched_content = content
+    patch.put()
+  else:
+    content = patch.content
+
+  if form.cleaned_data['file_too_large']:
+    content.file_too_large = True
+  else:
+    data = form.get_uploaded_content()
+    checksum = md5.new(data).hexdigest()
+    if checksum != request.POST.get('checksum'):
+      content.is_bad = True
+      content.put()
+      return HttpResponse('ERROR: Checksum mismatch.',
+                          content_type='text/plain')
+    if patch.is_binary:
+      content.data = data
+    else:      
+      content.text = engine.ToText(data)
   content.put()
   return HttpResponse('OK', content_type='text/plain')
 
@@ -1187,6 +1228,12 @@ def patch_helper(request, nav_type='patch'):
                   })
 
 
+@image_required
+def image(request):
+  """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
+  return HttpResponse(request.content.data)
+
+
 @patch_required
 def download_patch(request):
   """/download/issue<issue>_<patchset>_<patch>.diff - Download patch."""
@@ -1226,9 +1273,10 @@ def diff(request):
   patch = request.patch
 
   context = _get_context_for_user(request)
-  rows = _get_diff_table_rows(request, patch, context)
-  if isinstance(rows, HttpResponseNotFound):
-    return rows
+  if patch.is_binary:
+    rows = None
+  else:
+    rows = _get_diff_table_rows(request, patch, context)
 
   _add_next_prev(patchset, patch)
   return respond(request, 'diff.html',
@@ -1245,12 +1293,12 @@ def _get_diff_table_rows(request, patch, context):
   """Helper function that returns rendered rows for a patch"""
   chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
-    return HttpResponseNotFound('Can\'t parse the patch')
+    raise Http404
 
   try:
     content = request.patch.get_content()
   except engine.FetchError, err:
-    return HttpResponseNotFound(str(err))
+    raise Http404
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
                                          chunks, patch,
@@ -1280,8 +1328,6 @@ def diff_skipped_lines(request, id_before, id_after, where):
 
   # TODO: allow context = None?
   rows = _get_diff_table_rows(request, patch, 10000)
-  if isinstance(rows, HttpResponseNotFound):
-    return rows
   return _get_skipped_lines_response(rows, id_before, id_after, where)
 
 
