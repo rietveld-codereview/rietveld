@@ -24,7 +24,8 @@ Supported version control systems:
   Git
   Subversion
 
-(It is important for Git users to specify a tree-ish to diff against.)
+It is important for Git users to specify a tree-ish to diff against
+by using the '--rev' option.
 """
 # This code is derived from appcfg.py in the App Engine SDK (open source),
 # and from ASPN recipe #146306.
@@ -409,6 +410,9 @@ group.add_option("--download_base", action="store_true",
                  dest="download_base", default=False,
                  help="Base files will be downloaded by the server "
                  "(side-by-side diffs may not work on files with CRs).")
+group.add_option("--rev", action="store", dest="revision",
+                 metavar="REV", default=None,
+                 help="Branch/tree/revision to diff against (used by DVCS).")
 group.add_option("--send_mail", action="store_true",
                  dest="send_mail", default=False,
                  help="Send notification email to reviewers.")
@@ -516,6 +520,14 @@ def RunShell(command, silent_ok=False, universal_newlines=True):
 
 class VersionControlSystem(object):
   """Abstract base class providing an interface to the VCS."""
+
+  def __init__(self, options):
+    """Constructor.
+
+    Args:
+      options: Command line options.
+    """
+    self.options = options
 
   def GenerateDiff(self, args):
     """Return the current diff as a string.
@@ -793,7 +805,8 @@ class SubversionVCS(VersionControlSystem):
 class GitVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Git."""
 
-  def __init__(self):
+  def __init__(self, options):
+    super(GitVCS, self).__init__(options)
     # Map of filename -> hash of base file.
     self.base_hashes = {}
 
@@ -801,6 +814,8 @@ class GitVCS(VersionControlSystem):
     # This is more complicated than svn's GenerateDiff because we must convert
     # the diff output to include an svn-style "Index:" line as well as record
     # the hashes of the base files, so we can upload them along with our diff.
+    if self.options.revision:
+      extra_args = [self.options.revision] + extra_args
     gitdiff = RunShell(["git", "diff", "--full-index"] + extra_args)
     svndiff = []
     filecount = 0
@@ -910,7 +925,7 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
   return rv
 
 
-def GuessVCS():
+def GuessVCS(options):
   """Helper to guess the version control system.
 
   This examines the current directory, guesses which VersionControlSystem
@@ -923,7 +938,7 @@ def GuessVCS():
   # Subversion has a .svn in all working directories.
   if os.path.isdir('.svn'):
     logging.info("Guessed VCS = Subversion")
-    return SubversionVCS()
+    return SubversionVCS(options)
 
   # Git has a command to test if you're in a git tree.
   # Try running it, but don't die if we don't have git installed.
@@ -931,7 +946,7 @@ def GuessVCS():
     subproc = subprocess.Popen(["git", "rev-parse", "--is-inside-work-tree"],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if subproc.wait() == 0:
-      return GitVCS()
+      return GitVCS(options)
   except OSError, (errno, message):
     if errno != 2:  # ENOENT -- they don't have git installed.
       raise
@@ -951,7 +966,7 @@ def RealMain(argv, data=None):
     logging.getLogger().setLevel(logging.DEBUG)
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
-  vcs = GuessVCS()
+  vcs = GuessVCS(options)
   if isinstance(vcs, SubversionVCS):
     # base field is only allowed for Subversion.
     # Note: Fetching base files may become deprecated in future releases.
