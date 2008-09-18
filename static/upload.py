@@ -24,7 +24,8 @@ Supported version control systems:
   Git
   Subversion
 
-(It is important for Git users to specify a tree-ish to diff against.)
+It is important for Git users to specify a tree-ish to diff against
+by using the '--rev' option.
 """
 # This code is derived from appcfg.py in the App Engine SDK (open source),
 # and from ASPN recipe #146306.
@@ -149,6 +150,10 @@ class AbstractRpcServer(object):
     Returns:
       The authentication token returned by ClientLogin.
     """
+    account_type = "GOOGLE"
+    if self.host.endswith(".google.com"):
+      # Needed for use inside Google.
+      account_type = "HOSTED"
     req = self._CreateRequest(
         url="https://www.google.com/accounts/ClientLogin",
         data=urllib.urlencode({
@@ -156,8 +161,8 @@ class AbstractRpcServer(object):
             "Passwd": password,
             "service": "ah",
             "source": "rietveld-codereview-upload",
-            "accountType": "GOOGLE",
-        })
+            "accountType": account_type,
+        }),
     )
     try:
       response = self.opener.open(req)
@@ -405,9 +410,13 @@ group.add_option("-m", "--message", action="store", dest="message",
 group.add_option("-i", "--issue", type="int", action="store",
                  metavar="ISSUE", default=None,
                  help="Issue number to which to add. Defaults to new issue.")
-group.add_option("-l", "--local_base", action="store_true",
-                 dest="local_base", default=False,
-                 help="Base files will be uploaded.")
+group.add_option("--download_base", action="store_true",
+                 dest="download_base", default=False,
+                 help="Base files will be downloaded by the server "
+                 "(side-by-side diffs may not work on files with CRs).")
+group.add_option("--rev", action="store", dest="revision",
+                 metavar="REV", default=None,
+                 help="Branch/tree/revision to diff against (used by DVCS).")
 group.add_option("--send_mail", action="store_true",
                  dest="send_mail", default=False,
                  help="Send notification email to reviewers.")
@@ -426,7 +435,8 @@ def GetRpcServer(options):
     """Prompts the user for a username and password."""
     email = options.email
     if email is None:
-      email = raw_input("Email: ").strip()
+      prompt = "Email (login for uploading to %s): " % options.server
+      email = raw_input(prompt).strip()
     password = getpass.getpass("Password for %s: " % email)
     return (email, password)
 
@@ -497,7 +507,7 @@ def GetContentType(filename):
 use_shell = sys.platform.startswith("win")
 
 
-def RunShell(command, silent_ok=False, universal_newlines=False):
+def RunShell(command, silent_ok=False, universal_newlines=True):
   logging.info("Running %s", command)
   p = subprocess.Popen(command, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, shell=use_shell,
@@ -514,6 +524,14 @@ def RunShell(command, silent_ok=False, universal_newlines=False):
 
 class VersionControlSystem(object):
   """Abstract base class providing an interface to the VCS."""
+
+  def __init__(self, options):
+    """Constructor.
+
+    Args:
+      options: Command line options.
+    """
+    self.options = options
 
   def GenerateDiff(self, args):
     """Return the current diff as a string.
@@ -545,43 +563,64 @@ class VersionControlSystem(object):
     """Get the content of the upstream version of a file.
 
     Returns:
-      A tuple (content, status) representing the file content and the status of
-      the file.
+      A tuple (base_content, new_content, is_binary, status)
+        base_content: The contents of the base file.
+        new_content: For text files, this is empty.  For binary files, this is
+          the contents of the new file, since the diff output won't contain
+          information to reconstruct the current file.
+        is_binary: True iff the file is binary.
+        status: The status of the file.
     """
 
     raise NotImplementedError(
         "abstract method -- subclass %s must override" % self.__class__)
 
   def UploadBaseFiles(self, issue, rpc_server, patch_list, patchset, options):
-    """Uploads the base files."""
-    patches = dict()
-    [patches.setdefault(v, k) for k, v in patch_list]
-    for filename in patches.keys():
-      content, status = self.GetBaseFile(filename)
-      no_base_file = False
+    """Uploads the base files (and if necessary, the current ones as well)."""
+
+    def UploadFile(filename, file_id, content, is_binary, status, is_base):
+      """Uploads a file to the server."""
+      file_too_large = False
+      if is_base:
+        type = "base"
+      else:
+        type = "current"
       if len(content) > MAX_UPLOAD_SIZE:
-        print ("Not uploading the base file for " + filename +
-               " because the file is too large.")
-        no_base_file = True
+        print ("Not uploading the %s file for %s because it's too large." %
+               (type, filename))
+        file_too_large = True
         content = ""
       checksum = md5.new(content).hexdigest()
-      if options.verbose > 0:
-        print "Uploading %s" % filename
-      url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset),
-                                          int(patches.get(filename)))
+      if options.verbose > 0 and not file_too_large:
+        print "Uploading %s file for %s" % (type, filename)
+      url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset), file_id)
       form_fields = [("filename", filename),
                      ("status", status),
-                     ("checksum", checksum),]
-      if no_base_file:
-        form_fields.append(("no_base_file", "1"))
+                     ("checksum", checksum),
+                     ("is_binary", str(is_binary)),
+                     ("is_current", str(not is_base)),
+                    ]
+      if file_too_large:
+        form_fields.append(("file_too_large", "1"))
       if options.email:
         form_fields.append(("user", options.email))
       ctype, body = EncodeMultipartFormData(form_fields,
                                             [("data", filename, content)])
-      response_body = rpc_server.Send(url, body, content_type=ctype)
+      response_body = rpc_server.Send(url, body,
+                                      content_type=ctype)
       if not response_body.startswith("OK"):
         StatusUpdate("  --> %s" % response_body)
-        sys.exit(False)
+        sys.exit(1)
+
+    patches = dict()
+    [patches.setdefault(v, k) for k, v in patch_list]
+    for filename in patches.keys():
+      file_id = int(patches.get(filename))
+      base_content, new_content, is_binary, status = self.GetBaseFile(filename)
+      if base_content:
+        UploadFile(filename, file_id, base_content, is_binary, status, True)
+      if new_content:
+        UploadFile(filename, file_id, new_content, is_binary, status, False)
 
 
 class SubversionVCS(VersionControlSystem):
@@ -667,6 +706,7 @@ class SubversionVCS(VersionControlSystem):
       'LastChangedBy':       ['LastChangedBy', 'Author'],
       'URL':                 ['URL', 'HeadURL'],
     }
+
     def repl(m):
        if m.group(2):
          return "$%s::%s$" % (m.group(1), " " * len(m.group(3)))
@@ -684,11 +724,28 @@ class SubversionVCS(VersionControlSystem):
         unknown_files.append(line)
     return unknown_files
 
+  def IsImage(self, filename):
+    """Returns true if the filename has an image extension."""
+    mimetype =  mimetypes.guess_type(filename)[0]
+    if not mimetype:
+      return False
+    return mimetype.startswith("image/")
+
+  def ReadFile(self, filename):
+    """Returns the contents of a file."""
+    file = open(filename, 'rb')
+    result = ""
+    try:
+      result = file.read()
+    finally:
+      file.close()
+    return result
+
   def GetBaseFile(self, filename):
     status = RunShell(["svn", "status", "--ignore-externals", filename])
     if not status:
       StatusUpdate("svn status returned no output for %s" % filename)
-      sys.exit(False)
+      sys.exit(1)
     status_lines = status.splitlines()
     # If file is in a cl, the output will begin with
     # "\n--- Changelist 'cl_name':\n".  See
@@ -699,43 +756,61 @@ class SubversionVCS(VersionControlSystem):
       status = status_lines[2]
     else:
       status = status_lines[0]
+    base_content = ""
+    new_content = ""
+
     # If a file is copied its status will be "A  +", which signifies
     # "addition-with-history".  See "svn st" for more information.  We need to
     # upload the original file or else diff parsing will fail if the file was
     # edited.
-    if ((status[0] == "A" and status[3] != "+") or
-        (status[0] == " " and status[1] == "M")):  # property changed
-      content = ""
+    if status[0] == "A" and status[3] != "+":
+      # We'll need to upload the new content if we're adding a binary file
+      # since diff's output won't contain it.
+      mimetype = RunShell(["svn", "propget", "svn:mime-type", filename],
+                          silent_ok=True)
+      is_binary = mimetype and not mimetype.startswith("text/")
+      if is_binary and self.IsImage(filename):
+        new_content = self.ReadFile(filename)
+    elif status[0] == " " and status[1] == "M":
+      # Property changed, don't need to do anything.
+      pass
     elif (status[0] in ("M", "D", "R") or
           (status[0] == "A" and status[3] == "+")):
       mimetype = RunShell(["svn", "-rBASE", "propget", "svn:mime-type",
                            filename],
                           silent_ok=True)
-      if mimetype.startswith("application/octet-stream"):
-        content = ""
-      else:
-        # On Windows svn cat gives \r\n, and calling subprocess.Popen turns
-        # them into \r\r\n, so use universal newlines to avoid the extra \r.
-        if sys.platform.startswith("win"):
-          nl = True
+      is_binary = mimetype and not mimetype.startswith("text/")
+      get_base = False
+      if not is_binary:
+        get_base = True
+      elif self.IsImage(filename) and status[0] == "M":          
+        new_content = self.ReadFile(filename)
+        get_base = True
+
+      if get_base:
+        if is_binary:
+          universal_newlines = False
         else:
-          nl = False
-        content = RunShell(["svn", "cat", filename], universal_newlines=nl)
-      keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
-                           filename],
-                          silent_ok=True)
-      if keywords:
-        content = self._CollapseKeywords(content, keywords)
+          universal_newlines = True
+        base_content = RunShell(["svn", "cat", filename],
+                                universal_newlines=universal_newlines)
+        if not is_binary:
+          keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
+                               filename],
+                              silent_ok=True)
+          if keywords:
+            base_content = self._CollapseKeywords(base_content, keywords)
     else:
       StatusUpdate("svn status returned unexpected output: %s" % status)
-      sys.exit(False)
-    return content, status[0:5]
+      sys.exit(1)
+    return base_content, new_content, is_binary, status[0:5]
 
 
 class GitVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Git."""
 
-  def __init__(self):
+  def __init__(self, options):
+    super(GitVCS, self).__init__(options)
     # Map of filename -> hash of base file.
     self.base_hashes = {}
 
@@ -743,6 +818,8 @@ class GitVCS(VersionControlSystem):
     # This is more complicated than svn's GenerateDiff because we must convert
     # the diff output to include an svn-style "Index:" line as well as record
     # the hashes of the base files, so we can upload them along with our diff.
+    if self.options.revision:
+      extra_args = [self.options.revision] + extra_args
     gitdiff = RunShell(["git", "diff", "--full-index"] + extra_args)
     svndiff = []
     filecount = 0
@@ -772,13 +849,18 @@ class GitVCS(VersionControlSystem):
 
   def GetBaseFile(self, filename):
     hash = self.base_hashes[filename]
+    base_content = ""
+    new_content = ""
+    is_binary = False
     if hash == "0" * 40:  # All-zero hash indicates no base file.
-      return ("", "A")
+      status = "A"
     else:
-      return (RunShell(["git", "show", hash]), "M")
+      status = "M"
+      base_content = RunShell(["git", "show", hash])
+    return (base_content, new_content, is_binary, status)
 
 
-# NOTE: this function is duplicated in engine.py, keep them in sync.
+# NOTE: The SplitPatch function is duplicated in engine.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
 
@@ -832,7 +914,7 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
              " because the file is too large.")
       continue
     form_fields = [("filename", patch[0])]
-    if options.local_base:
+    if not options.download_base:
       form_fields.append(("content_upload", "1"))
     files = [("data", "data.diff", patch[1])]
     ctype, body = EncodeMultipartFormData(form_fields, files)
@@ -842,12 +924,12 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
     lines = response_body.splitlines()
     if not lines or lines[0] != "OK":
       StatusUpdate("  --> %s" % response_body)
-      sys.exit(False)
+      sys.exit(1)
     rv.append([lines[1], patch[0]])
   return rv
 
 
-def GuessVCS():
+def GuessVCS(options):
   """Helper to guess the version control system.
 
   This examines the current directory, guesses which VersionControlSystem
@@ -860,7 +942,7 @@ def GuessVCS():
   # Subversion has a .svn in all working directories.
   if os.path.isdir('.svn'):
     logging.info("Guessed VCS = Subversion")
-    return SubversionVCS()
+    return SubversionVCS(options)
 
   # Git has a command to test if you're in a git tree.
   # Try running it, but don't die if we don't have git installed.
@@ -868,7 +950,7 @@ def GuessVCS():
     subproc = subprocess.Popen(["git", "rev-parse", "--is-inside-work-tree"],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if subproc.wait() == 0:
-      return GitVCS()
+      return GitVCS(options)
   except OSError, (errno, message):
     if errno != 2:  # ENOENT -- they don't have git installed.
       raise
@@ -888,15 +970,15 @@ def RealMain(argv, data=None):
     logging.getLogger().setLevel(logging.DEBUG)
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
-  vcs = GuessVCS()
+  vcs = GuessVCS(options)
   if isinstance(vcs, SubversionVCS):
     # base field is only allowed for Subversion.
     # Note: Fetching base files may become deprecated in future releases.
-    base = vcs.GuessBase(not options.local_base)
+    base = vcs.GuessBase(options.download_base)
   else:
     base = None
-  if not base and not options.local_base:
-    options.local_base = True
+  if not base and options.download_base:
+    options.download_base = True
     logging.info("Enabled upload of base file")
   if not options.assume_yes:
     vcs.CheckForUnknownFiles()
@@ -940,9 +1022,9 @@ def RealMain(argv, data=None):
     form_fields.append(("description", description))
   # If we're uploading base files, don't send the email before the uploads, so
   # that it contains the file status.
-  if options.send_mail and not options.local_base:
+  if options.send_mail and options.download_base:
     form_fields.append(("send_mail", "1"))
-  if options.local_base:
+  if not options.download_base:
     form_fields.append(("content_upload", "1"))
   if len(data) > MAX_UPLOAD_SIZE:
     print "Patch is large, so uploading file patches separately."
@@ -952,7 +1034,7 @@ def RealMain(argv, data=None):
     files = [("data", "data.diff", data)]
   ctype, body = EncodeMultipartFormData(form_fields, files)
   response_body = rpc_server.Send("/upload", body, content_type=ctype)
-  if options.local_base or not files:
+  if not options.download_base or not files:
     lines = response_body.splitlines()
     if len(lines) >= 2:
       msg = lines[0]
@@ -970,13 +1052,13 @@ def RealMain(argv, data=None):
 
   if not files:
     result = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
-    if options.local_base:
+    if not options.download_base:
       patches = result
 
-  if options.local_base:
+  if not options.download_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
     if options.send_mail:
-      rpc_server.Send("/" + issue + "/mail")
+      rpc_server.Send("/" + issue + "/mail", payload="")
   return issue
 
 

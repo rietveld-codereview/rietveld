@@ -36,6 +36,7 @@ CONTEXT_CHOICES = (3, 10, 25, 50, 75, 100)
 
 _query_cache = {}
 
+
 def gql(cls, clause, *args, **kwds):
   """Return a query object, from the cache if possible.
 
@@ -174,8 +175,10 @@ class Content(BaseModel):
 
   # parent => Patch
   text = db.TextProperty()
+  data = db.BlobProperty()
   is_uploaded = db.BooleanProperty(default=False)
   is_bad = db.BooleanProperty(default=False)
+  file_too_large = db.BooleanProperty(required=False, default=False)
 
   @property
   def lines(self):
@@ -197,7 +200,7 @@ class Patch(BaseModel):
   text = db.TextProperty()
   content = db.ReferenceProperty(Content)
   patched_content = db.ReferenceProperty(Content, collection_name='patch2_set')
-  no_base_file = db.BooleanProperty(required=False, default=False)
+  is_binary = db.BooleanProperty(required=False, default=False)
 
   _lines = None
 
@@ -352,6 +355,11 @@ class Patch(BaseModel):
     self.patched_content = patched_content
     self.put()
     return patched_content
+
+  @property
+  def no_base_file(self):
+    """Returns True iff the base file is not available."""
+    return self.content and self.content.file_too_large
 
 
 class Comment(BaseModel):

@@ -39,7 +39,7 @@ class FetchError(Exception):
   """Exception raised by FetchBase() when a URL problem occurs."""
 
 
-# NOTE: this function is duplicated in upload.py, keep them in sync.
+# NOTE: The SplitPatch function is duplicated in upload.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
 
@@ -179,6 +179,7 @@ def _MakeUrl(base, filename, rev):
 
 DEFAULT_CONTEXT = 50
 
+
 def RenderDiffTableRows(request, old_lines, chunks, patch,
                         colwidth=80, debug=False, context=DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff for a patch.
@@ -197,8 +198,8 @@ def RenderDiffTableRows(request, old_lines, chunks, patch,
     pair of lines of the side-by-side diff, possibly including comments.
     Each yielded string may consist of several <tr> elements.
   """
-  rows =  _RenderDiffTableRows(request, old_lines, chunks, patch,
-                               colwidth, debug)
+  rows = _RenderDiffTableRows(request, old_lines, chunks, patch,
+                              colwidth, debug)
   return _CleanupTableRowsGenerator(rows, context)
 
 
@@ -301,7 +302,7 @@ def _ShortenBuffer(buffer, context):
 
 
 def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                         colwidth=80, debug=False):
+                          colwidth=80, debug=False):
   """Internal version of RenderDiff2TableRows().
 
   Args:

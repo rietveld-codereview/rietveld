@@ -112,10 +112,21 @@ login_warned = false;
 {%endif%}
 
 <table border="0" cellpadding="0" cellspacing="0" id="thecode"
-       ondblclick="M_handleTableDblClick(event)">
+       ondblclick="M_handleTableDblClick(event)" width="100%">
 <tr><th>OLD</th><th>NEW</th></tr>
 
+{%if patch.is_binary %}
+<tr>
+<td style="width:50%" align="center">
+  <img src="{%url codereview.views.image issue.key.id,patchset.key.id,patch.key.id,0%}" />
+</td>
+<td style="width:50%" align="center">
+  <img src="{%url codereview.views.image issue.key.id,patchset.key.id,patch.key.id,1%}" />
+</td>
+</tr>
+{%else%}
 {%for row in rows%}{{row|safe}}{%endfor%}
+{%endif%}
 
 <tr><th>OLD</th><th>NEW</th></tr>
 
