@@ -76,6 +76,14 @@ indexes:
   - name: modified
     direction: desc
 
+# Used 2 times in query history.
+- kind: Issue
+  properties:
+  - name: cc
+  - name: closed
+  - name: modified
+    direction: desc
+
 # Unused in query history -- copied from input.
 - kind: Issue
   properties:
