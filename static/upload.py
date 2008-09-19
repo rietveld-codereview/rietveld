@@ -773,17 +773,15 @@ class SubversionVCS(VersionControlSystem):
         base_content = ""
       elif self.IsImage(filename):
         new_content = self.ReadFile(filename)
-    elif status[0] == " " and status[1] == "M":
-      # Property changed, don't need to do anything.
-      pass
     elif (status[0] in ("M", "D", "R") or
-          (status[0] == "A" and status[3] == "+")):
+          (status[0] == "A" and status[3] == "+") or  # Copied file.
+          (status[0] == " " and status[1] == "M")):  # Property change.
       mimetype = RunShell(["svn", "-rBASE", "propget", "svn:mime-type",
                            filename],
                           silent_ok=True)
       is_binary = mimetype and not mimetype.startswith("text/")
       get_base = False
-      if not is_binary:
+      if status[0] == " " or not is_binary:
         get_base = True
       elif self.IsImage(filename) and status[0] == "M":          
         new_content = self.ReadFile(filename)
