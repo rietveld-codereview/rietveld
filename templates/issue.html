@@ -195,10 +195,10 @@
           <table border="0" width="100%" cellspacing="0" cellpadding="0">
             <tr class="comment_title"
                 onclick="M_switchChangelistComment({{forloop.counter0}})">
-                <td style="padding-left: 5px;">
-                  <b>{{message.sender|nickname}}</b>
-                </td>
-              <td width="100%">
+              <td style="padding-left: 5px; white-space: nowrap;">
+                <b>{{message.sender|nickname}}</b>
+              </td>
+              <td>
                 <table style="table-layout:fixed; white-space: nowrap;"
                        width="100%">
                   <tr>
@@ -212,7 +212,8 @@
                   </tr>
                 </table>
               </td>
-              <td style="white-space: nowrap; padding-right: 5px;">
+              <td align="right"
+                  style="white-space: nowrap; padding-right: 5px;">
                 {{message.date|timesince}} ago
               </td>
             </tr>
