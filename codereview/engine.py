@@ -177,7 +177,7 @@ def _MakeUrl(base, filename, rev):
   return url
 
 
-DEFAULT_CONTEXT = 50
+DEFAULT_CONTEXT = 10
 
 
 def RenderDiffTableRows(request, old_lines, chunks, patch,
