@@ -45,10 +45,11 @@ sys.path.insert(0, os.path.abspath('django.zip'))
 import django
 logging.info('django.__file__ = %r, django.VERSION = %r',
              django.__file__, django.VERSION)
-assert django.VERSION[0] >= 1,"This Django version is too old"
+assert django.VERSION[0] >= 1, "This Django version is too old"
 
 # AppEngine imports.
 from google.appengine.ext.webapp import util
+
 
 # Helper to enter the debugger.  This passes in __stdin__ and
 # __stdout__, because stdin and stdout are connected to the request
@@ -59,6 +60,7 @@ def BREAKPOINT():
   import pdb
   p = pdb.Pdb(None, sys.__stdin__, sys.__stdout__)
   p.set_trace()
+
 
 # Custom Django configuration.
 from django.conf import settings
@@ -75,10 +77,12 @@ import django.forms
 # Work-around to avoid warning about django.newforms in djangoforms.
 django.newforms = django.forms
 
+
 def log_exception(*args, **kwds):
   """Django signal handler to log an exception."""
   cls, err = sys.exc_info()[:2]
   logging.exception('Exception in request: %s: %s', cls.__name__, err)
+
 
 # Log all exceptions detected by Django.
 django.core.signals.got_request_exception.connect(log_exception)
@@ -87,6 +91,7 @@ django.core.signals.got_request_exception.connect(log_exception)
 django.core.signals.got_request_exception.disconnect(
     django.db._rollback_on_exception)
 
+
 def real_main():
   """Main program."""
   # Create a Django application for WSGI.
@@ -94,9 +99,13 @@ def real_main():
   # Run the WSGI CGI handler with that application.
   util.run_wsgi_app(application)
 
+
 def profile_main():
   """Main program for profiling."""
-  import cProfile, pstats, StringIO
+  import cProfile
+  import pstats
+  import StringIO
+
   prof = cProfile.Profile()
   prof = prof.runctx('real_main()', globals(), locals())
   stream = StringIO.StringIO()
@@ -115,6 +124,7 @@ def profile_main():
 
 # Set this to profile_main to enable profiling.
 main = real_main
+
 
 if __name__ == '__main__':
   main()

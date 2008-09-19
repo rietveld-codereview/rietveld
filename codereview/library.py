@@ -46,6 +46,7 @@ def nickname(email, arg=None):
       return 'me'
   return models.Account.get_nickname_for_email(email)
 
+
 @register.filter
 def nicknames(email_list, arg=None):
   """Render a list of email addresses or User objects as nicknames.
@@ -55,6 +56,7 @@ def nicknames(email_list, arg=None):
   The filter argument is the same as for nickname() above.
   """
   return ', '.join(nickname(email, arg) for email in email_list)
+
 
 @register.filter
 def show_user(email, arg=None, autoescape=None, memcache_results=None):
@@ -92,6 +94,7 @@ def show_user(email, arg=None, autoescape=None, memcache_results=None):
       memcache_results[email] = ret
 
   return django.utils.safestring.mark_safe(ret)
+
 
 @register.filter
 def show_users(email_list, arg=None):

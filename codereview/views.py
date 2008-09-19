@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Views for Rietveld.
-
-This requires Django 0.97.pre.
-"""
+"""Views for Rietveld."""
 
 
 ### Imports ###
@@ -54,6 +51,7 @@ except ImportError:
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
 from django import forms
+from django.http import Http404
 from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
@@ -189,13 +187,15 @@ class UploadContentForm(forms.Form):
   filename = forms.CharField(max_length=255)
   status = forms.CharField(required=False, max_length=20)
   checksum = forms.CharField(max_length=32)
-  no_base_file = forms.BooleanField(required=False)
+  file_too_large = forms.BooleanField(required=False)
+  is_binary = forms.BooleanField(required=False)
+  is_current = forms.BooleanField(required=False)
 
   def clean(self):
     # Check presence of 'data'. We cannot use FileField because
     # it disallows empty files.
     super(UploadContentForm, self).clean()
-    if not self.files and not self.files.has_key('data'):
+    if not self.files and 'data' not in self.files:
       raise forms.ValidationError, 'No content uploaded.'
     return self.cleaned_data
 
@@ -303,6 +303,7 @@ class SettingsForm(forms.Form):
 # redirects.  Rendered by templates/base.html.
 counter = 0
 
+
 def respond(request, template, params=None):
   """Helper to render a response, passing standard stuff to the response.
 
@@ -359,37 +360,44 @@ def _random_bytes(n):
 
 def post_required(func):
   """Decorator that returns an error unless request.method == 'POST'."""
+
   def post_wrapper(request, *args, **kwds):
     if request.method != 'POST':
       return HttpResponse('This requires a POST request.', status=405)
     return func(request, *args, **kwds)
+
   return post_wrapper
 
 
 def login_required(func):
   """Decorator that redirects to the login page if you're not logged in."""
+
   def login_wrapper(request, *args, **kwds):
     if request.user is None:
       return HttpResponseRedirect(
           users.create_login_url(request.get_full_path().encode('utf-8')))
     return func(request, *args, **kwds)
+
   return login_wrapper
 
 
 def admin_required(func):
+  """Decorator that insists that you're logged in as administratior."""
+
   def admin_wrapper(request, *args, **kwds):
-    """Decorator that insists that you're logged in as administratior."""
     if request.user is None:
       return HttpResponseRedirect(
           users.create_login_url(request.get_full_path().encode('utf-8')))
     if not request.user_is_admin:
       return HttpResponseForbidden('You must be admin in for this function')
     return func(request, *args, **kwds)
+
   return admin_wrapper
 
 
 def issue_required(func):
   """Decorator that processes the issue_id handler argument."""
+
   def issue_wrapper(request, issue_id, *args, **kwds):
     issue = models.Issue.get_by_id(int(issue_id))
     if issue is None:
@@ -397,11 +405,13 @@ def issue_required(func):
                                   issue_id)
     request.issue = issue
     return func(request, *args, **kwds)
+
   return issue_wrapper
 
 
 def user_key_required(func):
   """Decorator that processes the user handler argument."""
+
   def user_key_wrapper(request, user_key, *args, **kwds):
     user_key = urllib.unquote(user_key)
     if '@' in user_key:
@@ -414,22 +424,26 @@ def user_key_required(func):
                                     user_key)
       request.user_to_show = accounts[0].user
     return func(request, *args, **kwds)
+
   return user_key_wrapper
 
 
 def issue_owner_required(func):
   """Decorator that processes the issue_id argument and insists you own it."""
+
   @login_required
   @issue_required
   def issue_owner_wrapper(request, *args, **kwds):
     if request.issue.owner != request.user:
       return HttpResponseForbidden('You do not own this issue')
     return func(request, *args, **kwds)
+
   return issue_owner_wrapper
 
 
 def patchset_required(func):
   """Decorator that processes the patchset_id argument."""
+
   @issue_required
   def patchset_wrapper(request, patchset_id, *args, **kwds):
     patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
@@ -439,11 +453,13 @@ def patchset_required(func):
     patchset.issue = request.issue
     request.patchset = patchset
     return func(request, *args, **kwds)
+
   return patchset_wrapper
 
 
 def patch_required(func):
   """Decorator that processes the patch_id argument."""
+
   @patchset_required
   def patch_wrapper(request, patch_id, *args, **kwds):
     patch = models.Patch.get_by_id(int(patch_id), parent=request.patchset)
@@ -453,7 +469,31 @@ def patch_required(func):
     patch.patchset = request.patchset
     request.patch = patch
     return func(request, *args, **kwds)
+
   return patch_wrapper
+
+
+def image_required(func):
+  """Decorator that processes the image argument.
+  
+  Attributes set on the request:
+   content: a Content entity.
+  """
+
+  @patch_required
+  def image_wrapper(request, image_type, *args, **kwds):
+    content = None
+    if image_type == "0":
+      content = request.patch.content
+    elif image_type == "1":
+      content = request.patch.patched_content
+    # Other values are erroneous so request.content won't be set.
+    if not content or not content.data:
+      return HttpResponseRedirect("/static/blank.jpg")
+    request.content = content
+    return func(request, *args, **kwds)
+
+  return image_wrapper
 
 
 ### Request handlers ###
@@ -468,6 +508,7 @@ def index(request):
 
 
 DEFAULT_LIMIT = 10
+
 
 def all(request):
   """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
@@ -515,7 +556,8 @@ def all(request):
                  {'issues': issues, 'limit': limit,
                   'newest': newest, 'prev': prev, 'next': next,
                   'first': offset+1,
-                  'last': len(issues) > 1 and offset+len(issues) or None})
+                  'last': len(issues) > 1 and offset+len(issues) or None,
+                  })
 
 
 def _optimize_draft_counts(issues):
@@ -576,6 +618,10 @@ def _show_user(request):
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
       user.email()) if issue.owner != user]
+  cc_issues = [issue for issue in db.GqlQuery(
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND cc = :1 ORDER BY modified DESC',
+      user.email()) if issue.owner != user]
   closed_issues = list(db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
@@ -583,10 +629,12 @@ def _show_user(request):
       datetime.datetime.now() - datetime.timedelta(days=7), user))
   _optimize_draft_counts(my_issues + review_issues + closed_issues)
   return respond(request, 'user.html',
-                 {'email':user.email(),
+                 {'email': user.email(),
                   'my_issues': my_issues,
                   'review_issues': review_issues,
-                  'closed_issues': closed_issues})
+                  'cc_issues': cc_issues,
+                  'closed_issues': closed_issues,
+                  })
 
 
 @login_required
@@ -692,12 +740,6 @@ def upload_content(request):
   if not form.is_valid():
     return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
                         content_type='text/plain')
-  patch = request.patch
-  patch.status = form.cleaned_data['status']
-  if form.cleaned_data['no_base_file']:
-    patch.no_base_file = True
-  patch.put()
-  content = patch.content
   if request.user is None:
     if IS_DEV:
       request.user = users.User(request.POST.get('user', 'test@example.com'))
@@ -706,14 +748,35 @@ def upload_content(request):
   if request.user != request.issue.owner:
     return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                         (request.user, request.issue.key().id()))
+  patch = request.patch
+  patch.status = form.cleaned_data['status']
+  patch.is_binary = form.cleaned_data['is_binary']
+  patch.put()
 
-  data = form.get_uploaded_content()
-  checksum = md5.new(data).hexdigest()
-  if checksum != request.POST.get('checksum'):
-    content.is_bad = True
+  if form.cleaned_data['is_current']:
+    if patch.patched_content:
+      return HttpResponse('ERROR: Already have current content.')
+    content = models.Content(is_uploaded=True, parent=patch)
     content.put()
-    return HttpResponse('ERROR: Checksum mismatch.', content_type='text/plain')
-  content.text = engine.ToText(data)
+    patch.patched_content = content
+    patch.put()
+  else:
+    content = patch.content
+
+  if form.cleaned_data['file_too_large']:
+    content.file_too_large = True
+  else:
+    data = form.get_uploaded_content()
+    checksum = md5.new(data).hexdigest()
+    if checksum != request.POST.get('checksum'):
+      content.is_bad = True
+      content.put()
+      return HttpResponse('ERROR: Checksum mismatch.',
+                          content_type='text/plain')
+    if patch.is_binary:
+      content.data = data
+    else:      
+      content.text = engine.ToText(data)
   content.put()
   return HttpResponse('OK', content_type='text/plain')
 
@@ -996,7 +1059,8 @@ def show(request, form=None):
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
                   'last_patchset': last_patchset,
-                  'first_patch': first_patch})
+                  'first_patch': first_patch,
+                  })
 
 
 @issue_owner_required
@@ -1016,7 +1080,8 @@ def edit(request):
                              'base': base,
                              'reviewers': ', '.join(issue.reviewers),
                              'cc': ', '.join(issue.cc),
-                             'closed': issue.closed})
+                             'closed': issue.closed,
+                             })
     if not issue.local_base:
       form.set_branch_choices(base)
     return respond(request, 'edit.html', {'issue': issue, 'form': form})
@@ -1176,7 +1241,14 @@ def patch_helper(request, nav_type='patch'):
                  {'patch': request.patch,
                   'patchset': request.patchset,
                   'rows': rows,
-                  'issue': request.issue})
+                  'issue': request.issue,
+                  })
+
+
+@image_required
+def image(request):
+  """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
+  return HttpResponse(request.content.data)
 
 
 @patch_required
@@ -1218,27 +1290,32 @@ def diff(request):
   patch = request.patch
 
   context = _get_context_for_user(request)
-  rows = _get_diff_table_rows(request, patch, context)
-  if isinstance(rows, HttpResponseNotFound):
-    return rows
+  if patch.is_binary:
+    rows = None
+  else:
+    rows = _get_diff_table_rows(request, patch, context)
 
   _add_next_prev(patchset, patch)
   return respond(request, 'diff.html',
-                 {'issue': request.issue, 'patchset': patchset,
-                  'patch': patch, 'rows': rows,
-                  'context': context, 'context_values': models.CONTEXT_CHOICES})
+                 {'issue': request.issue,
+                  'patchset': patchset,
+                  'patch': patch,
+                  'rows': rows,
+                  'context': context,
+                  'context_values': models.CONTEXT_CHOICES,
+                  })
 
 
 def _get_diff_table_rows(request, patch, context):
   """Helper function that returns rendered rows for a patch"""
   chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
-    return HttpResponseNotFound('Can\'t parse the patch')
+    raise Http404
 
   try:
     content = request.patch.get_content()
   except engine.FetchError, err:
-    return HttpResponseNotFound(str(err))
+    raise Http404
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
                                          chunks, patch,
@@ -1268,8 +1345,6 @@ def diff_skipped_lines(request, id_before, id_after, where):
 
   # TODO: allow context = None?
   rows = _get_diff_table_rows(request, patch, 10000)
-  if isinstance(rows, HttpResponseNotFound):
-    return rows
   return _get_skipped_lines_response(rows, id_before, id_after, where)
 
 
@@ -1288,7 +1363,7 @@ def _get_skipped_lines_response(rows, id_before, id_after, where):
       curr_id = int(m.groupdict().get("rowcount"))
       if curr_id < id_before or curr_id > id_after:
         continue
-      if where  == "b" and curr_id <= id_after:
+      if where == "b" and curr_id <= id_after:
         response_rows.append(row)
       elif where == "t" and curr_id >= id_before:
         response_rows.append(row)
@@ -1488,7 +1563,8 @@ def _inline_draft(request):
                              'comments': comments,
                              'lineno': lineno,
                              'snapshot': snapshot,
-                             'side': side})
+                             'side': side,
+                             })
 
 
 def _get_affected_files(issue):
@@ -1561,8 +1637,10 @@ def publish(request):
                                'cc': ', '.join(cc),
                                'send_mail': True,
                                })
-    return respond(request, 'publish.html', {'form': form, 'issue': issue,
-                                             'preview' : preview})
+    return respond(request, 'publish.html', {'form': form,
+                                             'issue': issue,
+                                             'preview': preview,
+                                             })
 
   form = form_class(request.POST)
   if not form.is_valid():
@@ -1700,8 +1778,8 @@ def _get_draft_details(request, comments):
                                       c.patch.key().id(),
                                       c.left and "old" or "new",
                                       c.lineno))
-    output.append('\n%s\nLine %d: %s\n%s'  % (url, c.lineno, context,
-                                              c.text.rstrip()))
+    output.append('\n%s\nLine %d: %s\n%s' % (url, c.lineno, context,
+                                             c.text.rstrip()))
   if modified_patches:
     db.put(modified_patches)
   return '\n'.join(output)
@@ -1751,7 +1829,8 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
                     'cc_nicknames': cc_nicknames,
                     'my_nickname': my_nickname, 'url': url,
                     'message': message, 'details': details,
-                    'description': description, 'home': home})
+                    'description': description, 'home': home,
+                    })
     body = django.template.loader.render_to_string(template, context)
     logging.warn('Mail: to=%s; cc=%s', to, cc)
     kwds = {}
@@ -1877,7 +1956,8 @@ def branch_new(request, repo_id):
     # XXX Use repo.key() so that the default gets picked up
     form = BranchForm(initial={'repo': repo.key(),
                                'url': repo.url,
-                               'category': 'branch'})
+                               'category': 'branch',
+                               })
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
   form = BranchForm(request.POST)
   errors = form.errors
@@ -1944,7 +2024,8 @@ def settings(request):
     nickname = account.nickname
     default_context = account.default_context
     form = SettingsForm(initial={'nickname': nickname,
-                                 'context': default_context})
+                                 'context': default_context,
+                                 })
     return respond(request, 'settings.html', {'form': form})
   form = SettingsForm(request.POST)
   if form.is_valid():
@@ -1982,6 +2063,7 @@ def user_popup(request):
     return HttpResponse('<font color="red">Error: %s; please report!</font>' %
                         err.__class__.__name__)
 
+
 def _user_popup(request):
   user = request.user_to_show
   popup_html = memcache.get('user_popup:' + user.email())
@@ -1999,7 +2081,8 @@ def _user_popup(request):
     popup_html = render_to_response('user_popup.html',
                             {'user': user,
                              'num_issues_created': num_issues_created,
-                             'num_issues_reviewed': num_issues_reviewed})
+                             'num_issues_reviewed': num_issues_reviewed,
+                             })
     # Use time expired cache because the number of issues will change over time
     memcache.add('user_popup:' + user.email(), popup_html, 60)
   return popup_html

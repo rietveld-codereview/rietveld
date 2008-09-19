@@ -233,7 +233,7 @@ def GetDiffParams(expr='b', min_match_ratio=0.6, min_match_size=2, dbg=False):
     IntraLineDiff.
   """
   assert expr in EXPRS
-  assert min_match_size in xrange(1,5)
+  assert min_match_size in xrange(1, 5)
   assert min_match_ratio > 0.0 and min_match_ratio < 1.0
   return (expr, min_match_ratio, min_match_size, dbg)
 
@@ -286,6 +286,7 @@ def WordDiff(line1, line2, diff_params):
     line2_u = unicode(line2, "utf8")
   except:
     line2_u = line2
+
   def _ToUTF8(s):
     if isinstance(s, unicode):
       return s.encode("utf8")
@@ -507,8 +508,8 @@ def ConvertToSingleLine(lines):
   for l in lines:
     total_length += len(l)
     # TODO: Use a tuple instead.
-    state.append({     'pos': total_length, # the line split point
-                    'blocks': []            # blocks which belong to this line
+    state.append({'pos': total_length, # the line split point
+                  'blocks': [],        # blocks which belong to this line
                  })
   result = "".join(lines)
   assert len(state) == len(lines)
@@ -641,7 +642,7 @@ def NormalizeBlocks(blocks, line):
   prev_start, prev_len = blocks[0]
   for curr_start, curr_len in blocks[1:]:
     # Note: nm_ is a prefix for non matching and m_ is a prefix for matching.
-    m_len, nm_len  = prev_len, curr_start - (prev_start+prev_len)
+    m_len, nm_len = prev_len, curr_start - (prev_start+prev_len)
     # This if condition checks if matching and non matching parts are greater
     # than zero length and are comprised of spaces ONLY. The last condition
     # deals with most of the observed cases of strange diffs.
