@@ -617,9 +617,9 @@ class VersionControlSystem(object):
     for filename in patches.keys():
       file_id = int(patches.get(filename))
       base_content, new_content, is_binary, status = self.GetBaseFile(filename)
-      if base_content:
+      if base_content != None:
         UploadFile(filename, file_id, base_content, is_binary, status, True)
-      if new_content:
+      if new_content != None:
         UploadFile(filename, file_id, new_content, is_binary, status, False)
 
 
@@ -756,8 +756,8 @@ class SubversionVCS(VersionControlSystem):
       status = status_lines[2]
     else:
       status = status_lines[0]
-    base_content = ""
-    new_content = ""
+    base_content = None
+    new_content = None
 
     # If a file is copied its status will be "A  +", which signifies
     # "addition-with-history".  See "svn st" for more information.  We need to
@@ -769,7 +769,9 @@ class SubversionVCS(VersionControlSystem):
       mimetype = RunShell(["svn", "propget", "svn:mime-type", filename],
                           silent_ok=True)
       is_binary = mimetype and not mimetype.startswith("text/")
-      if is_binary and self.IsImage(filename):
+      if not is_binary:
+        base_content = ""
+      elif self.IsImage(filename):
         new_content = self.ReadFile(filename)
     elif status[0] == " " and status[1] == "M":
       # Property changed, don't need to do anything.
@@ -849,11 +851,12 @@ class GitVCS(VersionControlSystem):
 
   def GetBaseFile(self, filename):
     hash = self.base_hashes[filename]
-    base_content = ""
-    new_content = ""
+    base_content = None
+    new_content = None
     is_binary = False
     if hash == "0" * 40:  # All-zero hash indicates no base file.
       status = "A"
+      base_content = ""
     else:
       status = "M"
       base_content = RunShell(["git", "show", hash])
