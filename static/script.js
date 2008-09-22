@@ -411,6 +411,47 @@ function M_toggleSection(id) {
   }
 }
 
+
+/**
+ * Callback for XMLHttpRequest.
+ */
+function M_PatchSetFetched() {
+  if (http_request.readyState != 4)
+    return;
+
+  var section = document.getElementById(http_request.div_id);
+  if (http_request.status == 200) {
+    section.innerHTML = http_request.responseText;
+  } else {
+    section.innerHTML = 
+        '<div style="color:red">Could not load the patchset (' +
+        http_request.status + ').</div>';
+  }
+}
+
+/**
+ * Toggle the visibility of a patchset, and fetches it if necessary.
+ * @param {String} issue The issue key
+ * @param {String} id The patchset key
+ */
+function M_toggleSectionForPS(issue, patchset) {
+  var id = 'ps-' + patchset;
+  M_toggleSection(id);
+  var section = document.getElementById(id);
+  if (section.innerHTML.search("<div") != -1)
+    return;
+
+  section.innerHTML = "<div>Loading...</div>"
+  http_request = M_getXMLHttpRequest();
+  if (!http_request)
+    return;
+
+  http_request.open('GET', "/" + issue + "/patchset/" + patchset, true);
+  http_request.onreadystatechange = M_PatchSetFetched;
+  http_request.div_id = id;
+  http_request.send(null);
+}
+
 /**
  * Toggle the visibility of the "Quick LGTM" link on the changelist page.
  * @param {String} id The id of the target element

@@ -1,0 +1,92 @@
+{%if patchset.url%}
+  <div>
+    Downloaded from: <a href="{{patchset.url}}">{{patchset.url}}</a>
+  </div>
+{%endif%}
+<div class="issue-list">
+
+  <div class="pagination">
+    <div style="float: left;">
+      <i>Created:</i> {{patchset.created|timesince}} ago
+      {%ifnotequal patchset.owner issue.owner%}
+      by <b>{{patchset.owner|nickname}}</b>{%endifnotequal%}
+    </div>
+    {%if patchset.data%}
+    <div style="float: right;">
+      <a href="{%url codereview.views.download issue.key.id,patchset.key.id%}">
+        Download raw patch set
+      </a>
+    </div>
+    {%else%}
+    <div class="disabled" style="float: right;">
+      (Patch set is too large to download)
+    </div>
+    {%endif%}
+    <div style="clear:both;"></div>
+  </div>
+
+  <table id="queues" style="clear:both;">
+    <tr align="left">
+      <th></th>
+      <th>Unified diffs</th>
+      <th>Side-by-side diffs</th>
+      <th>Delta from patch set</th>
+      <th colspan="3">Stats</th>
+      <th>Patch</th>
+    </tr>
+
+    {%for patch in patchset.patches%}
+      <tr>
+        <td>{%if patch.status%}{{patch.status}}{%endif%}</td>
+        <td>
+          <a class="noul"
+             href="{%url codereview.views.patch issue.key.id,patch.patchset.key.id,patch.key.id%}">
+            {{patch.filename}}
+          </a>
+        </td>
+        <td>
+          {%if patch.no_base_file%}
+          <span class="disabled">
+            (Base file is too large to download)
+          </span>
+          {%else%}
+          <a class="noul"
+             href="{%url codereview.views.diff issue.key.id,patch.patchset.key.id,patch.key.id%}">
+            View
+          </a>
+          {%endif%}
+        </td>
+        <td>
+        {%comment%}
+          The lines below are put together to avoid too much space.
+          %spaceless% only removes whitespace between html tags, but not
+          between django statements.
+        {%endcomment%}            
+          {%if not patch.no_base_file%}{%for other in patchsets%}{%ifnotequal other patchset%}{%for opatch in other.patches%}{%if not opatch.no_base_file%}{%ifequal opatch.filename patch.filename%}{%ifnotequal opatch.text patch.text%}
+            <a href="/{{issue.key.id}}/diff2/{{other.key.id}}:{{patchset.key.id}}/{{patch.key.id}}"
+               title="Delta from patch set {{forloop.parentloop.counter}}">{{forloop.parentloop.counter}}</a>
+          {%endifnotequal%}{%endifequal%}{%endif%}{%endfor%}{%endifnotequal%}{%endfor%}{%endif%}
+        </td>
+        <td>{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
+        <td>{{patch.num_lines}} line{{patch.num_lines|pluralize}}</td>
+        <td>
+          {%if patch.num_comments or patch.num_drafts%}<b>{%endif%}
+            {{patch.num_comments}} comment{{patch.num_comments|pluralize}}
+            {%if patch.num_drafts%}
+            <span style="color:red">+
+              {{patch.num_drafts}} draft{{patch.num_drafts|pluralize}}
+            </span>
+          {%endif%}
+          {%if patch.num_comments or patch.num_drafts%}</b>{%endif%}
+        </td>
+        <td>
+          <a href="{%url codereview.views.download_patch issue.key.id,patch.patchset.key.id,patch.key.id%}"
+             title="Download patch for {{patch.filename}}">
+            Download
+          </a>
+        </td>
+      </tr>
+    {%endfor%}
+
+  </table>
+</div>

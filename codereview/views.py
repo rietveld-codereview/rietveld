@@ -998,12 +998,16 @@ def _get_emails(form, label):
   return emails
 
 
-@issue_required
-def show(request, form=None):
-  """/<issue> - Show an issue."""
+def _get_patchset_info(request):
+  """ Returns a list of patchsets for the issue.
+  
+  Args:
+    request: Django Request object.
+  
+  Returns:
+    A 2-tuple of (issue, patchsets).
+  """
   issue = request.issue
-  if not form:
-    form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   patchsets = list(issue.patchset_set.order('created'))
   if request.user:
     drafts = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = TRUE'
@@ -1032,6 +1036,15 @@ def show(request, form=None):
         patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
         patchset.n_drafts += patch.num_drafts
       issue.draft_count += patchset.n_drafts
+  return issue, patchsets
+
+
+@issue_required
+def show(request, form=None):
+  """/<issue> - Show an issue."""
+  issue, patchsets = _get_patchset_info(request)
+  if not form:
+    form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   last_patchset = first_patch = None
   if patchsets:
     last_patchset = patchsets[-1]
@@ -1043,6 +1056,21 @@ def show(request, form=None):
                   'messages': messages, 'form': form,
                   'last_patchset': last_patchset,
                   'first_patch': first_patch,
+                  })
+
+
+@patchset_required
+def patchset(request):
+  """/patchset/<key> - Returns patchset information."""
+  patchset = request.patchset
+  issue, patchsets = _get_patchset_info(request)
+  for ps in patchsets:
+    if ps.key().id() == patchset.key().id():
+      patchset = ps
+  return respond(request, 'patchset.html',
+                 {'issue': issue,
+                  'patchset': patchset,
+                  'patchsets': patchsets,
                   })
 
 
