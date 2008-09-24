@@ -37,7 +37,7 @@ class BaseFeed(Feed):
 
   def item_link(self, item):
     if isinstance(item, models.PatchSet):
-      return ('/download/issue%d_%d.diff' % 
+      return ('/download/issue%d_%d.diff' %
               (item.issue.key().id(),item.key().id()))
     if isinstance(item, models.Comment):
       return '/%s' % (item.parent_key().parent().parent().id())
@@ -45,14 +45,14 @@ class BaseFeed(Feed):
 
   def item_title(self, item):
     return 'the title'
-    
+
   def item_author_name(self, item):
     if isinstance(item, models.Issue) or isinstance(item, models.PatchSet):
       return item.owner
     if isinstance(item, models.Comment):
       return item.author
     return 'Rietveld'
-  
+
   def item_pubdate(self, item):
     if isinstance(item, models.Issue) or isinstance(item, models.PatchSet):
       return item.modified
@@ -71,8 +71,8 @@ class BaseUserFeed(BaseFeed):
     if len(user) == 1:
       return user[0]
     raise ObjectDoesNotExist
-	
-	
+
+
 class ReviewsFeed(BaseUserFeed):
   title = 'Code Review - All issues I have to review'
 
@@ -93,11 +93,11 @@ class MineFeed(BaseUserFeed):
 
   def items(self,obj):
     return _rss_helper(obj.email, 'closed = FALSE AND owner = :1')
-	
-	
+
+
 class AllFeed(BaseFeed):
   title = 'Code Review - All issues'
-  
+
   def items(self):
     query = models.Issue.gql('WHERE closed = FALSE ORDER BY modified DESC')
     return query.fetch(RSS_LIMIT)
@@ -117,7 +117,7 @@ class OneIssueFeed(BaseFeed):
 
   def title(self, obj):
     return 'Code review - Issue %d: %s' % (obj.key().id(),obj.subject)
-	
+
   def items(self, obj):
     patchsets = list(obj.patchset_set.order('created'))
     messages = list(obj.message_set.order('date'))
