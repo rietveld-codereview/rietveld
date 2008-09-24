@@ -17,6 +17,25 @@
   <link rel="icon" href="/favicon.ico" />
   <link type="text/css" rel="stylesheet" href="/static/styles.css" />
   <script type="text/javascript" src="/static/script.js"></script>
+  <link rel="alternate" type="application/atom+xml"
+   	title="Recent Issues"
+   	href="/rss/all" />
+   {%if user%}
+     <link rel="alternate" type="application/atom+xml"
+   	  title="Issues created by me"
+   	  href="/rss/mine/{{user|nickname:"x"}}" />
+     <link rel="alternate" type="application/atom+xml"
+   	  title="Issues reviewable by me" 
+   	  href="/rss/reviews/{{user|nickname:"x"}}" />
+     <link rel="alternate" type="application/atom+xml"
+   	  title="Issues closed by me"
+   	  href="/rss/closed/{{user|nickname:"x"}}" />
+   {%endif%}
+   {%if issue%}
+     <link rel="alternate" type="application/atom+xml"
+ 	    title="Issue {{issue.key.id}}"
+ 	    href="/rss/issue/{{issue.key.id}}" />
+   {%endif%} 
 </head>
 <body>
 
@@ -173,8 +192,26 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
    src="http://code.google.com/appengine/images/appengine-noborder-120x30.gif"
    alt="Powered by Google App Engine" /></a>
 </div>
-<div class="extra" style="font-size: 9pt; float: right;">
-  {%include "live_revision.html"%}
+
+<div class="extra" style="font-size: 9pt; float: right; text-align: right;">
+  <div style="height:14px;">
+  <img src="/static/rss.gif" alt="RSS Feeds" width="14" height="14"
+       align="top" />
+  <a href="/rss/all">Recent Issues</a>
+  {%if user%}
+  |
+  <a href="/rss/mine/{{user|nickname:"x"}}">My Issues</a>
+  |
+  <a href="/rss/reviews/{{user|nickname:"x"}}">My Reviews</a>
+  |
+  <a href="/rss/closed/{{user|nickname:"x"}}">My Closed</a>
+  {%endif%}
+  {%if issue%}
+  |
+  <a href="/rss/issue/{{issue.key.id}}">This issue</a>
+  {%endif%} 
+  </div>
+  <div style="margin-top: .3em;">{%include "live_revision.html"%}</div>
 </div>
 
 <script type="text/javascript">
