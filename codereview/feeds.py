@@ -116,7 +116,7 @@ class OneIssueFeed(BaseFeed):
     raise ObjectDoesNotExist
 
   def title(self, obj):
-    return 'Code review - Issue (%d): %s' % (obj.key().id(),obj.subject)
+    return 'Code review - Issue %d: %s' % (obj.key().id(),obj.subject)
 	
   def items(self, obj):
     patchsets = list(obj.patchset_set.order('created'))
