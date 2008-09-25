@@ -16,6 +16,8 @@
 
 import os
 
+from django.test import TestCase
+
 from google.appengine.api import users
 from google.appengine.ext import db
 
@@ -31,202 +33,141 @@ os.environ['USER_EMAIL'] = ''
 # Install a mock.
 engine.FetchBase = lambda base, patch: models.Content(text=db.Text('foo'))
 
-__test__ = {
 
-    'models.Issue': r"""
+class BaseTest(TestCase):
 
-    Prepare:
+  def setUp(self):
+    self._me = users.User(email='me@example.com')
+    self._me.account = models.Account.get_account_for_user(self._me)
+    self._you = users.User(email='you@example.com')
+    self._you.account = models.Account.get_account_for_user(self._you)
 
-    >>> from models import *
-    >>> me = users.User(email='me@gmail.com')
-    >>> you = users.User(email='you@gmail.com')
-    >>>
 
-    Basic test:
+# Model tests
 
-    >>> i1 = Issue(subject='x', owner=me)
-    >>> _ = i1.put()
-    >>> i1.num_comments
-    0
-    >>> i1.num_drafts
-    0
-    >>>
 
-    Add some draft comments, in the proper hierarchy:
+class IssueTest(BaseTest):
 
-    >>> ps1 = PatchSet(owner=me, parent=i1)
-    >>> _ = ps1.put()
-    >>> p1 = Patch(owner=me, parent=ps1)
-    >>> _ = p1.put()
-    >>> c1 = Comment(draft=True, author=me, parent=p1)
-    >>> _ = c1.put()
-    >>> c2 = Comment(draft=True, author=me, parent=p1)
-    >>> _ = c2.put()
-    >>> c3 = Comment(draft=True, author=you, parent=p1)
-    >>> _ = c3.put()
-    >>>
+  def test_createIssue(self):
+    i1 = models.Issue(subject='x', owner=self._me)
+    i1.put()
+    self.assertEqual(models.Issue.get_by_id(i1.key().id()), i1)
 
-    From anonymous perspective:
+  def test_draft_comment_visibility(self):
+    i1 = models.Issue(subject='x', owner=self._me)
+    i1.put()
+    self.assertEqual(i1.num_comments, 0)
+    self.assertEqual(i1.num_drafts, 0)
+    # Add some draft comments, in the proper hierarchy:
+    ps1 = models.PatchSet(owner=self._me, parent=i1)
+    ps1.put()
+    p1 = models.Patch(owner=self._me, parent=ps1)
+    p1.put()
+    c1 = models.Comment(draft=True, author=self._me, parent=p1)
+    c1.put()
+    c2 = models.Comment(draft=True, author=self._me, parent=p1)
+    c2.put()
+    c3 = models.Comment(draft=True, author=self._you, parent=p1)
+    c3.put()
+    # From anonymous perspective:
+    models.Account.current_user_account = None
+    i1.n_comments = i1._num_drafts = None # reset caches
+    self.assertEqual(i1.num_comments, 0)
+    self.assertEqual(i1.num_drafts, 0)
+    # From my perspective:
+    models.Account.current_user_account = self._me.account
+    i1.n_comments = i1._num_drafts = None # reset caches
+    self.assertEqual(i1.num_comments, 0)
+    self.assertEqual(i1.num_drafts, 2)
+    # From your perspective:
+    models.Account.current_user_account = self._you.account
+    i1.n_comments = i1._num_drafts = None # reset caches
+    self.assertEqual(i1.num_comments, 0)
+    self.assertEqual(i1.num_drafts, 1)
+    # Submit some drafts:
+    c1.draft = False
+    c1.put()
+    c2.draft = False
+    c2.put()
+    # From anonymous perspective:
+    models.Account.current_user_account = None
+    i1.n_comments = i1._num_drafts = None # reset caches
+    self.assertEqual(i1.num_comments, 2)
+    self.assertEqual(i1.num_drafts, 0)
+    # From my perspective:
+    models.Account.current_user_account = self._me.account
+    i1.n_comments = i1._num_drafts = None # reset caches
+    self.assertEqual(i1.num_comments, 2)
+    self.assertEqual(i1.num_drafts, 0)
+    # From your perspective:
+    models.Account.current_user_account = self._you.account
+    i1.n_comments = i1._num_drafts = None # reset caches
+    self.assertEqual(i1.num_comments, 2)
+    self.assertEqual(i1.num_drafts, 1)
 
-    >>> os.environ['USER_EMAIL'] = ''
-    >>> i1._num_comments = i1._num_drafts = None  # reset caches
-    >>> i1.num_comments
-    0
-    >>> i1.num_drafts
-    0
-    >>>
 
-    From my perspective:
+class ContentTest(BaseTest):
 
-    >>> os.environ['USER_EMAIL'] = 'me@gmail.com'
-    >>> i1._num_comments = i1._num_drafts = None  # reset caches
-    >>> i1.num_comments
-    0
-    >>> i1.num_drafts
-    2
-    >>>
+  def test_lines(self):
+    c1 = models.Content()
+    self.assertEqual(c1.lines, [])
+    c1.text = db.Text()
+    self.assertEqual(c1.lines, [])
+    c1.text = db.Text('foo\nbar')
+    self.assertEqual(c1.lines, [u'foo\n', u'bar'])
+    self.assertEqual(c1.lines[0], u'foo\n')
+    self.assert_(isinstance(c1.lines[0], unicode))
 
-    From your perspective:
 
-    >>> os.environ['USER_EMAIL'] = 'you@gmail.com'
-    >>> i1._num_comments = i1._num_drafts = None  # reset caches
-    >>> i1.num_comments
-    0
-    >>> i1.num_drafts
-    1
-    >>>
+class PatchTest(BaseTest):
 
-    Submit some drafts:
+  def test_basic(self):
+    i1 = models.Issue(base=db.Link('http://python.org'), subject='x',
+                      owner=self._me)
+    i1.put()
+    ps1 = models.PatchSet(parent=i1, issue=i1, owner=self._me)
+    ps1.put()
+    p1 = models.Patch(parent=ps1, patchset=ps1)
+    self.assertEqual(p1.content, None)
+    p1._content = db.Key.from_path('Content', 42)  # Doesn't exist
+    p1._patched_content = db.Key.from_path('Content', 42)  # Ditto
+    self.assertRaises(db.Error, lambda : p1.content)
+    self.assertEqual(p1.get_content().text, u'foo')
+    self.assertEqual(p1.content.text, u'foo')
+    self.assertRaises(db.Error, lambda : p1.patched_content)
+    self.assertEqual(p1.get_patched_content().text, u'foo')
+    self.assertEqual(p1.patched_content.text, u'foo')
 
-    >>> c1.draft = False
-    >>> _ = c1.put()
-    >>> c2.draft = False
-    >>> _ = c2.put()
-    >>>
 
-    From anonymous perspective:
+class CommentText(BaseTest):
 
-    >>> os.environ['USER_EMAIL'] = ''
-    >>> i1._num_comments = i1._num_drafts = None  # reset caches
-    >>> i1.num_comments
-    2
-    >>> i1.num_drafts
-    0
-    >>>
+  def test_basic(self):
+    c1 = models.Comment(draft=False, text='  woo'*13)
+    c1.complete(models.Patch())
+    self.assertEqual(c1.shorttext,
+                     u'woo  woo  woo  woo  woo  woo  woo  woo  woo  woo')
+    self.assertEqual(len(c1.buckets), 1)
+    self.assertEqual(c1.buckets[0].text,
+                     (u'  woo  woo  woo  woo  woo  woo  woo  woo'
+                      u'  woo  woo  woo  woo  woo'))
 
-    From my perspective:
 
-    >>> os.environ['USER_EMAIL'] = 'me@gmail.com'
-    >>> i1._num_comments = i1._num_drafts = None  # reset caches
-    >>> i1.num_comments
-    2
-    >>> i1.num_drafts
-    0
-    >>>
+# View tests
 
-    From your perspective:
+class ViewIndexTest(BaseTest):
 
-    >>> os.environ['USER_EMAIL'] = 'you@gmail.com'
-    >>> i1._num_comments = i1._num_drafts = None  # reset caches
-    >>> i1.num_comments
-    2
-    >>> i1.num_drafts
-    1
-    >>>
-
-    """,
-
-    'models.Content': r"""
-
-    >>> from models import *
-    >>> c1 = Content()
-    >>> c1.lines
-    []
-    >>> c1.text = db.Text()
-    >>> c1.lines
-    []
-    >>> c1.text = db.Text('foo\nbar')
-    >>> c1.lines
-    [u'foo\n', u'bar']
-    >>>
-
-    """,
-
-    'models.Patch': r"""
-
-    >>> os.environ['USER_EMAIL'] = ''
-    >>> from models import *
-    >>> me = users.User(email='me@gmail.com')
-    >>> you = users.User(email='you@gmail.com')
-    >>>
-
-    >>> i1 = Issue(base=db.Link('http://python.org'), subject='x', owner=me)
-    >>> _ = i1.put()
-    >>> ps1 = PatchSet(parent=i1, issue=i1, owner=me)
-    >>> _ = ps1.put()
-    >>> p1 = Patch(parent=ps1, patchset=ps1)
-    >>> print p1.content
-    None
-    >>> p1._content = db.Key.from_path('Content', 42)  # Doesn't exist
-    >>> p1._patched_content = db.Key.from_path('Content', 42)  # Ditto
-    >>> p1.content
-    Traceback (most recent call last):
-        ...
-    Error: ReferenceProperty failed to be resolved
-    >>> p1.get_content().text
-    u'foo'
-    >>> p1.content.text
-    u'foo'
-    >>> p1.patched_content
-    Traceback (most recent call last):
-        ...
-    Error: ReferenceProperty failed to be resolved
-    >>> p1.get_patched_content().text
-    u'foo'
-    >>> p1.patched_content.text
-    u'foo'
-    >>>
-
-    """,
-
-    'models.Comment': r"""
-
-    >>> from models import *
-    >>> c1 = Comment(draft=False, text='  woo'*13)
-    >>> c1.complete(Patch())
-    >>> c1.shorttext
-    u'woo  woo  woo  woo  woo  woo  woo  woo  woo  woo'
-    >>> len(c1.buckets)
-    1
-    >>> c1.buckets[0].text
-    u'  woo  woo  woo  woo  woo  woo  woo  woo  woo  woo  woo  woo  woo'
-    >>>
-
-    """,
-
-    'views.index': r"""
-
-    >>> from django.test.client import Client
-    >>> c = Client()
-    >>> import __builtin__
-    >>> if '_' in __builtin__.__dict__: del __builtin__.__dict__['_']
-    >>> r = c.get('/')
-    >>> r.status_code
-    200
-    >>> r.content.splitlines()[0]
-    '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"'
-    >>> r = c.get('/bogus')
-    >>> r.status_code
-    404
-    >>> r = c.get('/mine')
-    >>> r.status_code
-    302
-    >>> r._headers['location'][0]
-    'Location'
-    >>> r._headers['location'][1]
-    'http://testserver/_ah/login?continue=http%3A//localhost/mine'
-    >>>
-
-    """,
-
-    }
+  def test_basic(self):
+    r = self.client.get('/')
+    self.assertEqual(r.status_code, 200)
+    self.assertEqual(r.content.splitlines()[0],
+                     ('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 '
+                      'Transitional//EN"'))
+    r = self.client.get('/bogus')
+    self.assertEqual(r.status_code, 404)
+    r = self.client.get('/mine')
+    self.assertEqual(r.status_code, 302)
+    self.assert_('location' in r._headers)
+    self.assertEqual(r._headers['location'][0], 'Location')
+    self.assertEqual(r._headers['location'][1],
+                     ('http://testserver/_ah/login?'
+                      'continue=http%3A//localhost/mine'))
