@@ -697,7 +697,7 @@ def upload(request):
       if issue is not None:
         patchset = issue.patchset
   if issue is None:
-    msg = 'Issue creation errors:\n%s' % repr(form.errors)
+    msg = 'Issue creation errors: %s' % repr(form.errors)
   else:
     msg = ('Issue %s. URL: %s' %
            (action,
@@ -770,7 +770,7 @@ def upload_content(request):
                           content_type='text/plain')
     if patch.is_binary:
       content.data = data
-    else:      
+    else:
       content.text = engine.ToText(data)
   content.put()
   return HttpResponse('OK', content_type='text/plain')
@@ -961,10 +961,15 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
     db.put(patches)
 
   if emails_add_only:
-    issue.reviewers += [reviewer for reviewer in _get_emails(form, 'reviewers')
+    emails = _get_emails(form, 'reviewers')
+    if not form.is_valid():
+      return None
+    issue.reviewers += [reviewer for reviewer in emails
                         if reviewer not in issue.reviewers]
-    issue.cc += [cc for cc in _get_emails(form, 'cc')
-                 if cc not in issue.cc]
+    emails = _get_emails(form, 'cc')
+    if not form.is_valid():
+      return None
+    issue.cc += [cc for cc in emails if cc not in issue.cc]
   else:
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
@@ -983,27 +988,34 @@ def _get_emails(form, label):
   if raw_emails:
     for email in raw_emails.split(','):
       email = email.strip().lower()
-      if email and email not in emails:
+      if email:
         try:
           email = db.Email(email)
-          if email.count('@') != 1:
+          if '@' not in email:
+            accounts = models.Account.get_accounts_for_nickname(email)
+            if len(accounts) != 1:
+              raise db.BadValueError('Unknown user: %s' % email)
+            email = db.Email(accounts[0].user.email())
+          elif email.count('@') != 1:
             raise db.BadValueError('Invalid email address: %s' % email)
-          head, tail = email.split('@')
-          if '.' not in tail:
-            raise db.BadValueError('Invalid email address: %s' % email)
+          else:
+            head, tail = email.split('@')
+            if '.' not in tail:
+              raise db.BadValueError('Invalid email address: %s' % email)
         except db.BadValueError, err:
           form.errors[label] = [unicode(err)]
           return None
-        emails.append(email)
+        if email not in emails:
+          emails.append(email)
   return emails
 
 
 def _get_patchset_info(request):
   """ Returns a list of patchsets for the issue.
-  
+
   Args:
     request: Django Request object.
-  
+
   Returns:
     A 2-tuple of (issue, patchsets).
   """
@@ -1086,11 +1098,16 @@ def edit(request):
     form_cls = EditForm
 
   if request.method != 'POST':
+    reviewers = [models.Account.get_nickname_for_email(reviewer,
+                                                       default=reviewer)
+                 for reviewer in issue.reviewers]
+    ccs = [models.Account.get_nickname_for_email(cc, default=cc)
+           for cc in issue.cc]
     form = form_cls(initial={'subject': issue.subject,
                              'description': issue.description,
                              'base': base,
-                             'reviewers': ', '.join(issue.reviewers),
-                             'cc': ', '.join(issue.cc),
+                             'reviewers': ', '.join(reviewers),
+                             'cc': ', '.join(ccs),
                              'closed': issue.closed,
                              })
     if not issue.local_base:
@@ -1641,11 +1658,15 @@ def publish(request):
       reviewers.append(request.user.email())
       if request.user.email() in cc:
         cc.remove(request.user.email())
+    reviewers = [models.Account.get_nickname_for_email(reviewer,
+                                                       default=reviewer)
+                 for reviewer in reviewers]
+    ccs = [models.Account.get_nickname_for_email(cc, default=cc) for cc in cc]
     tbd, comments = _get_draft_comments(request, issue, True)
     preview = _get_draft_details(request, comments)
     form = form_class(initial={'subject': issue.subject,
                                'reviewers': ', '.join(reviewers),
-                               'cc': ', '.join(cc),
+                               'cc': ', '.join(ccs),
                                'send_mail': True,
                                })
     return respond(request, 'publish.html', {'form': form,

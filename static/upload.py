@@ -1004,12 +1004,12 @@ def RealMain(argv, data=None):
     form_fields.append(("user", options.email))
   if options.reviewers:
     for reviewer in options.reviewers.split(','):
-      if reviewer.count("@") != 1 or "." not in reviewer.split("@")[1]:
+      if "@" in reviewer and not reviewer.split("@")[1].count(".") == 1:
         ErrorExit("Invalid email address: %s" % reviewer)
     form_fields.append(("reviewers", options.reviewers))
   if options.cc:
     for cc in options.cc.split(','):
-      if cc.count("@") != 1 or "." not in cc.split("@")[1]:
+      if "@" in cc and not cc.split("@")[1].count(".") == 1:
         ErrorExit("Invalid email address: %s" % cc)
     form_fields.append(("cc", options.cc))
   description = options.description

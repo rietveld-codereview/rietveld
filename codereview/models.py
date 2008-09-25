@@ -487,11 +487,23 @@ class Account(db.Model):
     return cls.get_by_key_name(key)
 
   @classmethod
-  def get_nickname_for_email(cls, email):
-    """Get the nickname for an email address, possibly a default."""
+  def get_nickname_for_email(cls, email, default=None):
+    """Get the nickname for an email address, possibly a default.
+
+    If default is None a generic nickname is computed from the email
+    address.
+
+    Args:
+      email: email address.
+      default: If given and no account is found, returned as the default value.
+    Returns:
+      Nickname for given email.
+    """
     account = cls.get_account_for_email(email)
     if account is not None and account.nickname:
       return account.nickname
+    if default is not None:
+      return default
     nickname = email
     if '@' in nickname:
       nickname = nickname.split('@', 1)[0]

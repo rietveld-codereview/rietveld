@@ -12,12 +12,6 @@ Nicknames too???
 Nicknames should not be allowed to contain multiple internal spaces
     nor internal whitespace other than space
 
-Sending Mail
-------------
-
-Should allow registered nicknames in Reviewers and CC fields
-Normalize emails to nicknames in these fields even when editing, if known
-
 Issues
 ------
 
