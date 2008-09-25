@@ -506,16 +506,43 @@ def GetContentType(filename):
 # Use a shell for subcommands on Windows to get a PATH search.
 use_shell = sys.platform.startswith("win")
 
+def RunShellWithReturnCode(command, print_output=False,
+                           universal_newlines=True):
+  """Executes a command and returns the output and the return code.
 
-def RunShell(command, silent_ok=False, universal_newlines=True):
+  Args:
+    command: Command to execute.
+    print_output: If True, the output is printed to stdout.
+    universal_newlines: Use universal_newlines flag (default: True).
+
+  Returns:
+    Tuple (output, return code)
+  """
   logging.info("Running %s", command)
   p = subprocess.Popen(command, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, shell=use_shell,
                        universal_newlines=universal_newlines)
-  data = p.stdout.read()
+  if print_output:
+    output_array = []
+    while True:
+      line = p.stdout.readline()
+      if not line:
+        break
+      print line.strip("\n")
+      output_array.append(line)
+    output = "".join(output_array)
+  else:
+    output = p.stdout.read()
   p.wait()
   p.stdout.close()
-  if p.returncode:
+  return output, p.returncode
+
+
+def RunShell(command, silent_ok=False, universal_newlines=True,
+             print_output=False):
+  data, retcode = RunShellWithReturnCode(command, print_output,
+                                         universal_newlines)
+  if retcode:
     ErrorExit("Got error status from %s" % command)
   if not silent_ok and not data:
     ErrorExit("No output from %s" % command)
@@ -626,7 +653,29 @@ class VersionControlSystem(object):
 class SubversionVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Subversion."""
 
+  def __init__(self, options):
+    super(SubversionVCS, self).__init__(options)
+    if self.options.revision:
+      match = re.match(r"(\d+)(:(\d+))?", self.options.revision)
+      if not match:
+        ErrorExit("Invalid Subversion revision %s." % self.options.revision)
+      self.rev_start = match.group(1)
+      self.rev_end = match.group(3)
+    else:
+      self.rev_start = self.rev_end = None
+    # Cache output from "svn list -r REVNO dirname".
+    # Keys: dirname, Values: 2-tuple (ouput for start rev and end rev).
+    self.svnls_cache = {}
+    # SVN base URL is required to fetch files deleted in an older revision.
+    # Result is cached to not guess it over and over again in GetBaseFile().
+    required = self.options.download_base or self.options.revision is not None
+    self.svn_base = self._GuessBase(required)
+
   def GuessBase(self, required):
+    """Wrapper for _GuessBase."""
+    return self.svn_base
+
+  def _GuessBase(self, required):
     """Returns the SVN base URL.
 
     Args:
@@ -672,6 +721,8 @@ class SubversionVCS(VersionControlSystem):
 
   def GenerateDiff(self, args):
     cmd = ["svn", "diff"]
+    if self.options.revision:
+      cmd += ["-r", self.options.revision]
     if not sys.platform.startswith("win"):
       cmd.append("--diff-cmd=diff")
     cmd.extend(args)
@@ -741,21 +792,52 @@ class SubversionVCS(VersionControlSystem):
       file.close()
     return result
 
-  def GetBaseFile(self, filename):
-    status = RunShell(["svn", "status", "--ignore-externals", filename])
-    if not status:
-      StatusUpdate("svn status returned no output for %s" % filename)
-      sys.exit(1)
-    status_lines = status.splitlines()
-    # If file is in a cl, the output will begin with
-    # "\n--- Changelist 'cl_name':\n".  See
-    # http://svn.collab.net/repos/svn/trunk/notes/changelist-design.txt
-    if (len(status_lines) == 3 and
-        not status_lines[0] and
-        status_lines[1].startswith("--- Changelist")):
-      status = status_lines[2]
+  def GetStatus(self, filename):
+    """Returns the status of a file."""
+    if not self.options.revision:
+      status = RunShell(["svn", "status", "--ignore-externals", filename])
+      if not status:
+        ErrorExit("svn status returned no output for %s" % filename)
+      status_lines = status.splitlines()
+      # If file is in a cl, the output will begin with
+      # "\n--- Changelist 'cl_name':\n".  See
+      # http://svn.collab.net/repos/svn/trunk/notes/changelist-design.txt
+      if (len(status_lines) == 3 and
+          not status_lines[0] and
+          status_lines[1].startswith("--- Changelist")):
+        status = status_lines[2]
+      else:
+        status = status_lines[0]
+    # If we have a revision to diff against we need to run "svn list"
+    # for the old and the new revision and compare the results to get
+    # the correct status for a file.
     else:
-      status = status_lines[0]
+      dirname, relfilename = os.path.split(filename)
+      if dirname not in self.svnls_cache:
+        cmd = ["svn", "list", "-r", self.rev_start, dirname or "."]
+        out, returncode = RunShellWithReturnCode(cmd)
+        if returncode:
+          ErrorExit("Failed to get status for %s." % filename)
+        old_files = out.splitlines()
+        args = ["svn", "list"]
+        if self.rev_end:
+          args += ["-r", self.rev_end]
+        cmd = args + [dirname or "."]
+        out, returncode = RunShellWithReturnCode(cmd)
+        if returncode:
+          ErrorExit("Failed to run command %s" % cmd)
+        self.svnls_cache[dirname] = (old_files, out.splitlines())
+      old_files, new_files = self.svnls_cache[dirname]
+      if relfilename in old_files and relfilename not in new_files:
+        status = "D   "
+      elif relfilename in old_files and relfilename in new_files:
+        status = "M   "
+      else:
+        status = "A   "
+    return status
+
+  def GetBaseFile(self, filename):
+    status = self.GetStatus(filename)
     base_content = None
     new_content = None
 
@@ -776,15 +858,30 @@ class SubversionVCS(VersionControlSystem):
     elif (status[0] in ("M", "D", "R") or
           (status[0] == "A" and status[3] == "+") or  # Copied file.
           (status[0] == " " and status[1] == "M")):  # Property change.
-      mimetype = RunShell(["svn", "-rBASE", "propget", "svn:mime-type",
-                           filename],
-                          silent_ok=True)
+      args = []
+      if self.options.revision:
+        url = "%s/%s@%s" % (self.svn_base, filename, self.rev_start)
+      else:
+        # Don't change filename, it's needed later.
+        url = filename
+        args += ["-r", "BASE"]
+      cmd = ["svn"] + args + ["propget", "svn:mime-type", url]
+      mimetype, returncode = RunShellWithReturnCode(cmd)
+      if returncode:
+        # File does not exist in the requested revision.
+        # Reset mimetype, it contains an error message.
+        mimetype = ""
       is_binary = mimetype and not mimetype.startswith("text/")
       get_base = False
       if status[0] == " " or not is_binary:
         get_base = True
-      elif self.IsImage(filename) and status[0] == "M":          
-        new_content = self.ReadFile(filename)
+      elif self.IsImage(filename) and status[0] == "M":
+        if not self.rev_end:
+          new_content = self.ReadFile(filename)
+        else:
+          url = "%s/%s@%s" % (self.svn_base, filename, self.rev_end)
+          new_content = RunShell(["svn", "cat", url],
+                                 universal_newlines=True)
         get_base = True
 
       if get_base:
@@ -792,13 +889,25 @@ class SubversionVCS(VersionControlSystem):
           universal_newlines = False
         else:
           universal_newlines = True
-        base_content = RunShell(["svn", "cat", filename],
-                                universal_newlines=universal_newlines)
+        if self.rev_start:
+          # "svn cat -r REV delete_file.txt" doesn't work. cat requires
+          # the full URL with "@REV" appended instead of using "-r" option.
+          url = "%s/%s@%s" % (self.svn_base, filename, self.rev_start)
+          base_content = RunShell(["svn", "cat", url],
+                                  universal_newlines=universal_newlines)
+        else:
+          base_content = RunShell(["svn", "cat", filename],
+                                  universal_newlines=universal_newlines)
         if not is_binary:
-          keywords = RunShell(["svn", "-rBASE", "propget", "svn:keywords",
-                               filename],
-                              silent_ok=True)
-          if keywords:
+          args = []
+          if self.rev_start:
+            url = "%s/%s@%s" % (self.svn_base, filename, self.rev_start)
+          else:
+            url = filename
+            args += ["-r", "BASE"]
+          cmd = ["svn"] + args + ["propget", "svn:keywords", url]
+          keywords, returncode = RunShellWithReturnCode(cmd)
+          if keywords and not returncode:
             base_content = self._CollapseKeywords(base_content, keywords)
     else:
       StatusUpdate("svn status returned unexpected output: %s" % status)
@@ -948,9 +1057,9 @@ def GuessVCS(options):
   # Git has a command to test if you're in a git tree.
   # Try running it, but don't die if we don't have git installed.
   try:
-    subproc = subprocess.Popen(["git", "rev-parse", "--is-inside-work-tree"],
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if subproc.wait() == 0:
+    out, returncode = RunShellWithReturnCode(["git", "rev-parse",
+                                              "--is-inside-work-tree"])
+    if returncode == 0:
       return GitVCS(options)
   except OSError, (errno, message):
     if errno != 2:  # ENOENT -- they don't have git installed.
