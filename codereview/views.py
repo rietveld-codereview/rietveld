@@ -987,26 +987,26 @@ def _get_emails(form, label):
   raw_emails = form.cleaned_data.get(label)
   if raw_emails:
     for email in raw_emails.split(','):
-      email = email.strip().lower()
+      email = email.strip()
       if email:
         try:
-          email = db.Email(email)
           if '@' not in email:
             accounts = models.Account.get_accounts_for_nickname(email)
             if len(accounts) != 1:
               raise db.BadValueError('Unknown user: %s' % email)
-            email = db.Email(accounts[0].user.email())
+            db_email = db.Email(accounts[0].user.email().lower())
           elif email.count('@') != 1:
             raise db.BadValueError('Invalid email address: %s' % email)
           else:
             head, tail = email.split('@')
             if '.' not in tail:
               raise db.BadValueError('Invalid email address: %s' % email)
+            db_email = db.Email(email.lower())
         except db.BadValueError, err:
           form.errors[label] = [unicode(err)]
           return None
-        if email not in emails:
-          emails.append(email)
+        if db_email not in emails:
+          emails.append(db_email)
   return emails
 
 
