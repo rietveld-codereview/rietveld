@@ -1750,6 +1750,15 @@ M_HookState.prototype.respond = function() {
     // hope is that these are returned in DOM order
     var comments = hooks[this.hookPos].getElementsByTagName("div");
     var commentsLength = comments.length;
+    if (comments && commentsLength == 0) {
+      // Don't give up too early and look a bit forward
+      var sibling = hooks[this.hookPos].nextSibling;
+      while (sibling && sibling.tagName != "TR") {
+        sibling = sibling.nextSibling;
+      }
+      comments = sibling.getElementsByTagName("div");
+      commentsLength = comments.length;
+    }
     if (comments && commentsLength > 0) {
       var last = null;
       for (var i = commentsLength - 1; i >= 0; i--) {
@@ -1770,22 +1779,21 @@ M_HookState.prototype.respond = function() {
           }
         }
       }
-    }
+    } else {
     // Create a comment at this line
     // TODO: Implement this in a sane fashion, e.g. opens up a comment
     // at the end of the diff chunk.
-    /*
     var tr = hooks[this.hookPos];
     for (var i = tr.cells.length - 1; i >= 0; i--) {
       if (tr.cells[i].id.substr(0, 7) == "newcode") {
-        createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'b');
+        M_createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'b');
         return;
       } else if (tr.cells[i].id.substr(0, 7) == "oldcode") {
-        createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'a');
+        M_createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'a');
         return;
       }
     }
-    */
+    }
   }
 };
 
