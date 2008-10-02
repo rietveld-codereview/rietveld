@@ -1504,6 +1504,7 @@ def _add_next_prev(patchset, patch):
   patch.prev = patch.next = None
   patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
                                   patchset))
+  _reorder_patches_by_filename(patches)
   patchset.patches = patches  # Required to render the jump to select.
   last = None
   for p in patches:
@@ -1628,7 +1629,9 @@ def _get_affected_files(issue):
   patchsets = list(issue.patchset_set.order('created'))
   if len(patchsets):
     patchset = patchsets[-1]
-    for patch in patchset.patch_set.order('filename'):
+    patches = patchset.patch_set.order('filename')
+    _reorder_patches_by_filename(patches)
+    for patch in patches:
       file_str = ''
       if patch.status:
         file_str += patch.status + ' '
