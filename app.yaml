@@ -23,5 +23,10 @@ handlers:
 - url: /static
   static_dir: static
 
+# Note that admin doesn't work with dasher accounts (http://b/1407477)
+- url: /shell.*
+  script: shell.py
+  login: admin
+
 - url: .*
   script: main.py
