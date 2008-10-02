@@ -702,7 +702,7 @@ def upload(request):
       if issue is not None:
         patchset = issue.patchset
   if issue is None:
-    msg = 'Issue creation errors:\n%s' % repr(form.errors)
+    msg = 'Issue creation errors: %s' % repr(form.errors)
   else:
     msg = ('Issue %s. URL: %s' %
            (action,
@@ -775,7 +775,7 @@ def upload_content(request):
                           content_type='text/plain')
     if patch.is_binary:
       content.data = data
-    else:      
+    else:
       content.text = engine.ToText(data)
   content.put()
   return HttpResponse('OK', content_type='text/plain')
@@ -966,10 +966,15 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
     db.put(patches)
 
   if emails_add_only:
-    issue.reviewers += [reviewer for reviewer in _get_emails(form, 'reviewers')
+    emails = _get_emails(form, 'reviewers')
+    if not form.is_valid():
+      return None
+    issue.reviewers += [reviewer for reviewer in emails
                         if reviewer not in issue.reviewers]
-    issue.cc += [cc for cc in _get_emails(form, 'cc')
-                 if cc not in issue.cc]
+    emails = _get_emails(form, 'cc')
+    if not form.is_valid():
+      return None
+    issue.cc += [cc for cc in emails if cc not in issue.cc]
   else:
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
@@ -987,19 +992,26 @@ def _get_emails(form, label):
   raw_emails = form.cleaned_data.get(label)
   if raw_emails:
     for email in raw_emails.split(','):
-      email = email.strip().lower()
-      if email and email not in emails:
+      email = email.strip()
+      if email:
         try:
-          email = db.Email(email)
-          if email.count('@') != 1:
+          if '@' not in email:
+            accounts = models.Account.get_accounts_for_nickname(email)
+            if len(accounts) != 1:
+              raise db.BadValueError('Unknown user: %s' % email)
+            db_email = db.Email(accounts[0].user.email().lower())
+          elif email.count('@') != 1:
             raise db.BadValueError('Invalid email address: %s' % email)
-          head, tail = email.split('@')
-          if '.' not in tail:
-            raise db.BadValueError('Invalid email address: %s' % email)
+          else:
+            head, tail = email.split('@')
+            if '.' not in tail:
+              raise db.BadValueError('Invalid email address: %s' % email)
+            db_email = db.Email(email.lower())
         except db.BadValueError, err:
           form.errors[label] = [unicode(err)]
           return None
-        emails.append(email)
+        if db_email not in emails:
+          emails.append(db_email)
   return emails
 
 
@@ -1013,12 +1025,16 @@ def _reorder_patches_by_filename(patches):
       patches[i:i+2] = [patches[i+1], patches[i]]
 
 
-@issue_required
-def show(request, form=None):
-  """/<issue> - Show an issue."""
+def _get_patchset_info(request):
+  """ Returns a list of patchsets for the issue.
+
+  Args:
+    request: Django Request object.
+
+  Returns:
+    A 2-tuple of (issue, patchsets).
+  """
   issue = request.issue
-  if not form:
-    form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   patchsets = list(issue.patchset_set.order('created'))
   if request.user:
     drafts = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = TRUE'
@@ -1049,6 +1065,15 @@ def show(request, form=None):
         patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
         patchset.n_drafts += patch.num_drafts
       issue.draft_count += patchset.n_drafts
+  return issue, patchsets
+
+
+@issue_required
+def show(request, form=None):
+  """/<issue> - Show an issue."""
+  issue, patchsets = _get_patchset_info(request)
+  if not form:
+    form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   last_patchset = first_patch = None
   if patchsets:
     last_patchset = patchsets[-1]
@@ -1060,6 +1085,21 @@ def show(request, form=None):
                   'messages': messages, 'form': form,
                   'last_patchset': last_patchset,
                   'first_patch': first_patch,
+                  })
+
+
+@patchset_required
+def patchset(request):
+  """/patchset/<key> - Returns patchset information."""
+  patchset = request.patchset
+  issue, patchsets = _get_patchset_info(request)
+  for ps in patchsets:
+    if ps.key().id() == patchset.key().id():
+      patchset = ps
+  return respond(request, 'patchset.html',
+                 {'issue': issue,
+                  'patchset': patchset,
+                  'patchsets': patchsets,
                   })
 
 
@@ -1075,11 +1115,16 @@ def edit(request):
     form_cls = EditForm
 
   if request.method != 'POST':
+    reviewers = [models.Account.get_nickname_for_email(reviewer,
+                                                       default=reviewer)
+                 for reviewer in issue.reviewers]
+    ccs = [models.Account.get_nickname_for_email(cc, default=cc)
+           for cc in issue.cc]
     form = form_cls(initial={'subject': issue.subject,
                              'description': issue.description,
                              'base': base,
-                             'reviewers': ', '.join(issue.reviewers),
-                             'cc': ', '.join(issue.cc),
+                             'reviewers': ', '.join(reviewers),
+                             'cc': ', '.join(ccs),
                              'closed': issue.closed,
                              })
     if not issue.local_base:
@@ -1630,11 +1675,15 @@ def publish(request):
       reviewers.append(request.user.email())
       if request.user.email() in cc:
         cc.remove(request.user.email())
+    reviewers = [models.Account.get_nickname_for_email(reviewer,
+                                                       default=reviewer)
+                 for reviewer in reviewers]
+    ccs = [models.Account.get_nickname_for_email(cc, default=cc) for cc in cc]
     tbd, comments = _get_draft_comments(request, issue, True)
     preview = _get_draft_details(request, comments)
     form = form_class(initial={'subject': issue.subject,
                                'reviewers': ', '.join(reviewers),
-                               'cc': ', '.join(cc),
+                               'cc': ', '.join(ccs),
                                'send_mail': True,
                                })
     return respond(request, 'publish.html', {'form': form,
