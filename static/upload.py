@@ -22,10 +22,11 @@ Diff options are passed to the diff command of the underlying system.
 
 Supported version control systems:
   Git
+  Mercurial
   Subversion
 
-It is important for Git users to specify a tree-ish to diff against
-by using the '--rev' option.
+It is important for Git/Mercurial users to specify a tree/node/branch to diff
+against by using the '--rev' option.
 """
 # This code is derived from appcfg.py in the App Engine SDK (open source),
 # and from ASPN recipe #146306.
@@ -649,6 +650,13 @@ class VersionControlSystem(object):
       if new_content != None:
         UploadFile(filename, file_id, new_content, is_binary, status, False)
 
+  def IsImage(self, filename):
+    """Returns true if the filename has an image extension."""
+    mimetype =  mimetypes.guess_type(filename)[0]
+    if not mimetype:
+      return False
+    return mimetype.startswith("image/")
+
 
 class SubversionVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Subversion."""
@@ -774,13 +782,6 @@ class SubversionVCS(VersionControlSystem):
       if line and line[0] == "?":
         unknown_files.append(line)
     return unknown_files
-
-  def IsImage(self, filename):
-    """Returns true if the filename has an image extension."""
-    mimetype =  mimetypes.guess_type(filename)[0]
-    if not mimetype:
-      return False
-    return mimetype.startswith("image/")
 
   def ReadFile(self, filename):
     """Returns the contents of a file."""
@@ -970,6 +971,104 @@ class GitVCS(VersionControlSystem):
     return (base_content, new_content, is_binary, status)
 
 
+class MercurialVCS(VersionControlSystem):
+  """Implementation of the VersionControlSystem interface for Mercurial."""
+
+  def __init__(self, options, repo_dir):
+    super(MercurialVCS, self).__init__(options)
+    # Absolute path to repository (we can be in a subdir)
+    self.repo_dir = os.path.normpath(repo_dir)
+    # Compute the subdir
+    cwd = os.path.normpath(os.getcwd())
+    assert cwd.startswith(self.repo_dir)
+    self.subdir = cwd[len(self.repo_dir):].lstrip(r"\/")
+    if self.options.revision:
+      self.base_rev = self.options.revision
+    else:
+      self.base_rev = RunShell(["hg", "parent", "-q"]).split(':')[1].strip()
+
+  def _GetRelPath(self, filename):
+    """Get relative path of a file according to the current directory,
+    given its logical path in the repo."""
+    assert filename.startswith(self.subdir), filename
+    return filename[len(self.subdir):].lstrip(r"\/")
+
+  def GenerateDiff(self, extra_args):
+    # If no file specified, restrict to the current subdir
+    extra_args = extra_args or ["."]
+    cmd = ["hg", "diff", "--git", "-r", self.base_rev] + extra_args
+    data = RunShell(cmd, silent_ok=True)
+    svndiff = []
+    filecount = 0
+    for line in data.splitlines():
+      m = re.match("diff --git a/(\S+) b/(\S+)", line)
+      if m:
+        # Modify line to make it look like as it comes from svn diff.
+        # With this modification no changes on the server side are required
+        # to make upload.py work with Mercurial repos.
+        # NOTE: for proper handling of moved/copied files, we have to use
+        # the second filename.
+        filename = m.group(2)
+        svndiff.append("Index: %s" % filename)
+        svndiff.append("=" * 67)
+        filecount += 1
+        logging.info(line)
+      else:
+        svndiff.append(line)
+    if not filecount:
+      ErrorExit("No valid patches found in output from hg diff")
+    return "\n".join(svndiff) + "\n"
+
+  def GetUnknownFiles(self):
+    """Return a list of files unknown to the VCS."""
+    args = []
+    status = RunShell(["hg", "status", "--rev", self.base_rev, "-u", "."],
+        silent_ok=True)
+    unknown_files = []
+    for line in status.splitlines():
+      st, fn = line.split(" ", 1)
+      if st == "?":
+        unknown_files.append(fn)
+    return unknown_files
+
+  def GetBaseFile(self, filename):
+    # "hg status" and "hg cat" both take a path relative to the current subdir
+    # rather than to the repo root, but "hg diff" has given us the full path
+    # to the repo root.
+    base_content = ""
+    new_content = None
+    is_binary = False
+    oldrelpath = relpath = self._GetRelPath(filename)
+    # "hg status -C" returns two lines for moved/copied files, one otherwise
+    out = RunShell(["hg", "status", "-C", "--rev", self.base_rev, relpath])
+    out = out.splitlines()
+    # HACK: strip error message about missing file/directory if it isn't in
+    # the working copy
+    if out[0].startswith('%s: ' % relpath):
+      out = out[1:]
+    if len(out) > 1:
+      # Moved/copied => considered as modified, use old filename to 
+      # retrieve base contents
+      oldrelpath = out[1].strip()
+      status = "M"
+    else:
+      status, _ = out[0].split(' ', 1)
+    if status != "A":
+      base_content = RunShell(["hg", "cat", "-r", self.base_rev, oldrelpath],
+        silent_ok=True)
+      is_binary = "\0" in base_content  # Mercurial's heuristic
+    if status != "R":
+      new_content = open(relpath, "rb").read()
+      is_binary = is_binary or "\0" in new_content
+    if is_binary and base_content:
+      # Fetch again without converting newlines
+      base_content = RunShell(["hg", "cat", "-r", self.base_rev, oldrelpath],
+        silent_ok=True, universal_newlines=False)
+    if not is_binary or not self.IsImage(relpath):
+      new_content = None
+    return base_content, new_content, is_binary, status
+
+
 # NOTE: The SplitPatch function is duplicated in engine.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
@@ -1049,6 +1148,17 @@ def GuessVCS(options):
   Returns:
     A VersionControlSystem instance. Exits if the VCS can't be guessed.
   """
+  # Mercurial has a command to get the base directory of a repository
+  # Try running it, but don't die if we don't have hg installed.
+  # NOTE: we try Mercurial first as it can sit on top of an SVN working copy.
+  try:
+    out, returncode = RunShellWithReturnCode(["hg", "root"])
+    if returncode == 0:
+      return MercurialVCS(options, out.strip())
+  except OSError, (errno, message):
+    if errno != 2:  # ENOENT -- they don't have hg installed.
+      raise
+
   # Subversion has a .svn in all working directories.
   if os.path.isdir('.svn'):
     logging.info("Guessed VCS = Subversion")
