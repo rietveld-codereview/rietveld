@@ -619,6 +619,10 @@ def _show_user(request):
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
       user.email()) if issue.owner != user]
+  cc_issues = [issue for issue in db.GqlQuery(
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND cc = :1 ORDER BY modified DESC',
+      user.email()) if issue.owner != user]
   closed_issues = list(db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
@@ -629,6 +633,7 @@ def _show_user(request):
                  {'email': user.email(),
                   'my_issues': my_issues,
                   'review_issues': review_issues,
+                  'cc_issues': cc_issues,
                   'closed_issues': closed_issues,
                   })
 
@@ -1045,6 +1050,16 @@ def _get_emails(form, label):
   return emails
 
 
+def _reorder_patches_by_filename(patches):
+  """Reorder a list of patches to put C/C++ headers before sources."""
+  splits = [os.path.splitext(patch.filename) for patch in patches]
+  for i in range(len(splits) - 1):
+    if (splits[i][0] == splits[i+1][0] and
+        splits[i][1] in ['.c', '.cc', '.cpp'] and
+        splits[i+1][1] in ['.h', '.hxx', '.hpp']):
+      patches[i:i+2] = [patches[i+1], patches[i]]
+
+
 def _calculate_delta(patch, patchsets):
   """Calculates which files in earlier patchsets this file differs from.
   
@@ -1103,6 +1118,8 @@ def _get_patchset_info(request, patchset_id):
   for patchset in patchsets:
     patchset_id_mapping[patchset.key().id()] = len(patchset_id_mapping) + 1
     patchset.patches = list(patchset.patch_set.order('filename'))
+    # Reorder the list of patches to put .h files before .cc.
+    _reorder_patches_by_filename(patchset.patches)
     for patch in patchset.patches:
       patch.patchset = patchset  # Prevent getting these over and over
     patchset.n_comments = 0
@@ -1575,6 +1592,7 @@ def _add_next_prev(patchset, patch):
   patch.prev = patch.next = None
   patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
                                   patchset))
+  _reorder_patches_by_filename(patches)
   patchset.patches = patches  # Required to render the jump to select.
   last = None
   for p in patches:
@@ -1699,7 +1717,9 @@ def _get_affected_files(issue):
   patchsets = list(issue.patchset_set.order('created'))
   if len(patchsets):
     patchset = patchsets[-1]
-    for patch in patchset.patch_set.order('filename'):
+    patches = patchset.patch_set.order('filename')
+    _reorder_patches_by_filename(patches)
+    for patch in patches:
       file_str = ''
       if patch.status:
         file_str += patch.status + ' '

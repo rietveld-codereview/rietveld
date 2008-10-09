@@ -522,7 +522,7 @@ def RunShellWithReturnCode(command, print_output=False,
   logging.info("Running %s", command)
   p = subprocess.Popen(command, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, shell=use_shell,
-                       universal_newlines=universal_newlines)
+                       universal_newlines=True)
   if print_output:
     output_array = []
     while True:
