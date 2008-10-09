@@ -67,9 +67,9 @@
                title="Delta from patch set {{forloop.parentloop.counter}}">{{forloop.parentloop.counter}}</a>
           {%endifnotequal%}{%endifequal%}{%endif%}{%endfor%}{%endifnotequal%}{%endfor%}{%endif%}
         </td>
-        <td>{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
-        <td>{{patch.num_lines}} line{{patch.num_lines|pluralize}}</td>
-        <td>
+        <td style="white-space: nowrap">{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
+        <td style="white-space: nowrap">{{patch.num_lines}} line{{patch.num_lines|pluralize}}</td>
+        <td style="white-space: nowrap">
           {%if patch.num_comments or patch.num_drafts%}<b>{%endif%}
             {{patch.num_comments}} comment{{patch.num_comments|pluralize}}
             {%if patch.num_drafts%}
