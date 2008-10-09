@@ -851,10 +851,9 @@ class SubversionVCS(VersionControlSystem):
       # since diff's output won't contain it.
       mimetype = RunShell(["svn", "propget", "svn:mime-type", filename],
                           silent_ok=True)
+      base_content = ""
       is_binary = mimetype and not mimetype.startswith("text/")
-      if not is_binary:
-        base_content = ""
-      elif self.IsImage(filename):
+      if is_binary and self.IsImage(filename):
         new_content = self.ReadFile(filename)
     elif (status[0] in ("M", "D", "R") or
           (status[0] == "A" and status[3] == "+") or  # Copied file.
@@ -872,17 +871,24 @@ class SubversionVCS(VersionControlSystem):
         # File does not exist in the requested revision.
         # Reset mimetype, it contains an error message.
         mimetype = ""
-      is_binary = mimetype and not mimetype.startswith("text/")
       get_base = False
-      if status[0] == " " or not is_binary:
-        get_base = True
-      elif self.IsImage(filename) and status[0] == "M":
-        if not self.rev_end:
-          new_content = self.ReadFile(filename)
+      is_binary = mimetype and not mimetype.startswith("text/")
+      if status[0] == " ":
+        # Empty base content just to force an upload.
+        base_content = ""
+      elif is_binary:
+        if self.IsImage(filename):
+          get_base = True
+          if status[0] == "M":
+            if not self.rev_end:
+              new_content = self.ReadFile(filename)
+            else:
+              url = "%s/%s@%s" % (self.svn_base, filename, self.rev_end)
+              new_content = RunShell(["svn", "cat", url],
+                                     universal_newlines=True)
         else:
-          url = "%s/%s@%s" % (self.svn_base, filename, self.rev_end)
-          new_content = RunShell(["svn", "cat", url],
-                                 universal_newlines=True)
+          base_content = ""
+      else:
         get_base = True
 
       if get_base:
