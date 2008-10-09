@@ -544,7 +544,7 @@ def RunShell(command, silent_ok=False, universal_newlines=True,
   data, retcode = RunShellWithReturnCode(command, print_output,
                                          universal_newlines)
   if retcode:
-    ErrorExit("Got error status from %s" % command)
+    ErrorExit("Got error status from %s:\n%s" % (command, data))
   if not silent_ok and not data:
     ErrorExit("No output from %s" % command)
   return data
@@ -603,7 +603,28 @@ class VersionControlSystem(object):
     raise NotImplementedError(
         "abstract method -- subclass %s must override" % self.__class__)
 
-  def UploadBaseFiles(self, issue, rpc_server, patch_list, patchset, options):
+
+  def GetBaseFiles(self, diff):
+    """Helper that calls GetBase file for each file in the patch.
+    
+    Returns:
+      A dictionary that maps from filename to GetBaseFile's tuple.  Filenames
+      are retrieved based on lines that start with "Index:" or
+      "Property changes on:".
+    """
+    files = {}
+    for line in diff.splitlines(True):
+      if line.startswith('Index:') or line.startswith('Property changes on:'):
+        unused, filename = line.split(':', 1)
+        # On Windows if a file has property changes its filename uses '\'
+        # instead of '/'.
+        filename = filename.strip().replace('\\', '/')
+        files[filename] = self.GetBaseFile(filename)
+    return files
+
+
+  def UploadBaseFiles(self, issue, rpc_server, patch_list, patchset, options,
+                      files):
     """Uploads the base files (and if necessary, the current ones as well)."""
 
     def UploadFile(filename, file_id, content, is_binary, status, is_base):
@@ -643,8 +664,12 @@ class VersionControlSystem(object):
     patches = dict()
     [patches.setdefault(v, k) for k, v in patch_list]
     for filename in patches.keys():
-      file_id = int(patches.get(filename))
-      base_content, new_content, is_binary, status = self.GetBaseFile(filename)
+      base_content, new_content, is_binary, status = files[filename]
+      file_id_str = patches.get(filename)
+      if file_id_str.find("nobase") != -1:
+        base_content = None
+        file_id_str = file_id_str[file_id_str.rfind("_") + 1:]
+      file_id = int(file_id_str)
       if base_content != None:
         UploadFile(filename, file_id, base_content, is_binary, status, True)
       if new_content != None:
@@ -1210,6 +1235,7 @@ def RealMain(argv, data=None):
     vcs.CheckForUnknownFiles()
   if data is None:
     data = vcs.GenerateDiff(args)
+  files = vcs.GetBaseFiles(data)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
   if options.issue:
@@ -1246,6 +1272,16 @@ def RealMain(argv, data=None):
     file.close()
   if description:
     form_fields.append(("description", description))
+  # Send a hash of all the base file so the server can determine if a copy
+  # already exists in an earlier patchset.
+  base_hashes = ""
+  for file, info in files.iteritems():
+    if not info[0] is None:
+      checksum = md5.new(info[0]).hexdigest()
+      if base_hashes:
+        base_hashes += "|"
+      base_hashes += checksum + ":" + file
+  form_fields.append(("base_hashes", base_hashes))
   # If we're uploading base files, don't send the email before the uploads, so
   # that it contains the file status.
   if options.send_mail and options.download_base:
@@ -1254,13 +1290,13 @@ def RealMain(argv, data=None):
     form_fields.append(("content_upload", "1"))
   if len(data) > MAX_UPLOAD_SIZE:
     print "Patch is large, so uploading file patches separately."
-    files = []
+    uploaded_diff_file = []
     form_fields.append(("separate_patches", "1"))
   else:
-    files = [("data", "data.diff", data)]
-  ctype, body = EncodeMultipartFormData(form_fields, files)
+    uploaded_diff_file = [("data", "data.diff", data)]
+  ctype, body = EncodeMultipartFormData(form_fields, uploaded_diff_file)
   response_body = rpc_server.Send("/upload", body, content_type=ctype)
-  if not options.download_base or not files:
+  if not options.download_base or not uploaded_diff_file:
     lines = response_body.splitlines()
     if len(lines) >= 2:
       msg = lines[0]
@@ -1276,13 +1312,13 @@ def RealMain(argv, data=None):
     sys.exit(0)
   issue = msg[msg.rfind("/")+1:]
 
-  if not files:
+  if not uploaded_diff_file:
     result = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
     if not options.download_base:
       patches = result
 
   if not options.download_base:
-    vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
+    vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options, files)
     if options.send_mail:
       rpc_server.Send("/" + issue + "/mail", payload="")
   return issue

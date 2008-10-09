@@ -175,9 +175,11 @@ class Content(db.Model):
   # parent => Patch
   text = db.TextProperty()
   data = db.BlobProperty()
+  # Checksum over text or data depending on the type of this content.
+  checksum = db.TextProperty()
   is_uploaded = db.BooleanProperty(default=False)
   is_bad = db.BooleanProperty(default=False)
-  file_too_large = db.BooleanProperty(required=False, default=False)
+  file_too_large = db.BooleanProperty(default=False)
 
   @property
   def lines(self):
@@ -199,7 +201,10 @@ class Patch(db.Model):
   text = db.TextProperty()
   content = db.ReferenceProperty(Content)
   patched_content = db.ReferenceProperty(Content, collection_name='patch2_set')
-  is_binary = db.BooleanProperty(required=False, default=False)
+  is_binary = db.BooleanProperty(default=False)
+  # Ids of patchsets that have a different version of this file.
+  delta = db.ListProperty(int)
+  delta_calculated = db.BooleanProperty(default=False)
 
   _lines = None
 
