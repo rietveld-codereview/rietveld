@@ -22,10 +22,11 @@ Diff options are passed to the diff command of the underlying system.
 
 Supported version control systems:
   Git
+  Mercurial
   Subversion
 
-It is important for Git users to specify a tree-ish to diff against
-by using the '--rev' option.
+It is important for Git/Mercurial users to specify a tree/node/branch to diff
+against by using the '--rev' option.
 """
 # This code is derived from appcfg.py in the App Engine SDK (open source),
 # and from ASPN recipe #146306.
@@ -543,7 +544,7 @@ def RunShell(command, silent_ok=False, universal_newlines=True,
   data, retcode = RunShellWithReturnCode(command, print_output,
                                          universal_newlines)
   if retcode:
-    ErrorExit("Got error status from %s" % command)
+    ErrorExit("Got error status from %s:\n%s" % (command, data))
   if not silent_ok and not data:
     ErrorExit("No output from %s" % command)
   return data
@@ -602,7 +603,28 @@ class VersionControlSystem(object):
     raise NotImplementedError(
         "abstract method -- subclass %s must override" % self.__class__)
 
-  def UploadBaseFiles(self, issue, rpc_server, patch_list, patchset, options):
+
+  def GetBaseFiles(self, diff):
+    """Helper that calls GetBase file for each file in the patch.
+    
+    Returns:
+      A dictionary that maps from filename to GetBaseFile's tuple.  Filenames
+      are retrieved based on lines that start with "Index:" or
+      "Property changes on:".
+    """
+    files = {}
+    for line in diff.splitlines(True):
+      if line.startswith('Index:') or line.startswith('Property changes on:'):
+        unused, filename = line.split(':', 1)
+        # On Windows if a file has property changes its filename uses '\'
+        # instead of '/'.
+        filename = filename.strip().replace('\\', '/')
+        files[filename] = self.GetBaseFile(filename)
+    return files
+
+
+  def UploadBaseFiles(self, issue, rpc_server, patch_list, patchset, options,
+                      files):
     """Uploads the base files (and if necessary, the current ones as well)."""
 
     def UploadFile(filename, file_id, content, is_binary, status, is_base):
@@ -642,12 +664,23 @@ class VersionControlSystem(object):
     patches = dict()
     [patches.setdefault(v, k) for k, v in patch_list]
     for filename in patches.keys():
-      file_id = int(patches.get(filename))
-      base_content, new_content, is_binary, status = self.GetBaseFile(filename)
+      base_content, new_content, is_binary, status = files[filename]
+      file_id_str = patches.get(filename)
+      if file_id_str.find("nobase") != -1:
+        base_content = None
+        file_id_str = file_id_str[file_id_str.rfind("_") + 1:]
+      file_id = int(file_id_str)
       if base_content != None:
         UploadFile(filename, file_id, base_content, is_binary, status, True)
       if new_content != None:
         UploadFile(filename, file_id, new_content, is_binary, status, False)
+
+  def IsImage(self, filename):
+    """Returns true if the filename has an image extension."""
+    mimetype =  mimetypes.guess_type(filename)[0]
+    if not mimetype:
+      return False
+    return mimetype.startswith("image/")
 
 
 class SubversionVCS(VersionControlSystem):
@@ -775,13 +808,6 @@ class SubversionVCS(VersionControlSystem):
         unknown_files.append(line)
     return unknown_files
 
-  def IsImage(self, filename):
-    """Returns true if the filename has an image extension."""
-    mimetype =  mimetypes.guess_type(filename)[0]
-    if not mimetype:
-      return False
-    return mimetype.startswith("image/")
-
   def ReadFile(self, filename):
     """Returns the contents of a file."""
     file = open(filename, 'rb')
@@ -850,10 +876,9 @@ class SubversionVCS(VersionControlSystem):
       # since diff's output won't contain it.
       mimetype = RunShell(["svn", "propget", "svn:mime-type", filename],
                           silent_ok=True)
+      base_content = ""
       is_binary = mimetype and not mimetype.startswith("text/")
-      if not is_binary:
-        base_content = ""
-      elif self.IsImage(filename):
+      if is_binary and self.IsImage(filename):
         new_content = self.ReadFile(filename)
     elif (status[0] in ("M", "D", "R") or
           (status[0] == "A" and status[3] == "+") or  # Copied file.
@@ -871,17 +896,24 @@ class SubversionVCS(VersionControlSystem):
         # File does not exist in the requested revision.
         # Reset mimetype, it contains an error message.
         mimetype = ""
-      is_binary = mimetype and not mimetype.startswith("text/")
       get_base = False
-      if status[0] == " " or not is_binary:
-        get_base = True
-      elif self.IsImage(filename) and status[0] == "M":
-        if not self.rev_end:
-          new_content = self.ReadFile(filename)
+      is_binary = mimetype and not mimetype.startswith("text/")
+      if status[0] == " ":
+        # Empty base content just to force an upload.
+        base_content = ""
+      elif is_binary:
+        if self.IsImage(filename):
+          get_base = True
+          if status[0] == "M":
+            if not self.rev_end:
+              new_content = self.ReadFile(filename)
+            else:
+              url = "%s/%s@%s" % (self.svn_base, filename, self.rev_end)
+              new_content = RunShell(["svn", "cat", url],
+                                     universal_newlines=True)
         else:
-          url = "%s/%s@%s" % (self.svn_base, filename, self.rev_end)
-          new_content = RunShell(["svn", "cat", url],
-                                 universal_newlines=True)
+          base_content = ""
+      else:
         get_base = True
 
       if get_base:
@@ -970,6 +1002,104 @@ class GitVCS(VersionControlSystem):
     return (base_content, new_content, is_binary, status)
 
 
+class MercurialVCS(VersionControlSystem):
+  """Implementation of the VersionControlSystem interface for Mercurial."""
+
+  def __init__(self, options, repo_dir):
+    super(MercurialVCS, self).__init__(options)
+    # Absolute path to repository (we can be in a subdir)
+    self.repo_dir = os.path.normpath(repo_dir)
+    # Compute the subdir
+    cwd = os.path.normpath(os.getcwd())
+    assert cwd.startswith(self.repo_dir)
+    self.subdir = cwd[len(self.repo_dir):].lstrip(r"\/")
+    if self.options.revision:
+      self.base_rev = self.options.revision
+    else:
+      self.base_rev = RunShell(["hg", "parent", "-q"]).split(':')[1].strip()
+
+  def _GetRelPath(self, filename):
+    """Get relative path of a file according to the current directory,
+    given its logical path in the repo."""
+    assert filename.startswith(self.subdir), filename
+    return filename[len(self.subdir):].lstrip(r"\/")
+
+  def GenerateDiff(self, extra_args):
+    # If no file specified, restrict to the current subdir
+    extra_args = extra_args or ["."]
+    cmd = ["hg", "diff", "--git", "-r", self.base_rev] + extra_args
+    data = RunShell(cmd, silent_ok=True)
+    svndiff = []
+    filecount = 0
+    for line in data.splitlines():
+      m = re.match("diff --git a/(\S+) b/(\S+)", line)
+      if m:
+        # Modify line to make it look like as it comes from svn diff.
+        # With this modification no changes on the server side are required
+        # to make upload.py work with Mercurial repos.
+        # NOTE: for proper handling of moved/copied files, we have to use
+        # the second filename.
+        filename = m.group(2)
+        svndiff.append("Index: %s" % filename)
+        svndiff.append("=" * 67)
+        filecount += 1
+        logging.info(line)
+      else:
+        svndiff.append(line)
+    if not filecount:
+      ErrorExit("No valid patches found in output from hg diff")
+    return "\n".join(svndiff) + "\n"
+
+  def GetUnknownFiles(self):
+    """Return a list of files unknown to the VCS."""
+    args = []
+    status = RunShell(["hg", "status", "--rev", self.base_rev, "-u", "."],
+        silent_ok=True)
+    unknown_files = []
+    for line in status.splitlines():
+      st, fn = line.split(" ", 1)
+      if st == "?":
+        unknown_files.append(fn)
+    return unknown_files
+
+  def GetBaseFile(self, filename):
+    # "hg status" and "hg cat" both take a path relative to the current subdir
+    # rather than to the repo root, but "hg diff" has given us the full path
+    # to the repo root.
+    base_content = ""
+    new_content = None
+    is_binary = False
+    oldrelpath = relpath = self._GetRelPath(filename)
+    # "hg status -C" returns two lines for moved/copied files, one otherwise
+    out = RunShell(["hg", "status", "-C", "--rev", self.base_rev, relpath])
+    out = out.splitlines()
+    # HACK: strip error message about missing file/directory if it isn't in
+    # the working copy
+    if out[0].startswith('%s: ' % relpath):
+      out = out[1:]
+    if len(out) > 1:
+      # Moved/copied => considered as modified, use old filename to 
+      # retrieve base contents
+      oldrelpath = out[1].strip()
+      status = "M"
+    else:
+      status, _ = out[0].split(' ', 1)
+    if status != "A":
+      base_content = RunShell(["hg", "cat", "-r", self.base_rev, oldrelpath],
+        silent_ok=True)
+      is_binary = "\0" in base_content  # Mercurial's heuristic
+    if status != "R":
+      new_content = open(relpath, "rb").read()
+      is_binary = is_binary or "\0" in new_content
+    if is_binary and base_content:
+      # Fetch again without converting newlines
+      base_content = RunShell(["hg", "cat", "-r", self.base_rev, oldrelpath],
+        silent_ok=True, universal_newlines=False)
+    if not is_binary or not self.IsImage(relpath):
+      new_content = None
+    return base_content, new_content, is_binary, status
+
+
 # NOTE: The SplitPatch function is duplicated in engine.py, keep them in sync.
 def SplitPatch(data):
   """Splits a patch into separate pieces for each file.
@@ -1049,6 +1179,17 @@ def GuessVCS(options):
   Returns:
     A VersionControlSystem instance. Exits if the VCS can't be guessed.
   """
+  # Mercurial has a command to get the base directory of a repository
+  # Try running it, but don't die if we don't have hg installed.
+  # NOTE: we try Mercurial first as it can sit on top of an SVN working copy.
+  try:
+    out, returncode = RunShellWithReturnCode(["hg", "root"])
+    if returncode == 0:
+      return MercurialVCS(options, out.strip())
+  except OSError, (errno, message):
+    if errno != 2:  # ENOENT -- they don't have hg installed.
+      raise
+
   # Subversion has a .svn in all working directories.
   if os.path.isdir('.svn'):
     logging.info("Guessed VCS = Subversion")
@@ -1094,6 +1235,7 @@ def RealMain(argv, data=None):
     vcs.CheckForUnknownFiles()
   if data is None:
     data = vcs.GenerateDiff(args)
+  files = vcs.GetBaseFiles(data)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
   if options.issue:
@@ -1130,6 +1272,16 @@ def RealMain(argv, data=None):
     file.close()
   if description:
     form_fields.append(("description", description))
+  # Send a hash of all the base file so the server can determine if a copy
+  # already exists in an earlier patchset.
+  base_hashes = ""
+  for file, info in files.iteritems():
+    if not info[0] is None:
+      checksum = md5.new(info[0]).hexdigest()
+      if base_hashes:
+        base_hashes += "|"
+      base_hashes += checksum + ":" + file
+  form_fields.append(("base_hashes", base_hashes))
   # If we're uploading base files, don't send the email before the uploads, so
   # that it contains the file status.
   if options.send_mail and options.download_base:
@@ -1138,13 +1290,13 @@ def RealMain(argv, data=None):
     form_fields.append(("content_upload", "1"))
   if len(data) > MAX_UPLOAD_SIZE:
     print "Patch is large, so uploading file patches separately."
-    files = []
+    uploaded_diff_file = []
     form_fields.append(("separate_patches", "1"))
   else:
-    files = [("data", "data.diff", data)]
-  ctype, body = EncodeMultipartFormData(form_fields, files)
+    uploaded_diff_file = [("data", "data.diff", data)]
+  ctype, body = EncodeMultipartFormData(form_fields, uploaded_diff_file)
   response_body = rpc_server.Send("/upload", body, content_type=ctype)
-  if not options.download_base or not files:
+  if not options.download_base or not uploaded_diff_file:
     lines = response_body.splitlines()
     if len(lines) >= 2:
       msg = lines[0]
@@ -1160,13 +1312,13 @@ def RealMain(argv, data=None):
     sys.exit(0)
   issue = msg[msg.rfind("/")+1:]
 
-  if not files:
+  if not uploaded_diff_file:
     result = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
     if not options.download_base:
       patches = result
 
   if not options.download_base:
-    vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options)
+    vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options, files)
     if options.send_mail:
       rpc_server.Send("/" + issue + "/mail", payload="")
   return issue

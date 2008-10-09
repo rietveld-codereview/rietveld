@@ -167,6 +167,7 @@ class UploadForm(forms.Form):
   reviewers = forms.CharField(max_length=1000, required=False)
   cc = forms.CharField(max_length=1000, required=False)
   send_mail = forms.BooleanField(required=False)
+  base_hashes = forms.CharField(required=False)
 
   def clean_base(self):
     base = self.cleaned_data.get('base')
@@ -716,16 +717,49 @@ def upload(request):
         issue.local_base = True
         issue.put()
 
+        base_hashes = {}
+        for file_info in form.cleaned_data.get('base_hashes').split("|"):
+          if not file_info:
+            break
+          checksum, filename = file_info.split(":", 1)
+          base_hashes[filename] = checksum
+
+        content_entities = []
         new_content_entities = []
         patches = list(patchset.patch_set)
+        existing_patches = {}
+        patchsets = list(issue.patchset_set)
+        if len(patchsets) > 1:
+          # Only check the last uploaded patchset for speed.
+          for opatch in patchsets[-2].patch_set:
+            if opatch.content:
+              existing_patches[opatch.filename] = opatch
         for patch in patches:
-          content = models.Content(is_uploaded=True, parent=patch)
-          new_content_entities.append(content)
-        db.put(new_content_entities)
+          content = None
+          # Check if the base file is already uploaded in another patchset.
+          if (patch.filename in base_hashes and
+              patch.filename in existing_patches and
+              (base_hashes[patch.filename] ==
+               existing_patches[patch.filename].content.checksum)):
+            content = existing_patches[patch.filename].content
+            patch.status = existing_patches[patch.filename].status
+            patch.is_binary = existing_patches[patch.filename].is_binary
+          if not content:
+            content = models.Content(is_uploaded=True, parent=patch)
+            new_content_entities.append(content)
+          content_entities.append(content)
+        if new_content_entities:
+          db.put(new_content_entities)
 
-        for patch, content_entity in zip(patches, new_content_entities):
+        for patch, content_entity in zip(patches, content_entities):
           patch.content = content_entity
-          msg += "\n%d %s" % (patch.key().id(), patch.filename)
+          id_string = patch.key().id()
+          if content_entity not in new_content_entities:
+            # Base file not needed since we reused a previous upload.  Send its
+            # patch id in case it's a binary file and the new content needs to
+            # be uploaded.  We mark this by prepending 'nobase' to the id.
+            id_string = "nobase_" + str(id_string)
+          msg += "\n%s %s" % (id_string, patch.filename)
         db.put(patches)
   return HttpResponse(msg, content_type='text/plain')
 
@@ -777,6 +811,7 @@ def upload_content(request):
       content.data = data
     else:
       content.text = engine.ToText(data)
+    content.checksum = checksum
   content.put()
   return HttpResponse('OK', content_type='text/plain')
 
@@ -1025,17 +1060,50 @@ def _reorder_patches_by_filename(patches):
       patches[i:i+2] = [patches[i+1], patches[i]]
 
 
-def _get_patchset_info(request):
+def _calculate_delta(patch, patchsets):
+  """Calculates which files in earlier patchsets this file differs from.
+  
+  Args:
+    patch: The file to compare.
+    patchsets: A list of existing patchsets.
+
+  Returns:
+    A list of patchset ids.
+  """
+    
+  delta = []
+  if patch.no_base_file:
+    return delta
+  for other in patchsets:
+    if patch.patchset.key().id() == other.key().id():
+      break
+    for opatch in other.patches:
+      if (not opatch.no_base_file and
+          patch.filename == opatch.filename and
+          patch.text != opatch.text):
+        delta.append(other.key().id())
+  return delta
+
+
+def _get_patchset_info(request, patchset_id):
   """ Returns a list of patchsets for the issue.
 
   Args:
     request: Django Request object.
+    patchset_id: The id of the patchset that the caller is interested in.  This
+      is the one that we generate delta links to if they're not available.  We
+      can't generate for all patchsets because it would take too long on issues
+      with many patchsets.  Passing in None is equivalent to doing it for the
+      last patchset.
 
   Returns:
     A 2-tuple of (issue, patchsets).
   """
   issue = request.issue
   patchsets = list(issue.patchset_set.order('created'))
+  if not patchset_id:
+    patchset_id = patchsets[-1].key().id()
+
   if request.user:
     drafts = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = TRUE'
                                      '  AND author = :2',
@@ -1046,7 +1114,9 @@ def _get_patchset_info(request):
                                      issue))
   issue.draft_count = 0
   issue.comment_count = 0
+  patchset_id_mapping = {}  # Maps from patchset id to its ordering number.
   for patchset in patchsets:
+    patchset_id_mapping[patchset.key().id()] = len(patchset_id_mapping) + 1
     patchset.patches = list(patchset.patch_set.order('filename'))
     # Reorder the list of patches to put .h files before .cc.
     _reorder_patches_by_filename(patchset.patches)
@@ -1057,6 +1127,24 @@ def _get_patchset_info(request):
       pkey = patch.key()
       patch._num_comments = sum(c.parent_key() == pkey for c in comments)
       patchset.n_comments += patch.num_comments
+      if not patch.delta_calculated:
+        if patchset_id == patchset.key().id():
+          # Compare each patch to the same file in earlier patchsets to see if
+          # they differ, so that we can generate the delta patch urls.  We do
+          # this once and cache it after.  It's specifically not done on upload
+          # because we already are doing too much processing there.
+          patch.delta = _calculate_delta(patch, patchsets)
+          patch.delta_calculated = True
+          # A multi-entity put would be quicker, but it fails when the patches
+          # have content that is large.  App Engine throws RequestTooLarge.
+          # This way, although not as efficient, allows multiple refreshes on an
+          # issue to get things done, as opposed to an all-or-nothing approach.
+          patch.put()
+        else:
+          patch.delta = []
+      patch.parsed_deltas = []
+      for delta in patch.delta:
+        patch.parsed_deltas.append([patchset_id_mapping[delta], delta])
     issue.comment_count += patchset.n_comments
     patchset.n_drafts = 0
     if request.user:
@@ -1071,7 +1159,7 @@ def _get_patchset_info(request):
 @issue_required
 def show(request, form=None):
   """/<issue> - Show an issue."""
-  issue, patchsets = _get_patchset_info(request)
+  issue, patchsets = _get_patchset_info(request, None)
   if not form:
     form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   last_patchset = first_patch = None
@@ -1092,7 +1180,7 @@ def show(request, form=None):
 def patchset(request):
   """/patchset/<key> - Returns patchset information."""
   patchset = request.patchset
-  issue, patchsets = _get_patchset_info(request)
+  issue, patchsets = _get_patchset_info(request, patchset.key().id())
   for ps in patchsets:
     if ps.key().id() == patchset.key().id():
       patchset = ps
