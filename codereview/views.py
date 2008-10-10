@@ -1717,7 +1717,7 @@ def _get_affected_files(issue):
   patchsets = list(issue.patchset_set.order('created'))
   if len(patchsets):
     patchset = patchsets[-1]
-    patches = patchset.patch_set.order('filename')
+    patches = list(patchset.patch_set.order('filename'))
     _reorder_patches_by_filename(patches)
     for patch in patches:
       file_str = ''
