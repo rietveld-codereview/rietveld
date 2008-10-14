@@ -40,14 +40,14 @@
       <td class="meta" width="20%">
         {%block issue_actions%}
           <div>
-            {%ifequal issue.owner user %}
+            {%if issue.edit_allowed%}
               <a class="novisit"
                  href="{%url codereview.views.edit issue.key.id%}">
                 Edit Issue
               </a>
             {%else%}
               <span class="disabled">Can't Edit</span>
-            {%endifequal%}
+            {%endif%}
             <br/>
             {%if user%}
               <a class="novisit"
