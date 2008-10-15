@@ -442,6 +442,21 @@ def issue_owner_required(func):
   return issue_owner_wrapper
 
 
+def issue_editor_required(func):
+  """Decorator that processes the issue_id argument and insists the user has
+  permission to edit it."""
+
+  @login_required
+  @issue_required
+  def issue_editor_wrapper(request, *args, **kwds):
+    if not request.issue.user_can_edit(request.user):
+      return HttpResponseForbidden('You do not have permission to '
+                                   'edit this issue')
+    return func(request, *args, **kwds)
+
+  return issue_editor_wrapper
+
+
 def patchset_required(func):
   """Decorator that processes the patchset_id argument."""
 
@@ -1191,7 +1206,7 @@ def patchset(request):
                   })
 
 
-@issue_owner_required
+@issue_editor_required
 def edit(request):
   """/<issue>/edit - Edit an issue."""
   issue = request.issue
