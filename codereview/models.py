@@ -88,6 +88,15 @@ class Issue(db.Model):
     self._is_starred = account is not None and self.key().id() in account.stars
     return self._is_starred
 
+  def user_can_edit(self, user):
+    """Return true if the given user has permission to edit this issue."""
+    return user == self.owner
+
+  @property
+  def edit_allowed(self):
+    """Whether the current user can edit this issue."""
+    return self.user_can_edit(Account.current_user_account.user)
+
   def update_comment_count(self, n):
     """Increment the n_comments property by n.
 
