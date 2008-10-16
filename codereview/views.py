@@ -38,15 +38,7 @@ from google.appengine.api import users
 from google.appengine.api import urlfetch
 from google.appengine.ext import db
 from google.appengine.ext.db import djangoforms
-
-# DeadlineExceededError can live in two different places
-# TODO(guido): simplify once this is fixed.
-try:
-  # When deployed
-  from google.appengine.runtime import DeadlineExceededError
-except ImportError:
-  # In the development server
-  from google.appengine.runtime.apiproxy_errors import DeadlineExceededError
+from google.appengine.runtime import DeadlineExceededError
 
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
