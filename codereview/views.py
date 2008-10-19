@@ -1416,7 +1416,10 @@ def diff(request):
   if patch.is_binary:
     rows = None
   else:
-    rows = _get_diff_table_rows(request, patch, context)
+    try:
+      rows = _get_diff_table_rows(request, patch, context)
+    except engine.FetchError, err:
+      return HttpResponseNotFound(str(err))
 
   _add_next_prev(patchset, patch)
   return respond(request, 'diff.html',
@@ -1430,15 +1433,17 @@ def diff(request):
 
 
 def _get_diff_table_rows(request, patch, context):
-  """Helper function that returns rendered rows for a patch"""
+  """Helper function that returns rendered rows for a patch.
+
+  Raises:
+    engine.FetchError if patch parsing or download of base files fails.
+  """
   chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
-    raise Http404
+    raise engine.FetchError('Can\'t parse the patch')
 
-  try:
-    content = request.patch.get_content()
-  except engine.FetchError, err:
-    raise Http404
+  # Possible engine.FetchErrors are handled in diff() and diff_skipped_lines().
+  content = request.patch.get_content()
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
                                          chunks, patch,
@@ -1467,7 +1472,12 @@ def diff_skipped_lines(request, id_before, id_after, where):
   patch = request.patch
 
   # TODO: allow context = None?
-  rows = _get_diff_table_rows(request, patch, 10000)
+  try:
+    rows = _get_diff_table_rows(request, patch, 10000)
+  except engine.FetchError, err:
+    # Return HttpResponse because the JS part expects a 200 status code.
+    return HttpResponse('<font color="red">Error: %s; please report!</font>' %
+                        err)
   return _get_skipped_lines_response(rows, id_before, id_after, where)
 
 
@@ -1606,6 +1616,8 @@ def inline_draft(request):
   except Exception, err:
     logging.exception('Exception in inline_draft processing:')
     # TODO(guido): return some kind of error instead?
+    # Return HttpResponse for now because the JS part expects
+    # a 200 status code.
     return HttpResponse('<font color="red">Error: %s; please report!</font>' %
                         err.__class__.__name__)
 
@@ -2187,6 +2199,7 @@ def user_popup(request):
     return _user_popup(request)
   except Exception, err:
     logging.exception('Exception in user_popup processing:')
+    # Return HttpResponse because the JS part expects a 200 status code.
     return HttpResponse('<font color="red">Error: %s; please report!</font>' %
                         err.__class__.__name__)
 
