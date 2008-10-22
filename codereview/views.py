@@ -1758,7 +1758,7 @@ def _get_mail_template(issue):
   if issue.message_set.count(1) == 0:
     template = 'mails/review.txt'
     files, patch = _get_affected_files(issue)
-    context.update({'files': files, 'patch': patch})
+    context.update({'files': files, 'patch': patch, 'base': issue.base})
   else:
     template = 'mails/comment.txt'
   return template, context
