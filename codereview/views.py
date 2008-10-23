@@ -598,6 +598,24 @@ def _optimize_draft_counts(issues):
       issue._num_drafts = 0
 
 
+def overview(request):
+  """/overview - show a list of reviewable issues for a set of users."""
+  emails = request.GET.getlist('email')
+  if len(emails) > 20:  # Arbitrary limit just to avoid excessive hammering.
+    raise Http404
+
+  users = []
+  for email in emails:
+    review_issues = list(db.GqlQuery(
+        'SELECT * FROM Issue '
+        'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
+        email))
+    _optimize_draft_counts(review_issues)
+    users.append({'email': email, 'review_issues': review_issues})
+
+  return respond(request, 'overview.html', {'users': users})
+
+
 @login_required
 def mine(request):
   """/mine - Show a list of issues created by the current user."""
