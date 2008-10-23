@@ -756,8 +756,6 @@ class SubversionVCS(VersionControlSystem):
     cmd = ["svn", "diff"]
     if self.options.revision:
       cmd += ["-r", self.options.revision]
-    if not sys.platform.startswith("win"):
-      cmd.append("--diff-cmd=diff")
     cmd.extend(args)
     data = RunShell(cmd)
     count = 0
