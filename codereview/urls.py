@@ -33,6 +33,7 @@ urlpatterns = patterns(
     (r'^$', 'index'),
     (r'^all$', 'all'),
     (r'^mine$', 'mine'),
+    (r'^overview', 'overview'),
     (r'^starred$', 'starred'),
     (r'^new$', 'new'),
     (r'^upload$', 'upload'),

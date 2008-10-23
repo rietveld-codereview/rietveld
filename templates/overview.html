@@ -1,0 +1,31 @@
+{%extends "issue_base.html"%}
+{%block title1%}Review queue overview -{%endblock%}
+{%block body%}
+<h2>Review queue overview</h2>
+{%for user in users%}
+<div class="issue-list">
+  <table id="queues">
+
+  <tr>
+    <td colspan="9" class="header">
+      <h3>Issues Reviewable by {{user.email|nickname}} ({{user.review_issues|length}})</h3>
+    </td>
+  </tr>
+  {%if not user.review_issues%}
+    <tr>
+      <td colspan="9" class="first last">
+        <span class="disabled">(None)</span>
+      </td>
+    </tr>
+  {%else%}
+    {%include "issue_heading.html"%}
+    {%for issue in user.review_issues%}
+      {%include "issue_row.html"%}
+    {%endfor%}
+  {%endif%}
+
+  </table>
+</div>
+<p>
+{%endfor%}
+{%endblock%}
