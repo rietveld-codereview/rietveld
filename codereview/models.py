@@ -89,6 +89,15 @@ class Issue(BaseModel):
     self._is_starred = account is not None and self.key().id() in account.stars
     return self._is_starred
 
+  def user_can_edit(self, user):
+    """Return true if the given user has permission to edit this issue."""
+    return user == self.owner
+
+  @property
+  def edit_allowed(self):
+    """Whether the current user can edit this issue."""
+    return self.user_can_edit(Account.current_user_account.user)
+
   def update_comment_count(self, n):
     """Increment the n_comments property by n.
 
@@ -176,9 +185,11 @@ class Content(BaseModel):
   # parent => Patch
   text = db.TextProperty()
   data = db.BlobProperty()
+  # Checksum over text or data depending on the type of this content.
+  checksum = db.TextProperty()
   is_uploaded = db.BooleanProperty(default=False)
   is_bad = db.BooleanProperty(default=False)
-  file_too_large = db.BooleanProperty(required=False, default=False)
+  file_too_large = db.BooleanProperty(default=False)
 
   @property
   def lines(self):
@@ -200,7 +211,10 @@ class Patch(BaseModel):
   text = db.TextProperty()
   content = db.ReferenceProperty(Content)
   patched_content = db.ReferenceProperty(Content, collection_name='patch2_set')
-  is_binary = db.BooleanProperty(required=False, default=False)
+  is_binary = db.BooleanProperty(default=False)
+  # Ids of patchsets that have a different version of this file.
+  delta = db.ListProperty(int)
+  delta_calculated = db.BooleanProperty(default=False)
 
   _lines = None
 
@@ -489,11 +503,23 @@ class Account(BaseModel):
     return cls.get_by_key_name(key)
 
   @classmethod
-  def get_nickname_for_email(cls, email):
-    """Get the nickname for an email address, possibly a default."""
+  def get_nickname_for_email(cls, email, default=None):
+    """Get the nickname for an email address, possibly a default.
+
+    If default is None a generic nickname is computed from the email
+    address.
+
+    Args:
+      email: email address.
+      default: If given and no account is found, returned as the default value.
+    Returns:
+      Nickname for given email.
+    """
     account = cls.get_account_for_email(email)
     if account is not None and account.nickname:
       return account.nickname
+    if default is not None:
+      return default
     nickname = email
     if '@' in nickname:
       nickname = nickname.split('@', 1)[0]

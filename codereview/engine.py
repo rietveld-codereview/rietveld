@@ -150,8 +150,10 @@ def _MakeUrl(base, filename, rev):
   scheme, netloc, path, params, query, fragment = urlparse.urlparse(base)
   if netloc.endswith(".googlecode.com"):
     # Handle Google code repositories
-    assert rev is not None, "Can't access googlecode.com without a revision"
-    assert path.startswith("/svn/"), "Malformed googlecode.com URL"
+    if rev is None:
+      raise FetchError("Can't access googlecode.com without a revision")
+    if not path.startswith("/svn/"):
+      raise FetchError( "Malformed googlecode.com URL (%s)" % base)
     path = path[5:]  # Strip "/svn/"
     url = "%s://%s/svn-history/r%d/%s/%s" % (scheme, netloc, rev,
                                              path, filename)
@@ -177,7 +179,7 @@ def _MakeUrl(base, filename, rev):
   return url
 
 
-DEFAULT_CONTEXT = 50
+DEFAULT_CONTEXT = 10
 
 
 def RenderDiffTableRows(request, old_lines, chunks, patch,

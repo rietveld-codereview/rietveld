@@ -736,3 +736,14 @@ span.visualtab {
 .help {
   font-size: .9em;
 }
+
+ul.errorlist {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+ul.errorlist li {
+  color: red;
+  font-weight: bold;
+}

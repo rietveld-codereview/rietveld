@@ -38,15 +38,7 @@ from google.appengine.api import users
 from google.appengine.api import urlfetch
 from google.appengine.ext import db
 from google.appengine.ext.db import djangoforms
-
-# DeadlineExceededError can live in two different places
-# TODO(guido): simplify once this is fixed.
-try:
-  # When deployed
-  from google.appengine.runtime import DeadlineExceededError
-except ImportError:
-  # In the development server
-  from google.appengine.runtime.apiproxy_errors import DeadlineExceededError
+from google.appengine.runtime import DeadlineExceededError
 
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
@@ -167,6 +159,7 @@ class UploadForm(forms.Form):
   reviewers = forms.CharField(max_length=1000, required=False)
   cc = forms.CharField(max_length=1000, required=False)
   send_mail = forms.BooleanField(required=False)
+  base_hashes = forms.CharField(required=False)
 
   def clean_base(self):
     base = self.cleaned_data.get('base')
@@ -441,6 +434,21 @@ def issue_owner_required(func):
   return issue_owner_wrapper
 
 
+def issue_editor_required(func):
+  """Decorator that processes the issue_id argument and insists the user has
+  permission to edit it."""
+
+  @login_required
+  @issue_required
+  def issue_editor_wrapper(request, *args, **kwds):
+    if not request.issue.user_can_edit(request.user):
+      return HttpResponseForbidden('You do not have permission to '
+                                   'edit this issue')
+    return func(request, *args, **kwds)
+
+  return issue_editor_wrapper
+
+
 def patchset_required(func):
   """Decorator that processes the patchset_id argument."""
 
@@ -697,7 +705,7 @@ def upload(request):
       if issue is not None:
         patchset = issue.patchset
   if issue is None:
-    msg = 'Issue creation errors:\n%s' % repr(form.errors)
+    msg = 'Issue creation errors: %s' % repr(form.errors)
   else:
     msg = ('Issue %s. URL: %s' %
            (action,
@@ -711,16 +719,49 @@ def upload(request):
         issue.local_base = True
         issue.put()
 
+        base_hashes = {}
+        for file_info in form.cleaned_data.get('base_hashes').split("|"):
+          if not file_info:
+            break
+          checksum, filename = file_info.split(":", 1)
+          base_hashes[filename] = checksum
+
+        content_entities = []
         new_content_entities = []
         patches = list(patchset.patch_set)
+        existing_patches = {}
+        patchsets = list(issue.patchset_set)
+        if len(patchsets) > 1:
+          # Only check the last uploaded patchset for speed.
+          for opatch in patchsets[-2].patch_set:
+            if opatch.content:
+              existing_patches[opatch.filename] = opatch
         for patch in patches:
-          content = models.Content(is_uploaded=True, parent=patch)
-          new_content_entities.append(content)
-        db.put(new_content_entities)
+          content = None
+          # Check if the base file is already uploaded in another patchset.
+          if (patch.filename in base_hashes and
+              patch.filename in existing_patches and
+              (base_hashes[patch.filename] ==
+               existing_patches[patch.filename].content.checksum)):
+            content = existing_patches[patch.filename].content
+            patch.status = existing_patches[patch.filename].status
+            patch.is_binary = existing_patches[patch.filename].is_binary
+          if not content:
+            content = models.Content(is_uploaded=True, parent=patch)
+            new_content_entities.append(content)
+          content_entities.append(content)
+        if new_content_entities:
+          db.put(new_content_entities)
 
-        for patch, content_entity in zip(patches, new_content_entities):
+        for patch, content_entity in zip(patches, content_entities):
           patch.content = content_entity
-          msg += "\n%d %s" % (patch.key().id(), patch.filename)
+          id_string = patch.key().id()
+          if content_entity not in new_content_entities:
+            # Base file not needed since we reused a previous upload.  Send its
+            # patch id in case it's a binary file and the new content needs to
+            # be uploaded.  We mark this by prepending 'nobase' to the id.
+            id_string = "nobase_" + str(id_string)
+          msg += "\n%s %s" % (id_string, patch.filename)
         db.put(patches)
   return HttpResponse(msg, content_type='text/plain')
 
@@ -770,8 +811,9 @@ def upload_content(request):
                           content_type='text/plain')
     if patch.is_binary:
       content.data = data
-    else:      
+    else:
       content.text = engine.ToText(data)
+    content.checksum = checksum
   content.put()
   return HttpResponse('OK', content_type='text/plain')
 
@@ -961,10 +1003,15 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
     db.put(patches)
 
   if emails_add_only:
-    issue.reviewers += [reviewer for reviewer in _get_emails(form, 'reviewers')
+    emails = _get_emails(form, 'reviewers')
+    if not form.is_valid():
+      return None
+    issue.reviewers += [reviewer for reviewer in emails
                         if reviewer not in issue.reviewers]
-    issue.cc += [cc for cc in _get_emails(form, 'cc')
-                 if cc not in issue.cc]
+    emails = _get_emails(form, 'cc')
+    if not form.is_valid():
+      return None
+    issue.cc += [cc for cc in emails if cc not in issue.cc]
   else:
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
@@ -982,29 +1029,73 @@ def _get_emails(form, label):
   raw_emails = form.cleaned_data.get(label)
   if raw_emails:
     for email in raw_emails.split(','):
-      email = email.strip().lower()
-      if email and email not in emails:
+      email = email.strip()
+      if email:
         try:
-          email = db.Email(email)
-          if email.count('@') != 1:
+          if '@' not in email:
+            accounts = models.Account.get_accounts_for_nickname(email)
+            if len(accounts) != 1:
+              raise db.BadValueError('Unknown user: %s' % email)
+            db_email = db.Email(accounts[0].user.email().lower())
+          elif email.count('@') != 1:
             raise db.BadValueError('Invalid email address: %s' % email)
-          head, tail = email.split('@')
-          if '.' not in tail:
-            raise db.BadValueError('Invalid email address: %s' % email)
+          else:
+            head, tail = email.split('@')
+            if '.' not in tail:
+              raise db.BadValueError('Invalid email address: %s' % email)
+            db_email = db.Email(email.lower())
         except db.BadValueError, err:
           form.errors[label] = [unicode(err)]
           return None
-        emails.append(email)
+        if db_email not in emails:
+          emails.append(db_email)
   return emails
 
 
-@issue_required
-def show(request, form=None):
-  """/<issue> - Show an issue."""
+def _calculate_delta(patch, patchsets):
+  """Calculates which files in earlier patchsets this file differs from.
+  
+  Args:
+    patch: The file to compare.
+    patchsets: A list of existing patchsets.
+
+  Returns:
+    A list of patchset ids.
+  """
+    
+  delta = []
+  if patch.no_base_file:
+    return delta
+  for other in patchsets:
+    if patch.patchset.key().id() == other.key().id():
+      break
+    for opatch in other.patches:
+      if (not opatch.no_base_file and
+          patch.filename == opatch.filename and
+          patch.text != opatch.text):
+        delta.append(other.key().id())
+  return delta
+
+
+def _get_patchset_info(request, patchset_id):
+  """ Returns a list of patchsets for the issue.
+
+  Args:
+    request: Django Request object.
+    patchset_id: The id of the patchset that the caller is interested in.  This
+      is the one that we generate delta links to if they're not available.  We
+      can't generate for all patchsets because it would take too long on issues
+      with many patchsets.  Passing in None is equivalent to doing it for the
+      last patchset.
+
+  Returns:
+    A 2-tuple of (issue, patchsets).
+  """
   issue = request.issue
-  if not form:
-    form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   patchsets = list(issue.patchset_set.order('created'))
+  if not patchset_id:
+    patchset_id = patchsets[-1].key().id()
+
   if request.user:
     drafts = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = TRUE'
                                      '  AND author = :2',
@@ -1015,7 +1106,9 @@ def show(request, form=None):
                                      issue))
   issue.draft_count = 0
   issue.comment_count = 0
+  patchset_id_mapping = {}  # Maps from patchset id to its ordering number.
   for patchset in patchsets:
+    patchset_id_mapping[patchset.key().id()] = len(patchset_id_mapping) + 1
     patchset.patches = list(patchset.patch_set.order('filename'))
     for patch in patchset.patches:
       patch.patchset = patchset  # Prevent getting these over and over
@@ -1024,6 +1117,24 @@ def show(request, form=None):
       pkey = patch.key()
       patch._num_comments = sum(c.parent_key() == pkey for c in comments)
       patchset.n_comments += patch.num_comments
+      if not patch.delta_calculated:
+        if patchset_id == patchset.key().id():
+          # Compare each patch to the same file in earlier patchsets to see if
+          # they differ, so that we can generate the delta patch urls.  We do
+          # this once and cache it after.  It's specifically not done on upload
+          # because we already are doing too much processing there.
+          patch.delta = _calculate_delta(patch, patchsets)
+          patch.delta_calculated = True
+          # A multi-entity put would be quicker, but it fails when the patches
+          # have content that is large.  App Engine throws RequestTooLarge.
+          # This way, although not as efficient, allows multiple refreshes on an
+          # issue to get things done, as opposed to an all-or-nothing approach.
+          patch.put()
+        else:
+          patch.delta = []
+      patch.parsed_deltas = []
+      for delta in patch.delta:
+        patch.parsed_deltas.append([patchset_id_mapping[delta], delta])
     issue.comment_count += patchset.n_comments
     patchset.n_drafts = 0
     if request.user:
@@ -1032,6 +1143,15 @@ def show(request, form=None):
         patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
         patchset.n_drafts += patch.num_drafts
       issue.draft_count += patchset.n_drafts
+  return issue, patchsets
+
+
+@issue_required
+def show(request, form=None):
+  """/<issue> - Show an issue."""
+  issue, patchsets = _get_patchset_info(request, None)
+  if not form:
+    form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   last_patchset = first_patch = None
   if patchsets:
     last_patchset = patchsets[-1]
@@ -1046,7 +1166,22 @@ def show(request, form=None):
                   })
 
 
-@issue_owner_required
+@patchset_required
+def patchset(request):
+  """/patchset/<key> - Returns patchset information."""
+  patchset = request.patchset
+  issue, patchsets = _get_patchset_info(request, patchset.key().id())
+  for ps in patchsets:
+    if ps.key().id() == patchset.key().id():
+      patchset = ps
+  return respond(request, 'patchset.html',
+                 {'issue': issue,
+                  'patchset': patchset,
+                  'patchsets': patchsets,
+                  })
+
+
+@issue_editor_required
 def edit(request):
   """/<issue>/edit - Edit an issue."""
   issue = request.issue
@@ -1058,11 +1193,16 @@ def edit(request):
     form_cls = EditForm
 
   if request.method != 'POST':
+    reviewers = [models.Account.get_nickname_for_email(reviewer,
+                                                       default=reviewer)
+                 for reviewer in issue.reviewers]
+    ccs = [models.Account.get_nickname_for_email(cc, default=cc)
+           for cc in issue.cc]
     form = form_cls(initial={'subject': issue.subject,
                              'description': issue.description,
                              'base': base,
-                             'reviewers': ', '.join(issue.reviewers),
-                             'cc': ', '.join(issue.cc),
+                             'reviewers': ', '.join(reviewers),
+                             'cc': ', '.join(ccs),
                              'closed': issue.closed,
                              })
     if not issue.local_base:
@@ -1276,7 +1416,10 @@ def diff(request):
   if patch.is_binary:
     rows = None
   else:
-    rows = _get_diff_table_rows(request, patch, context)
+    try:
+      rows = _get_diff_table_rows(request, patch, context)
+    except engine.FetchError, err:
+      return HttpResponseNotFound(str(err))
 
   _add_next_prev(patchset, patch)
   return respond(request, 'diff.html',
@@ -1290,15 +1433,17 @@ def diff(request):
 
 
 def _get_diff_table_rows(request, patch, context):
-  """Helper function that returns rendered rows for a patch"""
+  """Helper function that returns rendered rows for a patch.
+
+  Raises:
+    engine.FetchError if patch parsing or download of base files fails.
+  """
   chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
-    raise Http404
+    raise engine.FetchError('Can\'t parse the patch')
 
-  try:
-    content = request.patch.get_content()
-  except engine.FetchError, err:
-    raise Http404
+  # Possible engine.FetchErrors are handled in diff() and diff_skipped_lines().
+  content = request.patch.get_content()
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
                                          chunks, patch,
@@ -1327,7 +1472,12 @@ def diff_skipped_lines(request, id_before, id_after, where):
   patch = request.patch
 
   # TODO: allow context = None?
-  rows = _get_diff_table_rows(request, patch, 10000)
+  try:
+    rows = _get_diff_table_rows(request, patch, 10000)
+  except engine.FetchError, err:
+    # Return HttpResponse because the JS part expects a 200 status code.
+    return HttpResponse('<font color="red">Error: %s; please report!</font>' %
+                        err)
   return _get_skipped_lines_response(rows, id_before, id_after, where)
 
 
@@ -1466,6 +1616,8 @@ def inline_draft(request):
   except Exception, err:
     logging.exception('Exception in inline_draft processing:')
     # TODO(guido): return some kind of error instead?
+    # Return HttpResponse for now because the JS part expects
+    # a 200 status code.
     return HttpResponse('<font color="red">Error: %s; please report!</font>' %
                         err.__class__.__name__)
 
@@ -1613,11 +1765,15 @@ def publish(request):
       reviewers.append(request.user.email())
       if request.user.email() in cc:
         cc.remove(request.user.email())
+    reviewers = [models.Account.get_nickname_for_email(reviewer,
+                                                       default=reviewer)
+                 for reviewer in reviewers]
+    ccs = [models.Account.get_nickname_for_email(cc, default=cc) for cc in cc]
     tbd, comments = _get_draft_comments(request, issue, True)
     preview = _get_draft_details(request, comments)
     form = form_class(initial={'subject': issue.subject,
                                'reviewers': ', '.join(reviewers),
-                               'cc': ', '.join(cc),
+                               'cc': ', '.join(ccs),
                                'send_mail': True,
                                })
     return respond(request, 'publish.html', {'form': form,
@@ -2043,6 +2199,7 @@ def user_popup(request):
     return _user_popup(request)
   except Exception, err:
     logging.exception('Exception in user_popup processing:')
+    # Return HttpResponse because the JS part expects a 200 status code.
     return HttpResponse('<font color="red">Error: %s; please report!</font>' %
                         err.__class__.__name__)
 

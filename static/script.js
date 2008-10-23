@@ -411,6 +411,47 @@ function M_toggleSection(id) {
   }
 }
 
+
+/**
+ * Callback for XMLHttpRequest.
+ */
+function M_PatchSetFetched() {
+  if (http_request.readyState != 4)
+    return;
+
+  var section = document.getElementById(http_request.div_id);
+  if (http_request.status == 200) {
+    section.innerHTML = http_request.responseText;
+  } else {
+    section.innerHTML = 
+        '<div style="color:red">Could not load the patchset (' +
+        http_request.status + ').</div>';
+  }
+}
+
+/**
+ * Toggle the visibility of a patchset, and fetches it if necessary.
+ * @param {String} issue The issue key
+ * @param {String} id The patchset key
+ */
+function M_toggleSectionForPS(issue, patchset) {
+  var id = 'ps-' + patchset;
+  M_toggleSection(id);
+  var section = document.getElementById(id);
+  if (section.innerHTML.search("<div") != -1)
+    return;
+
+  section.innerHTML = "<div>Loading...</div>"
+  http_request = M_getXMLHttpRequest();
+  if (!http_request)
+    return;
+
+  http_request.open('GET', "/" + issue + "/patchset/" + patchset, true);
+  http_request.onreadystatechange = M_PatchSetFetched;
+  http_request.div_id = id;
+  http_request.send(null);
+}
+
 /**
  * Toggle the visibility of the "Quick LGTM" link on the changelist page.
  * @param {String} id The id of the target element
@@ -1709,6 +1750,15 @@ M_HookState.prototype.respond = function() {
     // hope is that these are returned in DOM order
     var comments = hooks[this.hookPos].getElementsByTagName("div");
     var commentsLength = comments.length;
+    if (comments && commentsLength == 0) {
+      // Don't give up too early and look a bit forward
+      var sibling = hooks[this.hookPos].nextSibling;
+      while (sibling && sibling.tagName != "TR") {
+        sibling = sibling.nextSibling;
+      }
+      comments = sibling.getElementsByTagName("div");
+      commentsLength = comments.length;
+    }
     if (comments && commentsLength > 0) {
       var last = null;
       for (var i = commentsLength - 1; i >= 0; i--) {
@@ -1729,22 +1779,21 @@ M_HookState.prototype.respond = function() {
           }
         }
       }
-    }
+    } else {
     // Create a comment at this line
     // TODO: Implement this in a sane fashion, e.g. opens up a comment
     // at the end of the diff chunk.
-    /*
     var tr = hooks[this.hookPos];
     for (var i = tr.cells.length - 1; i >= 0; i--) {
       if (tr.cells[i].id.substr(0, 7) == "newcode") {
-        createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'b');
+        M_createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'b');
         return;
       } else if (tr.cells[i].id.substr(0, 7) == "oldcode") {
-        createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'a');
+        M_createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'a');
         return;
       }
     }
-    */
+    }
   }
 };
 
