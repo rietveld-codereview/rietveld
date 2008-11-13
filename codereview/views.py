@@ -1861,9 +1861,10 @@ def _get_draft_comments(request, issue, preview=False):
         p.patchset = patchset
       for c in ps_comments:
         c.draft = False
-        # XXX Using internal knowledge about db package: the key for
-        # reference property foo is stored as _foo.
-        pkey = getattr(c, '_patch', None)
+        # Get the patch key value without loading the patch entity.
+        # NOTE: Unlike the old version of this code, this is the
+        # recommended and documented way to do this!
+        pkey = models.Comment.patch.get_value_for_datastore(c)
         if pkey in patches:
           patch = patches[pkey]
           c.patch = patch
