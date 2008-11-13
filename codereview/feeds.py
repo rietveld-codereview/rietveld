@@ -37,8 +37,12 @@ class BaseFeed(Feed):
 
   def item_link(self, item):
     if isinstance(item, models.PatchSet):
-      return ('/download/issue%d_%d.diff' %
-              (item.issue.key().id(),item.key().id()))
+      if item.data is not None:
+        return ('/download/issue%d_%d.diff' %
+                (item.issue.key().id(), item.key().id()))
+      else:
+        # Patch set is too large, only the splitted diffs are available.
+        return '/%s' % (item.parent_key().id())
     if isinstance(item, models.Comment):
       return '/%s' % (item.parent_key().parent().parent().id())
     return '/%s' % (item.key().id())
