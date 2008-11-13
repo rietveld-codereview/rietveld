@@ -1316,6 +1316,9 @@ def mailissue(request):
 @patchset_required
 def download(request):
   """/download/<issue>_<patchset>.diff - Download a patch set."""
+  if request.patchset.data is None:
+    return HttpResponseNotFound('Patch set (%s) is too large.'
+                                % request.patchset.key().id())
   return HttpResponse(request.patchset.data, content_type='text/plain')
 
 
