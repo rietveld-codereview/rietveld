@@ -8,7 +8,9 @@
 {%endif%}{%if description%}Description:
 {{description|wordwrap:"72"}}{%endif%}
 
-Please review this at {{url}}{%if files%}
+Please review this at {{url}}{%if files%}{%if base%}
+
+SVN Base: {{base}}{%endif%}
 
 Affected files:
 {% for file in files %}  {{file}}
