@@ -509,19 +509,20 @@ use_shell = sys.platform.startswith("win")
 
 def RunShellWithReturnCode(command, print_output=False,
                            universal_newlines=True):
-  """Executes a command and returns the output and the return code.
+  """Executes a command and returns the output from stdout and the return code.
 
   Args:
     command: Command to execute.
     print_output: If True, the output is printed to stdout.
+                  If False, both stdout and stderr are ignored.
     universal_newlines: Use universal_newlines flag (default: True).
 
   Returns:
     Tuple (output, return code)
   """
   logging.info("Running %s", command)
-  p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=use_shell,
-                       universal_newlines=universal_newlines)
+  p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                       shell=use_shell, universal_newlines=universal_newlines)
   if print_output:
     output_array = []
     while True:
@@ -534,7 +535,11 @@ def RunShellWithReturnCode(command, print_output=False,
   else:
     output = p.stdout.read()
   p.wait()
+  errout = p.stderr.read()
+  if print_output and errout:
+    print >>sys.stderr, errout
   p.stdout.close()
+  p.stderr.close()
   return output, p.returncode
 
 
