@@ -470,6 +470,15 @@ class Account(db.Model):
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
 
+  lower_email = db.StringProperty()
+  lower_nickname = db.StringProperty()
+
+  # Note that this doesn't get called when doing multi-entity puts.
+  def put(self):
+    self.lower_email = str(self.email).lower()
+    self.lower_nickname = self.nickname.lower()
+    db.Model.put(self)
+
   @classmethod
   def get_account_for_user(cls, user):
     """Get the Account for a user, creating a default one if needed."""

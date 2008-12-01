@@ -49,6 +49,7 @@ from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
 import django.template
 from django.utils import simplejson
+from django.utils.safestring import mark_safe
 
 # Local imports
 import models
@@ -70,6 +71,39 @@ IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
 
 ### Form classes ###
 
+class AccountInput(forms.TextInput):
+  # Associates the necessary css/js files for the control.  See
+  # http://docs.djangoproject.com/en/dev/topics/forms/media/.
+  class Media:
+    css = {
+      'all': ('/static/autocomplete/jquery.autocomplete.css',)
+    }
+    js = (
+      '/static/autocomplete/lib/jquery.js',
+      '/static/autocomplete/lib/jquery.bgiframe.min.js',
+      '/static/autocomplete/lib/jquery.ajaxQueue.js',
+      '/static/autocomplete/jquery.autocomplete.js'
+    )
+
+  def render(self, name, value, attrs=None):
+    output = super(AccountInput, self).render(name, value, attrs)
+    # TODO(John): Why is the line below needed, it should be automatic.
+    output += mark_safe(AccountInput().media)
+    return output + mark_safe(u'''<script type="text/javascript">
+                              jQuery("#id_%s").autocomplete("/account", {
+                              max: 10,
+                              highlight: false,
+                              multiple: true,
+                              multipleSeparator: ", ",
+                              scroll: true,
+                              scrollHeight: 300,
+                              matchContains: true,
+                              formatResult : function(row) {
+                                return row[0].replace(/ (\(.+?\))/gi, '');
+                              }
+                              });
+                              </script>''' % name)
+
 
 class IssueBaseForm(forms.Form):
 
@@ -84,11 +118,11 @@ class IssueBaseForm(forms.Form):
                          widget=forms.TextInput(attrs={'size': 60}))
   reviewers = forms.CharField(required=False,
                               max_length=1000,
-                              widget=forms.TextInput(attrs={'size': 60}))
+                              widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
                        max_length=1000,
                        label = 'CC',
-                       widget=forms.TextInput(attrs={'size': 60}))
+                       widget=AccountInput(attrs={'size': 60}))
 
   def set_branch_choices(self, base=None):
     branches = models.Branch.gql('ORDER BY repo, category, name')
@@ -142,7 +176,7 @@ class AddForm(forms.Form):
                        max_length=2083,
                        widget=forms.TextInput(attrs={'size': 60}))
   reviewers = forms.CharField(max_length=1000, required=False,
-                              widget=forms.TextInput(attrs={'size': 60}))
+                              widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False, initial=True)
 
 
@@ -217,11 +251,11 @@ class EditLocalBaseForm(forms.Form):
                                 widget=forms.Textarea(attrs={'cols': 60}))
   reviewers = forms.CharField(required=False,
                               max_length=1000,
-                              widget=forms.TextInput(attrs={'size': 60}))
+                              widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
                        max_length=1000,
                        label = 'CC',
-                       widget=forms.TextInput(attrs={'size': 60}))
+                       widget=AccountInput(attrs={'size': 60}))
   closed = forms.BooleanField(required=False)
 
   def get_base(self):
@@ -248,11 +282,11 @@ class PublishForm(forms.Form):
                             widget=forms.TextInput(attrs={'size': 60}))
   reviewers = forms.CharField(required=False,
                               max_length=1000,
-                              widget=forms.TextInput(attrs={'size': 60}))
+                              widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
                        max_length=1000,
                        label = 'CC',
-                       widget=forms.TextInput(attrs={'size': 60}))
+                       widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
   message = forms.CharField(required=False,
                             max_length=10000,
@@ -265,11 +299,11 @@ class MiniPublishForm(forms.Form):
 
   reviewers = forms.CharField(required=False,
                               max_length=1000,
-                              widget=forms.TextInput(attrs={'size': 60}))
+                              widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
                        max_length=1000,
                        label = 'CC',
-                       widget=forms.TextInput(attrs={'size': 60}))
+                       widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
   message = forms.CharField(required=False,
                             max_length=10000,
@@ -1179,6 +1213,55 @@ def patchset(request):
                   'patchset': patchset,
                   'patchsets': patchsets,
                   })
+
+
+@login_required
+def account(request):
+  """/account/?q=blah&limit=10&timestamp=blah - Used for autocomplete."""
+  def searchAccounts(property, added, response):
+    query = request.GET.get('q').lower()
+    limit = int(request.GET.get('limit'))
+
+    accounts = models.Account.all()
+    accounts.filter("lower_%s >= " % property, query)
+    accounts.filter("lower_%s < " % property, query + u"\ufffd")
+    accounts.order("lower_%s" % property);
+    for account in accounts:
+      if account.key() in added:
+        continue
+      if len(added) >= limit:
+        break
+      added.add(account.key())
+      response += '%s (%s)\n' % (account.email, account.nickname)
+    return added, response
+
+  added = set()
+  response = ''
+  added, response = searchAccounts("nickname", added, response)
+  added, response = searchAccounts("email", added, response)
+  return HttpResponse(response)
+
+
+@admin_required
+def update_accounts(request):
+  """/update_accounts/?q=nick."""
+  starting_nick = request.GET.get('q', '')
+  try:
+    while True:
+      accounts = db.GqlQuery(
+        'SELECT * FROM Account '
+        'WHERE nickname > :1 LIMIT 50',
+        starting_nick)
+      # Don't use multi-entity puts as they don't call our overridden put().
+      empty = True
+      for account in accounts:
+        empty = False
+        account.put()
+        starting_nick = account.nickname
+      if empty:
+        return HttpResponse('Done', content_type='text/plain')
+  except DeadlineExceededError:
+    return HttpResponseRedirect('/update_accounts?q=' + starting_nick)
 
 
 @issue_editor_required
