@@ -80,6 +80,9 @@
           <div><b>Reviewers:</b><br/>
             {{issue.reviewers|show_users}}
           </div>
+          <div><b>CC:</b><br/>
+            {{issue.cc|nicknames}}
+          </div>
           <div><b>SVN Base:</b><br/>
             {%firstof issue.base%}
           </div>
