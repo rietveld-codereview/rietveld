@@ -1402,7 +1402,13 @@ def download(request):
   if request.patchset.data is None:
     return HttpResponseNotFound('Patch set (%s) is too large.'
                                 % request.patchset.key().id())
-  return HttpResponse(request.patchset.data, content_type='text/plain')
+  padding = ''
+  user_agent = request.META.get('HTTP_USER_AGENT')
+  if user_agent and 'MSIE' in user_agent:
+    # Add 256+ bytes of padding to prevent XSS attacks on Internet Explorer.
+    padding = ('='*67 + '\n') * 4
+  return HttpResponse(padding + request.patchset.data,
+                      content_type='text/plain')
 
 
 @issue_required
