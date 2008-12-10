@@ -27,7 +27,7 @@
 
   <table id="queues" style="clear:both;">
     <tr align="left">
-      <th></th>
+      <th colspan="2"></th>
       <th>Unified diffs</th>
       <th>Side-by-side diffs</th>
       <th>Delta from patch set</th>
@@ -36,7 +36,9 @@
     </tr>
 
     {%for patch in patchset.patches%}
-      <tr>
+      <tr name="patch">
+	<td class="first" width="14"><img src="/static/closedtriangle.gif" 
+    style="visibility: hidden;" width="12" height="9" /></td>
         <td>{%if patch.status%}{{patch.status}}{%endif%}</td>
         <td>
           <a class="noul"
