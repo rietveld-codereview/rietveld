@@ -26,15 +26,15 @@
   <h3>
     <a id="ps-{{patchset.key.id}}-pointer"
        href="javascript:M_toggleSectionForPS('{{issue.key.id}}', '{{patchset.key.id}}')"
-       class="toggled-section {%if forloop.last or patchset.n_drafts%}opentriangle{%endif%}">
+       class="toggled-section {%if forloop.last%}opentriangle{%endif%}">
       Patch Set {{forloop.counter}}
       {%if patchset.message%}: {{patchset.message}}{%endif%}
     </a>
   </h3>
 
-  {%if patchset.n_comments or patchset.n_drafts%}
+  {%if patchset.num_comments or patchset.n_drafts%}
     <div>
-      <i>Total comments:</i> {{patchset.n_comments}}
+      <i>Total comments:</i> {{patchset.num_comments}}
       {%if patchset.n_drafts%}
         <span style="color:red">
           <b>+ {{patchset.n_drafts}} draft{{patchset.n_drafts|pluralize}}</b>
@@ -44,7 +44,7 @@
   {%endif%}
 
   <div id="ps-{{patchset.key.id}}"
-  {%if forloop.last or patchset.n_drafts%}
+  {%if forloop.last%}
        style="">
     {%include "patchset.html"%}
   {%else%}

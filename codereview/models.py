@@ -159,6 +159,34 @@ class PatchSet(db.Model):
   owner = db.UserProperty(required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
+  n_comments = db.IntegerProperty()
+  
+  def update_comment_count(self, n):
+    """Increment the n_comments property by n.
+
+    If n_comments in None, compute the count through a query.  (This
+    is a transitional strategy while the database contains Issues
+    created using a previous version of the schema.)
+    """
+    self.n_comments = self._get_num_comments() + n
+
+  @property
+  def num_comments(self):
+    """The number of non-draft comments for this issue.
+
+    This is almost an alias for self.n_comments, except that if
+    n_comments is None, it is computed through a query, and stored,
+    using n_comments as a cache.
+    """
+    if self.n_comments is None:
+      self.n_comments = self._get_num_comments()
+    return self.n_comments
+
+  def _get_num_comments(self):
+    """Helper to compute the number of comments through a query."""
+    return gql(Comment,
+               'WHERE ANCESTOR IS :1 AND draft = FALSE',
+               self).count()
 
 
 class Message(db.Model):
@@ -249,10 +277,17 @@ class Patch(db.Model):
       self._property_changes = self.text[match.end():].splitlines()
     return self._property_changes
 
+  _num_lines = None
+
   @property
   def num_lines(self):
-    """The number of lines in this patch."""
-    return len(self.lines)
+    """The number of lines in this patch.
+
+    The value is cached.
+    """
+    if self._num_lines is None:
+      self._num_lines = len(self.lines)
+    return self._num_lines
 
   _num_chunks = None
 
@@ -295,8 +330,8 @@ class Patch(db.Model):
     The value is expensive to compute, so it is cached.
     """
     if self._num_drafts is None:
-      user = Account.current_user_account
-      if user is None:
+      account = Account.current_user_account
+      if account is None:
         self._num_drafts = 0
       else:
         query = gql(Comment,
