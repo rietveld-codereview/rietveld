@@ -422,8 +422,10 @@ function M_PatchSetFetched() {
   var section = document.getElementById(http_request.div_id);
   if (http_request.status == 200) {
     section.innerHTML = http_request.responseText;
+    /* initialize dashboardState again to update cached patch rows */
+    if (dashboardState) dashboardState.initialize();
   } else {
-    section.innerHTML = 
+    section.innerHTML =
         '<div style="color:red">Could not load the patchset (' +
         http_request.status + ').</div>';
   }
@@ -2083,7 +2085,7 @@ function M_changelistKeyPress(evt) {
   return M_keyPressCommon(evt, function(key) {
     if (key == 'o' || key == '\r' || key == '\n') {
       if (dashboardState) {
-	var child = dashboardState.curTR.cells[1].firstChild;
+	var child = dashboardState.curTR.cells[3].firstChild;
 	while (child && child.nextSibling && child.nodeName != "A") {
 	  child = child.nextSibling;
 	}
@@ -2099,14 +2101,8 @@ function M_changelistKeyPress(evt) {
 	  child = child.nextSibling;
 	}
 	if (child && child.nodeName == "A") {
-	  child.onclick();
+	  location.href = child.href;
 	}
-      }
-    } else if (key == 'I') {
-      if (M_CL_hiddenInlineDiffCount == M_CL_maxHiddenInlineDiffCount) {
-        M_showAllDiffs(M_CL_maxHiddenInlineDiffCount);
-      } else {
-	M_hideAllDiffs(M_CL_maxHiddenInlineDiffCount);
       }
     } else if (key == 'k') {
       if (dashboardState) dashboardState.gotoPrev();
@@ -2426,7 +2422,12 @@ M_DashboardState.prototype.initialize = function() {
     for (var i=0; i<cookie_values.length; i++) {
       name = cookie_values[i].split("=")[0].replace(/ /g, '');
       if (name == this.cookieName) {
-        this.trPos = cookie_values[i].split("=")[1];
+	pos = cookie_values[i].split("=")[1];
+	/* Make sure that the saved position is valid. */
+	if (pos > this.trCache.length-1) {
+	  pos = 0;
+	}
+        this.trPos = pos;
       }
     }
   }

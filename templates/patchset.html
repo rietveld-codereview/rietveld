@@ -27,7 +27,7 @@
 
   <table id="queues" style="clear:both;">
     <tr align="left">
-      <th></th>
+      <th colspan="2"></th>
       <th>Unified diffs</th>
       <th>Side-by-side diffs</th>
       <th>Delta from patch set</th>
@@ -36,25 +36,21 @@
     </tr>
 
     {%for patch in patchset.patches%}
-      <tr>
+      <tr name="patch">
+	<td class="first" width="14"><img src="/static/closedtriangle.gif" 
+    style="visibility: hidden;" width="12" height="9" /></td>
         <td>{%if patch.status%}{{patch.status}}{%endif%}</td>
         <td>
           <a class="noul"
-             href="{%url codereview.views.patch issue.key.id,patch.patchset.key.id,patch.key.id%}">
+             href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}">
             {{patch.filename}}
           </a>
         </td>
         <td>
-          {%if patch.no_base_file%}
-          <span class="disabled">
-            (Base file is too large to download)
-          </span>
-          {%else%}
           <a class="noul"
-             href="{%url codereview.views.diff issue.key.id,patch.patchset.key.id,patch.key.id%}">
+             href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.key.id%}">
             View
           </a>
-          {%endif%}
         </td>
         <td>
         {%for delta in patch.parsed_deltas%}
@@ -71,11 +67,11 @@
             <span style="color:red">+
               {{patch.num_drafts}} draft{{patch.num_drafts|pluralize}}
             </span>
-          {%endif%}
+            {%endif%}
           {%if patch.num_comments or patch.num_drafts%}</b>{%endif%}
         </td>
         <td>
-          <a href="{%url codereview.views.download_patch issue.key.id,patch.patchset.key.id,patch.key.id%}"
+          <a href="{%url codereview.views.download_patch issue.key.id,patchset.key.id,patch.key.id%}"
              title="Download patch for {{patch.filename}}">
             Download
           </a>

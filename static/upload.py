@@ -62,6 +62,39 @@ verbosity = 1
 MAX_UPLOAD_SIZE = 900 * 1024
 
 
+def GetEmail():
+  """Prompts the user for their email address and returns it.
+
+  The last used email address is saved to a file and offered up as a suggestion
+  to the user. If the user presses enter without typing in anything the last
+  used email address is used. If the user enters a new address, it is saved
+  for next time we prompt.
+
+  """
+  last_email_file_name = os.path.expanduser("~/.last_codereview_email_address")
+  last_email = ""
+  prompt = "Email: "
+  if os.path.exists(last_email_file_name):
+    try:
+      last_email_file = open(last_email_file_name, "r")
+      last_email = last_email_file.readline().strip("\n")
+      last_email_file.close()
+      prompt = "Email [%s]: " % last_email
+    except IOError, e:
+      pass
+  email = raw_input(prompt).strip()
+  if email:
+    try:
+      last_email_file = open(last_email_file_name, "w")
+      last_email_file.write(email)
+      last_email_file.close()
+    except IOError, e:
+      pass
+  else:
+    email = last_email
+  return email
+
+
 def StatusUpdate(msg):
   """Print a status message to stdout.
 
@@ -436,8 +469,7 @@ def GetRpcServer(options):
     """Prompts the user for a username and password."""
     email = options.email
     if email is None:
-      prompt = "Email (login for uploading to %s): " % options.server
-      email = raw_input(prompt).strip()
+      email = GetEmail()
     password = getpass.getpass("Password for %s: " % email)
     return (email, password)
 
@@ -912,7 +944,7 @@ class SubversionVCS(VersionControlSystem):
             else:
               url = "%s/%s@%s" % (self.svn_base, filename, self.rev_end)
               new_content = RunShell(["svn", "cat", url],
-                                     universal_newlines=True)
+                                     universal_newlines=True, silent_ok=True)
         else:
           base_content = ""
       else:
@@ -928,10 +960,12 @@ class SubversionVCS(VersionControlSystem):
           # the full URL with "@REV" appended instead of using "-r" option.
           url = "%s/%s@%s" % (self.svn_base, filename, self.rev_start)
           base_content = RunShell(["svn", "cat", url],
-                                  universal_newlines=universal_newlines)
+                                  universal_newlines=universal_newlines,
+                                  silent_ok=True)
         else:
           base_content = RunShell(["svn", "cat", filename],
-                                  universal_newlines=universal_newlines)
+                                  universal_newlines=universal_newlines,
+                                  silent_ok=True)
         if not is_binary:
           args = []
           if self.rev_start:
@@ -1323,7 +1357,7 @@ def RealMain(argv, data=None):
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options, files)
     if options.send_mail:
       rpc_server.Send("/" + issue + "/mail", payload="")
-  return issue
+  return issue, patchset
 
 
 def main():

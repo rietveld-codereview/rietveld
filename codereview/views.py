@@ -790,7 +790,9 @@ def upload(request):
         patchsets = list(issue.patchset_set)
         if len(patchsets) > 1:
           # Only check the last uploaded patchset for speed.
-          for opatch in patchsets[-2].patch_set:
+          last_patch_set = patchsets[-2].patch_set
+          patchsets = None  # Reduce memory usage.
+          for opatch in last_patch_set:
             if opatch.content:
               existing_patches[opatch.filename] = opatch
         for patch in patches:
@@ -807,6 +809,7 @@ def upload(request):
             content = models.Content(is_uploaded=True, parent=patch)
             new_content_entities.append(content)
           content_entities.append(content)
+        existing_patches = None  # Reduce memory usage.
         if new_content_entities:
           db.put(new_content_entities)
 
@@ -1119,28 +1122,45 @@ def _reorder_patches_by_filename(patches):
       patches[i:i+2] = [patches[i+1], patches[i]]
 
 
-def _calculate_delta(patch, patchsets):
+def _calculate_delta(patch, patchset_id, patchsets):
   """Calculates which files in earlier patchsets this file differs from.
   
   Args:
     patch: The file to compare.
+    patchset_id: The file's patchset's key id.
     patchsets: A list of existing patchsets.
 
   Returns:
     A list of patchset ids.
   """
-    
   delta = []
   if patch.no_base_file:
     return delta
   for other in patchsets:
-    if patch.patchset.key().id() == other.key().id():
+    if patchset_id == other.key().id():
       break
-    for opatch in other.patches:
-      if (not opatch.no_base_file and
-          patch.filename == opatch.filename and
-          patch.text != opatch.text):
-        delta.append(other.key().id())
+    if other.data or other.parsed_patches:
+      # Loading all the Patch entities in every PatchSet takes too long 
+      # (DeadLineExceeded) and consumes a lot of memory (MemoryError) so instead
+      # just parse the patchset's data.  Note we can only do this if the
+      # patchset was small enough to fit in the data property.
+      if other.parsed_patches is None:
+        other.parsed_patches = engine.SplitPatch(other.data)
+        other.data = None  # Reduce memory usage.
+      for filename, text in other.parsed_patches:
+        if filename == patch.filename:
+          if text != patch.text:
+            delta.append(other.key().id())
+          break
+    else:
+      # Note: calling list(other.patch_set) would consume too much memory and
+      # sometimes fail with MemoryError.  So do this even if it's slower.
+      for opatch in other.patch_set:
+        if patch.filename == opatch.filename:
+          if not patch.no_base_file and patch.text != opatch.text:
+            delta.append(other.key().id())
+          opatch.text = None  # Reduce memory usage.
+          break
   return delta
 
 
@@ -1156,10 +1176,13 @@ def _get_patchset_info(request, patchset_id):
       last patchset.
 
   Returns:
-    A 2-tuple of (issue, patchsets).
+    A 3-tuple of (issue, patchsets, HttpResponse).
+    If HttpResponse is not None, further processing should stop and it should be
+    returned.
   """
   issue = request.issue
   patchsets = list(issue.patchset_set.order('created'))
+  response = None
   if not patchset_id:
     patchset_id = patchsets[-1].key().id()
 
@@ -1171,54 +1194,82 @@ def _get_patchset_info(request, patchset_id):
     drafts = []
   comments = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE',
                                      issue))
-  issue.draft_count = 0
-  issue.comment_count = 0
+  issue.draft_count = len(drafts)
+  for c in drafts:
+    c.ps_key = c.patch.patchset.key()
   patchset_id_mapping = {}  # Maps from patchset id to its ordering number.
   for patchset in patchsets:
     patchset_id_mapping[patchset.key().id()] = len(patchset_id_mapping) + 1
-    patchset.patches = list(patchset.patch_set.order('filename'))
-    # Reorder the list of patches to put .h files before .cc.
-    _reorder_patches_by_filename(patchset.patches)
-    for patch in patchset.patches:
-      patch.patchset = patchset  # Prevent getting these over and over
-    patchset.n_comments = 0
-    for patch in patchset.patches:
-      pkey = patch.key()
-      patch._num_comments = sum(c.parent_key() == pkey for c in comments)
-      patchset.n_comments += patch.num_comments
-      if not patch.delta_calculated:
-        if patchset_id == patchset.key().id():
-          # Compare each patch to the same file in earlier patchsets to see if
-          # they differ, so that we can generate the delta patch urls.  We do
-          # this once and cache it after.  It's specifically not done on upload
-          # because we already are doing too much processing there.
-          patch.delta = _calculate_delta(patch, patchsets)
-          patch.delta_calculated = True
-          # A multi-entity put would be quicker, but it fails when the patches
-          # have content that is large.  App Engine throws RequestTooLarge.
-          # This way, although not as efficient, allows multiple refreshes on an
-          # issue to get things done, as opposed to an all-or-nothing approach.
-          patch.put()
+    patchset.n_drafts = sum(c.ps_key == patchset.key() for c in drafts)
+    patchset.patches = None
+    patchset.parsed_patches = None
+    if patchset_id == patchset.key().id():
+      patchset.patches = list(patchset.patch_set.order('filename'))
+      # Reorder the list of patches to put .h files before .cc.
+      _reorder_patches_by_filename(patchset.patches)
+      try:
+        attempt = int(request.GET.get('attempt', 0))
+        if attempt < 0:
+          response = HttpResponse('Invalid parameter', status=404)
+          break
+        for patch in patchset.patches:
+          pkey = patch.key()
+          patch._num_comments = sum(c.parent_key() == pkey for c in comments)
+          patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
+          if not patch.delta_calculated:
+            if attempt > 2:
+              # Too many patchsets or files and we're not able to generate the
+              # delta links.  Instead of giving a 500, try to render the page
+              # without them.
+              patch.delta = []
+            else:
+              # Compare each patch to the same file in earlier patchsets to see
+              # if they differ, so that we can generate the delta patch urls.
+              # We do this once and cache it after.  It's specifically not done
+              # on upload because we're already doing too much processing there.
+              # NOTE: this function will clear out patchset.data to reduce
+              # memory so don't ever call patchset.put() after calling it.
+              patch.delta = _calculate_delta(patch, patchset_id, patchsets)
+              patch.delta_calculated = True
+              # A multi-entity put would be quicker, but it fails when the
+              # patches have content that is large.  App Engine throws
+              # RequestTooLarge.  This way, although not as efficient, allows
+              # multiple refreshes on an issue to get things done, as opposed to
+              # an all-or-nothing approach.
+              patch.put()
+          # Reduce memory usage: if this patchset has lots of added/removed
+          # files (i.e. > 100) then we'll get MemoryError when rendering the
+          # response.  Each Patch entity is using a lot of memory if the files
+          # are large, since it holds the entire contents.  Call num_chunks and
+          # num_drafts first though since they depend on text.
+          patch.num_chunks
+          patch.num_drafts
+          patch.num_lines
+          patch.text = None
+          patch._lines = None
+          patch.parsed_deltas = []
+          for delta in patch.delta:
+            patch.parsed_deltas.append([patchset_id_mapping[delta], delta])
+      except DeadlineExceededError:
+        logging.exception('DeadlineExceededError in _get_patchset_info')
+        if attempt > 2:
+          response = HttpResponse('DeadlineExceededError - create a new issue.')
         else:
-          patch.delta = []
-      patch.parsed_deltas = []
-      for delta in patch.delta:
-        patch.parsed_deltas.append([patchset_id_mapping[delta], delta])
-    issue.comment_count += patchset.n_comments
-    patchset.n_drafts = 0
-    if request.user:
-      for patch in patchset.patches:
-        pkey = patch.key()
-        patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
-        patchset.n_drafts += patch.num_drafts
-      issue.draft_count += patchset.n_drafts
-  return issue, patchsets
+          response = HttpResponseRedirect('%s?attempt=%d' %
+                                          (request.path, attempt + 1))
+        break
+  # Reduce memory usage (see above comment).
+  for patchset in patchsets:
+    patchset.parsed_patches = None
+  return issue, patchsets, response
 
 
 @issue_required
 def show(request, form=None):
   """/<issue> - Show an issue."""
-  issue, patchsets = _get_patchset_info(request, None)
+  issue, patchsets, response = _get_patchset_info(request, None)
+  if response:
+    return response
   if not form:
     form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   last_patchset = first_patch = None
@@ -1239,7 +1290,9 @@ def show(request, form=None):
 def patchset(request):
   """/patchset/<key> - Returns patchset information."""
   patchset = request.patchset
-  issue, patchsets = _get_patchset_info(request, patchset.key().id())
+  issue, patchsets, response = _get_patchset_info(request, patchset.key().id())
+  if response:
+    return response
   for ps in patchsets:
     if ps.key().id() == patchset.key().id():
       patchset = ps
@@ -1437,7 +1490,13 @@ def download(request):
   if request.patchset.data is None:
     return HttpResponseNotFound('Patch set (%s) is too large.'
                                 % request.patchset.key().id())
-  return HttpResponse(request.patchset.data, content_type='text/plain')
+  padding = ''
+  user_agent = request.META.get('HTTP_USER_AGENT')
+  if user_agent and 'MSIE' in user_agent:
+    # Add 256+ bytes of padding to prevent XSS attacks on Internet Explorer.
+    padding = ('='*67 + '\n') * 4
+  return HttpResponse(padding + request.patchset.data,
+                      content_type='text/plain')
 
 
 @issue_required
@@ -1994,6 +2053,8 @@ def _get_draft_comments(request, issue, preview=False):
           c.patch = patch
       if not preview:
         tbd.append(ps_comments)
+        patchset.update_comment_count(len(ps_comments))
+        tbd.append(patchset)
       ps_comments.sort(key=lambda c: (c.patch.filename, not c.left,
                                       c.lineno, c.date))
       comments += ps_comments
