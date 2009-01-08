@@ -32,7 +32,8 @@ APPCFG = 'appcfg.py'
 DEV_APPSERVER = 'dev_appserver.py'
 RELEASE = 'release'
 ZIPFILE = 'django.zip'
-FILES = ["app.yaml", "index.yaml", "__init__.py", "main.py", "settings.py"]
+FILES = ["app.yaml", "index.yaml",
+         "__init__.py", "main.py", "settings.py", "urls.py"]
 DIRS = ["static", "templates", "codereview"]
 IGNORED_DIR = (".svn", "gis", "admin", "localflavor", "mysql", "mysql_old",
                "oracle", "postgresql", "postgresql_psycopg2", "sqlite3",

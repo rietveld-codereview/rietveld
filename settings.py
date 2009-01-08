@@ -26,7 +26,7 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.http.ConditionalGetMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',
 )
-ROOT_URLCONF = 'codereview.urls'
+ROOT_URLCONF = 'urls'
 TEMPLATE_CONTEXT_PROCESSORS = ()
 TEMPLATE_DEBUG = DEBUG
 TEMPLATE_DIRS = (

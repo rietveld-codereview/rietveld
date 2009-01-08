@@ -12,21 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""URL mappings for Rietveld."""
+"""URL mappings for the codereview package."""
 
 # NOTE: Must import *, since Django looks for things here, e.g. handler500.
 from django.conf.urls.defaults import *
 
 from codereview import feeds
-
-
-feeds = {
-  'reviews': feeds.ReviewsFeed,
-  'closed': feeds.ClosedFeed,
-  'mine' : feeds.MineFeed,
-  'all': feeds.AllFeed,
-  'issue' : feeds.OneIssueFeed,
-}
 
 urlpatterns = patterns(
     'codereview.views',
@@ -74,9 +65,17 @@ urlpatterns = patterns(
     (r'^account$', 'account'),
     (r'^update_accounts$', 'update_accounts'),
     )
-    
+
+feed_dict = {
+  'reviews': feeds.ReviewsFeed,
+  'closed': feeds.ClosedFeed,
+  'mine' : feeds.MineFeed,
+  'all': feeds.AllFeed,
+  'issue' : feeds.OneIssueFeed,
+}
+
 urlpatterns += patterns(
-    '' ,
+    '',
     (r'^rss/(?P<url>.*)$', 'django.contrib.syndication.views.feed',
-     {'feed_dict': feeds}),
+     {'feed_dict': feed_dict}),
     )
