@@ -242,6 +242,7 @@ class Patch(db.Model):
   # Ids of patchsets that have a different version of this file.
   delta = db.ListProperty(int)
   delta_calculated = db.BooleanProperty(default=False)
+  lint_error_count = db.IntegerProperty(default=-1)
 
   _lines = None
 
