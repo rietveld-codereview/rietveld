@@ -32,6 +32,7 @@
       <th>Side-by-side diffs</th>
       <th>Delta from patch set</th>
       <th colspan="3">Stats</th>
+      <th>Lint</th>
       <th>Patch</th>
     </tr>
 
@@ -69,6 +70,16 @@
             </span>
             {%endif%}
           {%if patch.num_comments or patch.num_drafts%}</b>{%endif%}
+        </td>
+        <td style="white-space: nowrap">
+        {%ifequal patch.lint_error_count 0%}
+        0 errors
+        {%else%}
+        <a href="{%url codereview.views.lint_patch issue.key.id,patchset.key.id,patch.key.id%}"
+           title="Lint results for {{patch.filename}}">
+          {%ifequal patch.lint_error_count -1%}?{%else%}{{patch.lint_error_count}}{%endifequal%} errors
+        </a>
+        {%endifequal%}
         </td>
         <td>
           <a href="{%url codereview.views.download_patch issue.key.id,patchset.key.id,patch.key.id%}"
