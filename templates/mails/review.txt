@@ -1,4 +1,4 @@
-{%autoescape off%}Reviewers: {{to_nicknames}},
+{%autoescape off%}Reviewers: {{reviewer_nicknames}},
 
 {%if message%}Message:
 {{message|wordwrap:"72"}}

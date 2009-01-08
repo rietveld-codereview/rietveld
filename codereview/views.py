@@ -1884,19 +1884,20 @@ def _get_affected_files(issue):
   return files, diff
 
 
-def _get_mail_template(issue):
+def _get_mail_template(request, issue):
   """Helper to return the template and context for an email.
 
-  If this is the first email for this issue, a template that lists the
+  If this is the first email sent by the owner, a template that lists the
   reviewers, description and files is used.
   """
   context = {}
-  if issue.message_set.count(1) == 0:
-    template = 'mails/review.txt'
-    files, patch = _get_affected_files(issue)
-    context.update({'files': files, 'patch': patch})
-  else:
-    template = 'mails/comment.txt'
+  template = 'mails/comment.txt'
+  if request.user == issue.owner:
+    if db.GqlQuery('SELECT * FROM Message WHERE ANCESTOR IS :1 AND sender = :2',
+                   issue, db.Email(request.user.email())).count(1) == 0:
+      template = 'mails/review.txt'
+      files, patch = _get_affected_files(issue)
+      context.update({'files': files, 'patch': patch, 'base': issue.base})
   return template, context
 
 
@@ -2095,7 +2096,7 @@ def _get_draft_details(request, comments):
 def _make_message(request, issue, message, comments=None, send_mail=False,
                   draft=None):
   """Helper to create a Message instance and optionally send an email."""
-  template, context = _get_mail_template(issue)
+  template, context = _get_mail_template(request, issue)
   # Decide who should receive mail
   my_email = db.Email(request.user.email())
   to = [db.Email(issue.owner.email())] + issue.reviewers
@@ -2131,8 +2132,8 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
 
   if send_mail:
     url = request.build_absolute_uri('/%s' % issue.key().id())
-    to_nicknames = ', '.join(library.nickname(to_temp, True)
-                             for to_temp in to)
+    reviewer_nicknames = ', '.join(library.nickname(rev_temp, True)
+                                   for rev_temp in issue.reviewers)
     cc_nicknames = ', '.join(library.nickname(cc_temp, True)
                              for cc_temp in cc)
     my_nickname = library.nickname(request.user, True)
@@ -2141,7 +2142,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     reply_to = ', '.join(reply_to)
     description = (issue.description or '').replace('\r\n', '\n')
     home = request.build_absolute_uri('/')
-    context.update({'to_nicknames': to_nicknames,
+    context.update({'reviewer_nicknames': reviewer_nicknames,
                     'cc_nicknames': cc_nicknames,
                     'my_nickname': my_nickname, 'url': url,
                     'message': message, 'details': details,
