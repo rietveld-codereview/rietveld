@@ -94,6 +94,8 @@ login_warned = false;
   <div style="margin-top: 5px;">
     <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
     Comments</a> ('m')
+    |
+    <a class="novisit" href="javascript:draftMessage.dialog_show()">Edit draft message</a> ('M')
   </div>
   {%endif%}
 </div>
@@ -166,4 +168,7 @@ hookState.updateHooks();
 
 // -->
 </script>
+
+{%include "draft_message.html"%}
+
 {%endblock%}

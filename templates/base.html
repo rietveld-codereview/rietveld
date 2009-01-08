@@ -37,7 +37,7 @@
  	    href="/rss/issue/{{issue.key.id}}" />
    {%endif%} 
 </head>
-<body>
+<body onunload="M_unloadPage();">
 
 <!-- Begin help window -->
 <script type="text/javascript"><!--
@@ -66,6 +66,9 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
         <tr>
           <td class="shortcut"><span class="letter">m</span> <b>:</b></td><td>publish + mail comments</td>
         </tr>
+	<tr>
+	  <td class="shortcut"><span class="letter">M</span> <b>:</b></td><td>edit review message</td>
+	</tr>
         <tr>
           <td class="shortcut"><span class="letter">j</span> / <span class="letter">k</span> <b>:</b></td><td>jump to file after / before current file</td>
         </tr>
@@ -126,7 +129,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
         <tr><td>&nbsp;</td></tr>
         <tr><td>&nbsp;</td></tr>
         <tr>
-          <td></td><th>Comment editing</th>
+          <td></td><th>Comment/message editing</th>
         </tr>
         <tr>
           <td class="shortcut"><span class="letter">&lt;Ctrl&gt;</span> + <span class="letter">s</span> <b>:</b></td><td>save comment</td>

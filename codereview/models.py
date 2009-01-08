@@ -201,6 +201,7 @@ class Message(db.Model):
   recipients = db.ListProperty(db.Email)
   date = db.DateTimeProperty(auto_now_add=True)
   text = db.TextProperty()
+  draft = db.BooleanProperty(default=False)
 
 
 class Content(db.Model):

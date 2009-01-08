@@ -1,11 +1,15 @@
 {%extends "issue_base.html"%}
 
 {%block issue_body%}
-{%if issue.draft_count%}
+{%if issue.draft_count or has_draft_message%}
   <div class="error">
-    You have <b>{{issue.draft_count}} draft</b>
-    comment{{issue.draft_count|pluralize}}. Drafts are not viewable by others;
-    use <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">
+    You have {%if issue.draft_count%}<b>{{issue.draft_count}} draft</b>
+    comment{{issue.draft_count|pluralize}}{%endif%}
+    {%if has_draft_message%}{%if issue.draft_count%}and {%endif%}a draft
+    message{%endif%}.
+    Drafts are not viewable by others;
+    use <a class="novisit"
+	   href="{%url codereview.views.publish issue.key.id%}">
     Publish+Mail Comments</a> ('m') to let others view them.
   </div>
 {%endif%}

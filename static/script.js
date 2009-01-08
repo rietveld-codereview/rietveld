@@ -2009,7 +2009,11 @@ function M_commentTextKeyPress_(evt, src, code, key) {
     } else {
       if (code == (window.event ? 27 /* ASCII code for Escape */
                                 : evt.DOM_VK_ESCAPE)) {
-        return src.form.cancel.onclick();
+	if (draftMessage) {
+	  return draftMessage.dialog_hide(true);
+	} else {
+	  return src.form.cancel.onclick();
+        }
       }
     }
   }
@@ -2053,6 +2057,8 @@ function M_keyPress(evt) {
       }
     } else if (key == 'm') {
       document.location.href = publish_link;
+    } else if (key == 'M') {
+      if (draftMessage) { draftMessage.dialog_show(); }
     } else if (key == 'u') {
       // up to CL
       M_upToChangelist();
@@ -2717,3 +2723,200 @@ function M_addIssueStar(id) {
 function M_removeIssueStar(id) {
   return M_setIssueStar_(id, "/unstar");
 }
+
+
+/**
+ * Generic callback when page is unloaded.
+ */
+function M_unloadPage() {
+  if (draftMessage) { draftMessage.save(); }
+}
+
+
+/**
+ * Draft message dialog class.
+ * @param {Integer} issue_id ID of current issue.
+ * @param {Boolean} headless If true, the dialog is not
+                             initialized (default: false).
+ */
+
+var draftMessage = null;
+
+function M_draftMessage(issue_id, headless) {
+  this.issue_id = issue_id;
+  this.id_dlg_container = 'reviewmsgdlg';
+  this.id_textarea = 'reviewmsg';
+  this.id_hidden = 'reviewmsgorig';
+  this.id_status = 'reviewmsgstatus';
+  this.is_modified = false;
+  if (! headless) { this.initialize(); }
+}
+
+/**
+ * Constructor.
+ * Sets keypress callback and loads draft message if any.
+ */
+M_draftMessage.prototype.initialize = function() {
+  this.load();
+}
+
+/**
+ * Shows the dialog and focusses on textarea.
+ */
+M_draftMessage.prototype.dialog_show = function() {
+  dlg = this.get_dialog_();
+  dlg.style.display = "";
+  this.set_status('');
+  textarea = document.getElementById(this.id_textarea);
+  textarea.focus();
+}
+
+/**
+ * Hides the dialog and optionally saves the current content.
+ * @param {Boolean} save If true, the content is saved.
+ */
+M_draftMessage.prototype.dialog_hide = function(save) {
+  if (save) {
+    this.save();
+  }
+  dlg = this.get_dialog_();
+  dlg.style.display = "none";
+}
+
+/**
+ * Discards draft message.
+ */
+M_draftMessage.prototype.dialog_discard = function() {
+  this.discard(function(response) {
+    draftMessage.set_status('OK');
+    textarea = document.getElementById(draftMessage.id_textarea);
+    textarea.value = '';
+    });
+  return false;
+}
+
+/**
+ * Saves the content without closing the dialog.
+ */
+M_draftMessage.prototype.dialog_save = function() {
+  this.set_status('');
+  textarea = document.getElementById(this.id_textarea);
+  this.save(function(response) {
+    if (response.status != 200) {
+      draftMessage.set_status('An error occurred.');
+    } else {
+      draftMessage.set_status('Message saved.');
+    }
+    textarea.focus();
+    return false;
+  });
+  return false;
+}
+
+/**
+ * Sets a status message in the dialog.
+ * Additionally a timeout function is created to hide the message again.
+ * @param {String} msg The message to display.
+ */
+M_draftMessage.prototype.set_status = function(msg) {
+  status = document.getElementById(this.id_status);
+  if (status) {
+    status.innerHTML = msg;
+    this.status_timeout = setTimeout(function() {
+      draftMessage.set_status('');
+      }, 3000);
+  }
+}
+
+/**
+ * Saves the content of the draft message.
+ * @param {Function} cb A function called with the response object.
+ */
+M_draftMessage.prototype.save = function(cb) {
+  textarea = document.getElementById(this.id_textarea);
+  hidden = document.getElementById(this.id_hidden);
+  if (textarea == null || textarea.value == hidden.value || textarea.value == "") {
+    return;
+  }
+  text = textarea.value;
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4 && cb) {
+      /* XXX set hidden before cb */
+      hidden = document.getElementById(draftMessage.id_hidden);
+      hidden.value = text;
+      cb(httpreq);
+    }
+  }
+  httpreq.open("POST", "/" + this.issue_id + "/draft_message", true);
+  httpreq.send("reviewmsg="+encodeURIComponent(text));
+}
+
+/**
+ * Loads the content of the draft message from the datastore.
+ */
+M_draftMessage.prototype.load = function() {
+  elem = document.getElementById(this.id_textarea);
+  elem.disabled = "disabled";
+  this.set_status("Loading...");
+  if (elem) {
+    var httpreq = M_getXMLHttpRequest();
+    if (!httpreq) {
+      return true;
+    }
+    httpreq.onreadystatechange = function () {
+      if (httpreq.readyState == 4) {
+	if (httpreq.status != 200) {
+	  draftMessage.set_status('An error occurred.');
+	} else {
+	  if (elem) {
+	    elem.value = httpreq.responseText;
+	    hidden = document.getElementById(draftMessage.id_hidden);
+	    hidden.value = elem.value;
+	  }
+	}
+	elem.removeAttribute("disabled");
+	draftMessage.set_status('');
+	elem.focus();
+      }
+    }
+    httpreq.open("GET", "/" + this.issue_id + "/draft_message", true);
+    httpreq.send("");
+  }
+}
+
+/**
+ * Discards the draft message.
+ * @param {Function} cb A function called with response object.
+ */
+M_draftMessage.prototype.discard = function(cb) {
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4 && cb) {
+      elem = document.getElementById(this.id_textarea);
+      if (elem) {
+	elem.value = "";
+	hidden = document.getElementById(this.id_hidden);
+	hidden.value = elem.value;
+      }
+      cb(httpreq);
+    }
+  }
+  httpreq.open("DELETE", "/" + this.issue_id + "/draft_message", true);
+  httpreq.send("");
+}
+
+/**
+ * Helper function that returns the dialog's HTML container.
+ */
+M_draftMessage.prototype.get_dialog_ = function() {
+  return document.getElementById(this.id_dlg_container);
+}
+
+

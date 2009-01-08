@@ -1242,12 +1242,19 @@ def show(request, form=None):
     last_patchset = patchsets[-1]
     if last_patchset.patches:
       first_patch = last_patchset.patches[0]
-  messages = list(issue.message_set.order('date'))
+  messages = []
+  has_draft_message = False
+  for msg in issue.message_set.order('date'):
+    if not msg.draft:
+      messages.append(msg)
+    elif msg.draft and request.user and msg.sender == request.user.email():
+      has_draft_message = True
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
                   'last_patchset': last_patchset,
                   'first_patch': first_patch,
+                  'has_draft_message': has_draft_message,
                   })
 
 
@@ -1902,6 +1909,12 @@ def publish(request):
     form_class = PublishForm
   else:
     form_class = MiniPublishForm
+  draft_message = None
+  if not request.POST.get('message_only', None):
+    query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
+                                'AND draft = TRUE'), issue,
+                               request.user.email())
+    draft_message = query.get()
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
     cc = issue.cc[:]
@@ -1916,14 +1929,20 @@ def publish(request):
     ccs = [models.Account.get_nickname_for_email(cc, default=cc) for cc in cc]
     tbd, comments = _get_draft_comments(request, issue, True)
     preview = _get_draft_details(request, comments)
+    if draft_message is None:
+      msg = ''
+    else:
+      msg = draft_message.text
     form = form_class(initial={'subject': issue.subject,
                                'reviewers': ', '.join(reviewers),
                                'cc': ', '.join(ccs),
                                'send_mail': True,
+                               'message': msg,
                                })
     return respond(request, 'publish.html', {'form': form,
                                              'issue': issue,
                                              'preview': preview,
+                                             'draft_message': draft_message,
                                              })
 
   form = form_class(request.POST)
@@ -1961,7 +1980,8 @@ def publish(request):
   msg = _make_message(request, issue,
                       form.cleaned_data['message'],
                       comments,
-                      form.cleaned_data['send_mail'])
+                      form.cleaned_data['send_mail'],
+                      draft=draft_message)
   tbd.append(msg)
 
   for obj in tbd:
@@ -2072,7 +2092,8 @@ def _get_draft_details(request, comments):
   return '\n'.join(output)
 
 
-def _make_message(request, issue, message, comments=None, send_mail=False):
+def _make_message(request, issue, message, comments=None, send_mail=False,
+                  draft=None):
   """Helper to create a Message instance and optionally send an email."""
   template, context = _get_mail_template(issue)
   # Decide who should receive mail
@@ -2093,12 +2114,20 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
     details = ''
   message = message.replace('\r\n', '\n')
   text = ((message.strip() + '\n\n' + details.strip())).strip()
-  msg = models.Message(issue=issue,
-                       subject=subject,
-                       sender=my_email,
-                       recipients=reply_to,
-                       text=db.Text(text),
-                       parent=issue)
+  if draft is None:
+    msg = models.Message(issue=issue,
+                         subject=subject,
+                         sender=my_email,
+                         recipients=reply_to,
+                         text=db.Text(text),
+                         parent=issue)
+  else:
+    msg = draft
+    msg.subject = subject
+    msg.recipients = reply_to
+    msg.text = db.Text(text)
+    msg.draft = False
+    msg.date = datetime.datetime.now()
 
   if send_mail:
     url = request.build_absolute_uri('/%s' % issue.key().id())
@@ -2161,6 +2190,72 @@ def unstar(request):
     account.stars[:] = [i for i in account.stars if i != id]
     account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
+
+
+@login_required
+@issue_required
+def draft_message(request):
+  """/<issue>/draft_message - Retrieve, modify and delete draft messages."""
+  query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
+                              'AND draft = TRUE'),
+                             request.issue, request.user.email())
+  if query.count() == 0:
+    draft_message = None
+  else:
+    draft_message = query.get()
+  if request.method == 'GET':
+    return _get_draft_message(request, draft_message)
+  elif request.method == 'POST':
+    return _post_draft_message(request, draft_message)
+  elif request.method == 'DELETE':
+    return _delete_draft_message(request, draft_message)
+  return HttpResponse('An error occurred.', content_type='text/plain',
+                      status=500)
+
+
+def _get_draft_message(request, draft):
+  """Handles GET requests to /<issue>/draft_message.
+
+  Arguments:
+    request: The current request.
+    draft: A Message instance or None.
+
+  Returns the content of a draft message or an empty string if draft is None.
+  """
+  if draft is None:
+    return HttpResponse('', content_type='text/plain')
+  return HttpResponse(draft.text, content_type='text/plain')
+
+
+def _post_draft_message(request, draft):
+  """Handles POST requests to /<issue>/draft_message.
+
+  If draft is None a new message is created.
+
+  Arguments:
+    request: The current request.
+    draft: A Message instance or None.
+  """
+  if draft is None:
+    draft = models.Message(issue=request.issue, parent=request.issue,
+                           sender=request.user.email(), draft=True)
+  draft.text = request.POST.get('reviewmsg')
+  draft.put()
+  return HttpResponse(draft.text, content_type='text/plain')
+
+
+def _delete_draft_message(request, draft):
+  """Handles DELETE requests to /<issue>/draft_message.
+
+  Deletes a draft message.
+
+  Arguments:
+    request: The current request.
+    draft: A Message instance or None.
+  """
+  if draft is not None:
+    draft.delete()
+  return HttpResponse('OK', content_type='text/plain')
 
 
 ### Repositories and Branches ###

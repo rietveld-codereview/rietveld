@@ -1,6 +1,16 @@
 {%extends "issue_base.html"%}
 {%block title1%}Publish+Mail -{%endblock%}
 {%block issue_body%}
+<script><!--
+function discard(btn) {
+  draftMessage.discard();
+  btn.disabled = "disabled";
+  document.getElementById("id_message").value = "";
+  return false;
+}
+draftMessage = new M_draftMessage({{issue.key.id}}, true);
+// -->
+</script>
 <h2>Publish + Mail Draft Comments</h2>
 
 <div>
@@ -18,7 +28,11 @@
   <tr>
     <td></td>
     <td>
-      <input type="submit" value="Publish All My Drafts">
+      <input type="submit" value="Publish All My Drafts" />
+      {%if draft_message%}
+      <input type="button" onclick="return discard(this);"
+	     value="Discard Message" />
+      {%endif%}
      </td>
   </tr>
   </table>
