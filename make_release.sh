@@ -30,10 +30,15 @@ zip -q $ZIPFILE `find django \
     -name mysql -prune -o \
     -name mysql_old -prune -o \
     -name oracle -prune -o \
-    -name postgresql-prune -o \
+    -name postgresql -prune -o \
     -name postgresql_psycopg2 -prune -o \
     -name sqlite3 -prune -o \
     -name test -prune -o \
+    -name auth -prune -o \
+    -name comments -prune -o \
+    -name databrowse -prune -o \
+    -name admindocs -prune -o \
+    -name commands -prune -o \
     -type f ! -name \*.py[co] ! -name \*.[pm]o -print`
 
 # Remove old $RELEASE directory.
