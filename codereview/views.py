@@ -2137,8 +2137,6 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     cc_nicknames = ', '.join(library.nickname(cc_temp, True)
                              for cc_temp in cc)
     my_nickname = library.nickname(request.user, True)
-    to = ', '.join(to)
-    cc = ', '.join(cc)
     reply_to = ', '.join(reply_to)
     description = (issue.description or '').replace('\r\n', '\n')
     home = request.build_absolute_uri('/')
@@ -2149,12 +2147,12 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
                     'description': description, 'home': home,
                     })
     body = django.template.loader.render_to_string(template, context)
-    logging.warn('Mail: to=%s; cc=%s', to, cc)
+    logging.warn('Mail: to=%s; cc=%s', ', '.join(to), ', '.join(cc))
     kwds = {}
     if cc:
-      kwds['cc'] = _encode_safely(cc)
+      kwds['cc'] = [_encode_safely(address) for address in cc]
     mail.send_mail(sender=my_email,
-                   to=_encode_safely(to),
+                   to=[_encode_safely(address) for address in to],
                    subject=_encode_safely(subject),
                    body=_encode_safely(body),
                    reply_to=_encode_safely(reply_to),
