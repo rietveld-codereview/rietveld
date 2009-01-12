@@ -1876,9 +1876,11 @@ def _get_affected_files(issue):
         file_str += patch.status + ' '
       file_str += patch.filename
       files.append(file_str)
-      modified_count += patch.num_lines
+      # No point in loading patches if the patchset is too large for email.
+      if modified_count < 100:
+        modified_count += patch.num_lines
 
-    if modified_count and modified_count < 100:
+    if modified_count < 100:
       diff = patchset.data
 
   return files, diff
