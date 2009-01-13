@@ -1034,7 +1034,9 @@ class GitVCS(VersionControlSystem):
       base_content = ""
     else:
       status = "M"
-      base_content = RunShell(["git", "show", hash])
+      base_content, returncode = RunShellWithReturnCode(["git", "show", hash])
+      if returncode:
+        ErrorExit("Got error status from 'git show %s'" % hash)
     return (base_content, new_content, is_binary, status)
 
 
