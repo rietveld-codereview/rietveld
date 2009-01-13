@@ -977,11 +977,11 @@ def _get_data_url(form):
   url = cleaned_data.get('url')
   separate_patches = cleaned_data.get('separate_patches')
   if not (data or url or separate_patches):
-    form.errors['data'] = ['You must specify a URL or upload a file']
+    form.errors['data'] = ['You must specify a URL or upload a file (< 1 MB).']
     return None
   if data and url:
     form.errors['data'] = ['You must specify either a URL or upload a file '
-                           'but not both']
+                           'but not both.']
     return None
   if separate_patches and (data or url):
     form.errors['data'] = ['If the patches will be uploaded separately later, '
