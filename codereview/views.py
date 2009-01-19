@@ -2459,7 +2459,7 @@ def _user_popup(request):
     num_issues_reviewed = db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1',
-      user).count()
+      user.email()).count()
 
     user.nickname = models.Account.get_nickname_for_email(user.email())
     popup_html = render_to_response('user_popup.html',
