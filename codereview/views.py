@@ -928,12 +928,10 @@ def _make_new(request, form):
                          base=base,
                          reviewers=reviewers,
                          cc=cc,
-                         owner=request.user,
                          n_comments=0)
     issue.put()
 
-    patchset = models.PatchSet(issue=issue, data=data, url=url,
-                               owner=request.user, parent=issue)
+    patchset = models.PatchSet(issue=issue, data=data, url=url, parent=issue)
     patchset.put()
     issue.patchset = patchset
 
@@ -1027,7 +1025,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   data, url, separate_patches = data_url
   message = form.cleaned_data[message_key]
   patchset = models.PatchSet(issue=issue, message=message, data=data, url=url,
-                             owner=request.user, parent=issue)
+                             parent=issue)
   patchset.put()
 
   if not separate_patches:
@@ -1823,7 +1821,6 @@ def _inline_draft(request):
     comment.patch = patch
     comment.lineno = lineno
     comment.left = left
-    comment.author = request.user
     comment.text = db.Text(text)
     comment.message_id = message_id
     comment.put()
@@ -2287,7 +2284,6 @@ def repo_new(request):
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'repo_new.html', {'form': form})
-  repo.owner = request.user
   repo.put()
   branch_url = repo.url
   if not branch_url.endswith('/'):
@@ -2295,7 +2291,6 @@ def repo_new(request):
   branch_url += 'trunk/'
   branch = models.Branch(repo=repo, category='*trunk*', name='Trunk',
                          url=branch_url)
-  branch.owner = request.user
   branch.put()
   return HttpResponseRedirect('/repos')
 
@@ -2314,7 +2309,7 @@ def repo_init(request):
   """/repo_init - Initialze the list of known Subversion repositories."""
   python = models.Repository.gql("WHERE name = 'Python'").get()
   if python is None:
-    python = models.Repository(name='Python', url=SVN_ROOT, owner=request.user)
+    python = models.Repository(name='Python', url=SVN_ROOT)
     python.put()
     pybranches = []
   else:
@@ -2325,8 +2320,7 @@ def repo_init(request):
       if (br.category, br.name, br.url) == (category, name, url):
         break
     else:
-      br = models.Branch(repo=python, category=category, name=name, url=url,
-                         owner=request.user)
+      br = models.Branch(repo=python, category=category, name=name, url=url)
       br.put()
   return HttpResponseRedirect('/repos')
 
@@ -2351,7 +2345,6 @@ def branch_new(request, repo_id):
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
-  branch.owner = request.user
   branch.put()
   return HttpResponseRedirect('/repos')
 

@@ -69,7 +69,7 @@ class Issue(db.Model):
   description = db.TextProperty()
   base = db.StringProperty()
   local_base = db.BooleanProperty(default=False)
-  owner = db.UserProperty(required=True)
+  owner = db.UserProperty(auto_current_user_add=True, required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   reviewers = db.ListProperty(db.Email)
@@ -156,7 +156,7 @@ class PatchSet(db.Model):
   message = db.StringProperty()
   data = db.BlobProperty()
   url = db.LinkProperty()
-  owner = db.UserProperty(required=True)
+  owner = db.UserProperty(auto_current_user_add=True, required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty()
@@ -419,7 +419,7 @@ class Comment(db.Model):
 
   patch = db.ReferenceProperty(Patch)  # == parent
   message_id = db.StringProperty()  # == key_name
-  author = db.UserProperty()
+  author = db.UserProperty(auto_current_user_add=True)
   date = db.DateTimeProperty(auto_now=True)
   lineno = db.IntegerProperty()
   text = db.TextProperty()
@@ -455,7 +455,7 @@ class Repository(db.Model):
 
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
-  owner = db.UserProperty()
+  owner = db.UserProperty(auto_current_user_add=True)
 
   def __str__(self):
     return self.name
@@ -469,7 +469,7 @@ class Branch(db.Model):
                                choices=('*trunk*', 'branch', 'tag'))
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
-  owner = db.UserProperty()
+  owner = db.UserProperty(auto_current_user_add=True)
 
 
 ### Accounts ###
@@ -493,7 +493,7 @@ class Account(db.Model):
   starred issues we'd have to think of a different approach.)
   """
 
-  user = db.UserProperty(required=True)
+  user = db.UserProperty(auto_current_user_add=True, required=True)
   email = db.EmailProperty(required=True)  # key == <email>
   nickname = db.StringProperty(required=True)
   default_context = db.IntegerProperty(default=engine.DEFAULT_CONTEXT,
