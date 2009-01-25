@@ -62,7 +62,7 @@ verbosity = 1
 MAX_UPLOAD_SIZE = 900 * 1024
 
 
-def GetEmail():
+def GetEmail(prompt):
   """Prompts the user for their email address and returns it.
 
   The last used email address is saved to a file and offered up as a suggestion
@@ -73,16 +73,15 @@ def GetEmail():
   """
   last_email_file_name = os.path.expanduser("~/.last_codereview_email_address")
   last_email = ""
-  prompt = "Email: "
   if os.path.exists(last_email_file_name):
     try:
       last_email_file = open(last_email_file_name, "r")
       last_email = last_email_file.readline().strip("\n")
       last_email_file.close()
-      prompt = "Email [%s]: " % last_email
+      prompt += " [%s]" % last_email
     except IOError, e:
       pass
-  email = raw_input(prompt).strip()
+  email = raw_input(prompt + ": ").strip()
   if email:
     try:
       last_email_file = open(last_email_file_name, "w")
@@ -469,7 +468,7 @@ def GetRpcServer(options):
     """Prompts the user for a username and password."""
     email = options.email
     if email is None:
-      email = GetEmail()
+      email = GetEmail("Email (login for uploading to %s)" % options.server)
     password = getpass.getpass("Password for %s: " % email)
     return (email, password)
 
