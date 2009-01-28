@@ -1379,9 +1379,11 @@ function M_handleTableDblClick(evt) {
  * Makes all inline comments visible. This is the default view.
  */
 function M_showAllInlineComments() {
-  var hide = document.getElementById("hide-all-inline");
-  var show = document.getElementById("show-all-inline");
-  hide.style.display = "";
+  var hide_elements = document.getElementsByName("hide-all-inline");
+  var show_elements = document.getElementsByName("show-all-inline");
+  for (var i = 0; i < hide_elements.length; i++) {
+    hide_elements[i].style.display = "";
+  }
   var elements = document.getElementsByName("comment-border");
   var elementsLength = elements.length;
   for (var i = 0; i < elementsLength; i++) {
@@ -1389,7 +1391,9 @@ function M_showAllInlineComments() {
     tr.style.display = "";
     tr.name = "hook";
   }
-  show.style.display = "none";
+  for (var i = 0; i < show_elements.length; i++) {
+    show_elements[i].style.display = "none";
+  }
   hookState.updateHooks();
 }
 
@@ -1397,9 +1401,11 @@ function M_showAllInlineComments() {
  * Hides all inline comments, to make code easier ot read.
  */
 function M_hideAllInlineComments() {
-  var hide = document.getElementById("hide-all-inline");
-  var show = document.getElementById("show-all-inline");
-  show.style.display = "";
+  var hide_elements = document.getElementsByName("hide-all-inline");
+  var show_elements = document.getElementsByName("show-all-inline");
+  for (var i = 0; i < show_elements.length; i++) {
+    show_elements[i].style.display = "";
+  }
   var elements = document.getElementsByName("comment-border");
   var elementsLength = elements.length;
   for (var i = 0; i < elementsLength; i++) {
@@ -1407,7 +1413,9 @@ function M_hideAllInlineComments() {
     tr.style.display = "none";
     tr.name = "";
   }
-  hide.style.display = "none";
+  for (var i = 0; i < hide_elements.length; i++) {
+    hide_elements[i].style.display = "none";
+  }
   hookState.updateHooks();
 }
 
@@ -1415,11 +1423,11 @@ function M_hideAllInlineComments() {
  * Flips between making inline comments visible and invisible.
  */
 function M_toggleAllInlineComments() {
-  var show = document.getElementById("show-all-inline");
-  if (!show) {
+  var show_elements = document.getElementsByName("show-all-inline");
+  if (!show_elements) {
     return;
   }
-  if (show.style.display == "none") {
+  if (show_elements[0].style.display == "none") {
     M_hideAllInlineComments();
   } else {
     M_showAllInlineComments();
