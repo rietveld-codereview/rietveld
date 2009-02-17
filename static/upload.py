@@ -910,7 +910,7 @@ class SubversionVCS(VersionControlSystem):
       mimetype = RunShell(["svn", "propget", "svn:mime-type", filename],
                           silent_ok=True)
       base_content = ""
-      is_binary = mimetype and not mimetype.startswith("text/")
+      is_binary = bool(mimetype) and not mimetype.startswith("text/")
       if is_binary and self.IsImage(filename):
         new_content = self.ReadFile(filename)
     elif (status[0] in ("M", "D", "R") or
@@ -930,7 +930,7 @@ class SubversionVCS(VersionControlSystem):
         # Reset mimetype, it contains an error message.
         mimetype = ""
       get_base = False
-      is_binary = mimetype and not mimetype.startswith("text/")
+      is_binary = bool(mimetype) and not mimetype.startswith("text/")
       if status[0] == " ":
         # Empty base content just to force an upload.
         base_content = ""
