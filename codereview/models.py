@@ -465,6 +465,9 @@ class Branch(db.Model):
   """A trunk, branch, or atag in a specific Subversion repository."""
 
   repo = db.ReferenceProperty(Repository, required=True)
+  # Cache repo.name as repo_name, to speed up set_branch_choices()
+  # in views.IssueBaseForm.
+  repo_name = db.StringProperty()
   category = db.StringProperty(required=True,
                                choices=('*trunk*', 'branch', 'tag'))
   name = db.StringProperty(required=True)

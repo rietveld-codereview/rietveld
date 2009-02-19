@@ -127,13 +127,18 @@ class IssueBaseForm(forms.Form):
   def set_branch_choices(self, base=None):
     branches = models.Branch.gql('ORDER BY repo, category, name')
     bound_field = self['branch']
-    choices = [('', '[See Base]')]
+    choices = []
     default = None
     for b in branches:
-      pair = (b.key(), '%s - %s - %s' % (b.repo.name, b.category, b.name))
+      if not b.repo_name:
+        b.repo_name = b.repo.name
+        b.put()
+      pair = (b.key(), '%s - %s - %s' % (b.repo_name, b.category, b.name))
       choices.append(pair)
       if default is None and (base is None or b.url == base):
         default = b.key()
+    choices.sort(key=lambda pair: pair[1].lower())
+    choices.insert(0, ('', '[See Base]'))
     bound_field.field.choices = choices
     if default is not None:
       self.initial['branch'] = default
@@ -2289,7 +2294,8 @@ def repo_new(request):
   if not branch_url.endswith('/'):
     branch_url += '/'
   branch_url += 'trunk/'
-  branch = models.Branch(repo=repo, category='*trunk*', name='Trunk',
+  branch = models.Branch(repo=repo, repo_name=repo.name,
+                         category='*trunk*', name='Trunk',
                          url=branch_url)
   branch.put()
   return HttpResponseRedirect('/repos')
@@ -2320,7 +2326,8 @@ def repo_init(request):
       if (br.category, br.name, br.url) == (category, name, url):
         break
     else:
-      br = models.Branch(repo=python, category=category, name=name, url=url)
+      br = models.Branch(repo=python, repo_name='Python',
+                         category=category, name=name, url=url)
       br.put()
   return HttpResponseRedirect('/repos')
 
@@ -2345,6 +2352,7 @@ def branch_new(request, repo_id):
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
+  branch.repo_name = repo.name
   branch.put()
   return HttpResponseRedirect('/repos')
 
@@ -2369,6 +2377,7 @@ def branch_edit(request, branch_id):
   if errors:
     return respond(request, 'branch_edit.html',
                    {'branch': branch, 'form': form})
+  branch.repo_name = repo.name
   branch.put()
   return HttpResponseRedirect('/repos')
 
