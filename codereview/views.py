@@ -39,6 +39,7 @@ from google.appengine.api import urlfetch
 from google.appengine.ext import db
 from google.appengine.ext.db import djangoforms
 from google.appengine.runtime import DeadlineExceededError
+from google.appengine.runtime.apiproxy_errors import CapabilityDisabledError
 
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
@@ -373,10 +374,15 @@ def respond(request, template, params=None):
     return render_to_response(template, params)
   except DeadlineExceededError:
     logging.exception('DeadlineExceededError')
-    return HttpResponse('DeadlineExceededError')
+    return HttpResponse('DeadlineExceededError', status=503)
+  except CapabilityDisabledError, err:
+    logging.exception('CapabilityDisabledError: %s', err)
+    return HttpResponse('Rietveld: App Engine is undergoing maintenance. '
+                        'Please try again in a while. ' + str(err),
+                        status=503)
   except MemoryError:
     logging.exception('MemoryError')
-    return HttpResponse('MemoryError')
+    return HttpResponse('MemoryError', status=503)
   except AssertionError:
     logging.exception('AssertionError')
     return HttpResponse('AssertionError')
