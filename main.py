@@ -63,9 +63,9 @@ def BREAKPOINT():
 
 
 # Custom Django configuration.
+os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
 from django.conf import settings
 settings._target = None
-os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
 
 # Import various parts of Django.
 import django.core.handlers.wsgi
