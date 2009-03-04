@@ -356,9 +356,11 @@ def respond(request, template, params=None):
   if params is None:
     params = {}
   must_choose_nickname = False
+  uploadpy_hint = False
   if request.user is not None:
     account = models.Account.current_user_account
     must_choose_nickname = not account.user_has_selected_nickname()
+    uploadpy_hint = account.uploadpy_hint
   params['request'] = request
   params['counter'] = counter
   params['user'] = request.user
@@ -370,6 +372,7 @@ def respond(request, template, params=None):
   else:
     params['sign_out'] = users.create_logout_url(full_path)
   params['must_choose_nickname'] = must_choose_nickname
+  params['uploadpy_hint'] = uploadpy_hint
   try:
     return render_to_response(template, params)
   except DeadlineExceededError:
@@ -703,6 +706,21 @@ def new(request):
     return respond(request, 'new.html', {'form': form})
   else:
     return HttpResponseRedirect('/%s' % issue.key().id())
+
+
+@login_required
+def use_uploadpy(request):
+  """Show an intermediate page about upload.py."""
+  if request.method == 'POST':
+    if 'disable_msg' in request.POST:
+      models.Account.current_user_account.uploadpy_hint = False
+      models.Account.current_user_account.put()
+    if 'download' in request.POST:
+      url = '/static/upload.py'
+    else:
+      url = '/new'
+    return HttpResponseRedirect(url)
+  return respond(request, 'use_uploadpy.html')
 
 
 @post_required

@@ -8,6 +8,9 @@
 <h2>Create New Issue</h2>
 {%endif%}
 
+<p>Download <a href="/static/upload.py">upload.py</a>, a simple tool for
+uploading diffs from a version control system to the codereview app.</p>
+
 <form action="{%url codereview.views.new%}"
       method="post" enctype="multipart/form-data" id="create-form">
 <table>
@@ -21,11 +24,5 @@
 <script language="JavaScript" type="text/javascript"><!--
 M_addTextResizer_(document.getElementById("create-form"));
 --></script>
-
-<h2>Upload Utility</h2>
-
-<p>Tired of uploading files through this form? 
-Download <a href="/static/upload.py">upload.py</a>, a simple utility
-that will invoke "svn diff" and upload the output for you.
 
 {%endblock%}
