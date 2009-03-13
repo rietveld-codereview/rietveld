@@ -501,6 +501,7 @@ class Account(db.Model):
   nickname = db.StringProperty(required=True)
   default_context = db.IntegerProperty(default=engine.DEFAULT_CONTEXT,
                                        choices=CONTEXT_CHOICES)
+  default_column_width = db.IntegerProperty(default=engine.DEFAULT_COLUMN_WIDTH)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   stars = db.ListProperty(int)  # Issue ids of all starred issues

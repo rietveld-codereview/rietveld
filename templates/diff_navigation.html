@@ -6,17 +6,13 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {%endcomment%}
 {%if patch.prev%}
 <a id="prevFile"
-   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{%spaceless%}
-   {{patch.prev.key.id}}{%if context%}?context={{context}}{%endif%}
-   {%endspaceless%}">
+   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.prev.key.id}}{%urlappend_view_settings%}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
-   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{%spaceless%}
-   {{patch.next.key.id}}{%if context %}?context={{context}}{%endif%}
-   {%endspaceless%}">
+   href="/{{issue.key.id}}/diff/{{patchset.key.id}}/{{patch.next.key.id}}{%urlappend_view_settings%}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |

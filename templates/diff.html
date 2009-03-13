@@ -67,7 +67,7 @@ login_warned = false;
   </div>
 </div>
 <div style="float: right; color: #333333; background-color: #eeeeec; border: 1px solid lightgray; -moz-border-radius: 5px 5px 5px 5px; padding: 5px;">
-  <div>{%include "context_select.html"%}</div>
+  <div>{%include "view_details_select.html"%}</div>
   <div style="margin-top: 5px;">
     Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{patchset.key.id}});">
       {% for jump_patch in patchset.patches %}
@@ -77,7 +77,7 @@ login_warned = false;
     </select>
   </div>
   <div style="margin-top: 5px;">
-    <a href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}">
+    <a href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}{%urlappend_view_settings%}">
     View unified diff</a>
     |
     <a href="{%url codereview.views.download_patch issue.key.id,patchset.key.id,patch.key.id%}"

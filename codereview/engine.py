@@ -180,10 +180,13 @@ def _MakeUrl(base, filename, rev):
 
 
 DEFAULT_CONTEXT = 10
-
+DEFAULT_COLUMN_WIDTH = 80
+MIN_COLUMN_WIDTH = 3
+MAX_COLUMN_WIDTH = 2000
 
 def RenderDiffTableRows(request, old_lines, chunks, patch,
-                        colwidth=80, debug=False, context=DEFAULT_CONTEXT):
+                        colwidth=DEFAULT_COLUMN_WIDTH, debug=False,
+                        context=DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff for a patch.
 
   Args:
@@ -206,7 +209,8 @@ def RenderDiffTableRows(request, old_lines, chunks, patch,
 
 
 def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                         colwidth=80, debug=False, context=DEFAULT_CONTEXT):
+                         colwidth=DEFAULT_COLUMN_WIDTH, debug=False,
+                         context=DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff between two patches.
 
   Args:
@@ -304,7 +308,7 @@ def _ShortenBuffer(buffer, context):
 
 
 def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                          colwidth=80, debug=False):
+                          colwidth=DEFAULT_COLUMN_WIDTH, debug=False):
   """Internal version of RenderDiff2TableRows().
 
   Args:
@@ -376,7 +380,7 @@ def _GetComments(request):
 
 
 def _RenderDiffTableRows(request, old_lines, chunks, patch,
-                         colwidth=80, debug=False):
+                         colwidth=DEFAULT_COLUMN_WIDTH, debug=False):
   """Internal version of RenderDiffTableRows().
 
   Args:
@@ -398,7 +402,8 @@ def _RenderDiffTableRows(request, old_lines, chunks, patch,
 
 def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                        new_patch, new_dict, new_max, new_snapshot,
-                       triple_iterator, colwidth=80, debug=False):
+                       triple_iterator, colwidth=DEFAULT_COLUMN_WIDTH,
+                       debug=False):
   """Helper function to render side-by-side table rows.
 
   Args:

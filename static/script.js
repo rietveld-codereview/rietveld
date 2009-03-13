@@ -2582,7 +2582,9 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
     }
   }
 
-  url = skipped_lines_url+id_before+'/'+id_after+'/'+where;
+  colwidth = document.getElementById('id_column_width').value;
+
+  url = skipped_lines_url+id_before+'/'+id_after+'/'+where+'/'+colwidth;
   httpreq.open('GET', url, true);
   httpreq.send('');
 }
@@ -2683,15 +2685,25 @@ function M_showPopUp(obj, id) {
 }
 
 /**
- * TODO(andi): docstring
+ * Jump to a patch in the changelist.
+ * @param {Element} select The select form element.
+ * @param {Integer} issue The issue id.
+ * @param {Integer} patchset The patchset id.
+ * @param {Boolean} unified If True show unified diff else s-b-s view.
  */
 function M_jumpToPatch(select, issue, patchset, unified) {
-  if ( unified ) {
+  if (unified) {
     part = 'patch';
   } else {
     part = 'diff';
   }
-  document.location.href = '/'+issue+'/'+part+'/'+patchset+'/'+select.value;
+  var url = '/'+issue+'/'+part+'/'+patchset+'/'+select.value;
+  var context = document.getElementById('id_context');
+  var colwidth = document.getElementById('id_column_width');
+  if (context && colwidth) {
+    url = url+'?context='+context.value+'&column_width='+colwidth.value;
+  }
+  document.location.href = url;
 }
 
 /**

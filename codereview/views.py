@@ -324,9 +324,13 @@ FORM_CONTEXT_VALUES = [(x, "%d lines" % x) for x in models.CONTEXT_CHOICES]
 class SettingsForm(forms.Form):
 
   nickname = forms.CharField(max_length=30)
-  context = forms.IntegerField(widget=forms.Select(choices=FORM_CONTEXT_VALUES),
-                               label='Context')
-
+  context = forms.IntegerField(
+    widget=forms.Select(choices=FORM_CONTEXT_VALUES),
+    label='Context')
+  column_width = forms.IntegerField(label='Column Width',
+                                    initial=engine.DEFAULT_COLUMN_WIDTH,
+                                    min_value=engine.MIN_COLUMN_WIDTH,
+                                    max_value=engine.MAX_COLUMN_WIDTH)
 
 ### Helper functions ###
 
@@ -394,6 +398,30 @@ def respond(request, template, params=None):
 def _random_bytes(n):
   """Helper returning a string of random bytes of given length."""
   return ''.join(map(chr, (random.randrange(256) for i in xrange(n))))
+
+
+def _clean_int(value, default, min_value=None, max_value=None):
+  """Helper to cast value to int and to clip it to min or max_value.
+
+  Args:
+    value: Any value (preferably something that can be casted to int).
+    default: Default value to be used when type casting fails.
+    min_value: Minimum allowed value (default: None).
+    max_value: Maximum allowed value (default: None).
+
+  Returns:
+    An integer between min_value and max_value.
+  """
+  if not isinstance(value, (int, long)):
+    try:
+      value = int(value)
+    except (TypeError, ValueError), err:
+      value = default
+  if min_value is not None:
+    value = max(min_value, value)
+  if max_value is not None:
+    value = min(value, max_value)
+  return value
 
 
 ### Decorators for request handlers ###
@@ -568,26 +596,9 @@ DEFAULT_LIMIT = 10
 
 def all(request):
   """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
-  offset = request.GET.get('offset')
-  if offset:
-    try:
-      offset = int(offset)
-    except:
-      offset = 0
-    else:
-      offset = max(0, offset)
-  else:
-    offset = 0
-  limit = request.GET.get('limit')
-  if limit:
-    try:
-      limit = int(limit)
-    except:
-      limit = DEFAULT_LIMIT
-    else:
-      limit = max(1, min(limit, 100))
-  else:
-    limit = DEFAULT_LIMIT
+  offset = _clean_int(request.GET.get('offset'), 0, 0)
+  limit = _clean_int(request.GET.get('limit'), DEFAULT_LIMIT, 1, 100)
+
   query = db.GqlQuery('SELECT * FROM Issue '
                       'WHERE closed = FALSE ORDER BY modified DESC')
   # Fetch one more to see if there should be a 'next' link
@@ -1200,7 +1211,7 @@ def _get_patchset_info(request, patchset_id):
     if patchset_id == patchset.key().id():
       patchset.patches = list(patchset.patch_set.order('filename'))
       try:
-        attempt = int(request.GET.get('attempt', 0))
+        attempt = _clean_int(request.GET.get('attempt'), 0, 0)
         if attempt < 0:
           response = HttpResponse('Invalid parameter', status=404)
           break
@@ -1307,7 +1318,7 @@ def account(request):
   """/account/?q=blah&limit=10&timestamp=blah - Used for autocomplete."""
   def searchAccounts(property, added, response):
     query = request.GET.get('q').lower()
-    limit = int(request.GET.get('limit'))
+    limit = _clean_int(request.GET.get('limit'), 10, 10, 100)
 
     accounts = models.Account.all()
     accounts.filter("lower_%s >= " % property, query)
@@ -1544,6 +1555,8 @@ def patch_helper(request, nav_type='patch'):
                   'patchset': request.patchset,
                   'rows': rows,
                   'issue': request.issue,
+                  'context': request.GET.get('context'),
+                  'column_width': request.GET.get('column_width'),
                   })
 
 
@@ -1571,13 +1584,23 @@ def _get_context_for_user(request):
     default_context = account.default_context
   else:
     default_context = engine.DEFAULT_CONTEXT
-  try:
-    context = int(request.GET.get("context", default_context))
-  except ValueError:
-    context = default_context
+  context = _clean_int(request.GET.get('context'), default_context)
   if context not in models.CONTEXT_CHOICES:
     context = engine.DEFAULT_CONTEXT
   return context
+
+def _get_column_width_for_user(request):
+  """Returns the column width setting for a user."""
+  if request.user:
+    account = models.Account.current_user_account
+    default_column_width = account.default_column_width
+  else:
+    default_column_width = engine.DEFAULT_COLUMN_WIDTH
+
+  column_width = _clean_int(request.GET.get('column_width'),
+                            default_column_width,
+                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+  return column_width
 
 
 @patch_required
@@ -1592,11 +1615,12 @@ def diff(request):
   patch = request.patch
 
   context = _get_context_for_user(request)
+  column_width = _get_column_width_for_user(request)
   if patch.is_binary:
     rows = None
   else:
     try:
-      rows = _get_diff_table_rows(request, patch, context)
+      rows = _get_diff_table_rows(request, patch, context, column_width)
     except engine.FetchError, err:
       return HttpResponseNotFound(str(err))
 
@@ -1608,10 +1632,11 @@ def diff(request):
                   'rows': rows,
                   'context': context,
                   'context_values': models.CONTEXT_CHOICES,
+                  'column_width': column_width,
                   })
 
 
-def _get_diff_table_rows(request, patch, context):
+def _get_diff_table_rows(request, patch, context, column_width):
   """Helper function that returns rendered rows for a patch.
 
   Raises:
@@ -1626,7 +1651,8 @@ def _get_diff_table_rows(request, patch, context):
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
                                          chunks, patch,
-                                         context=context))
+                                         context=context,
+                                         colwidth=column_width))
   if rows and rows[-1] is None:
     del rows[-1]
     # Get rid of content, which may be bad
@@ -1645,14 +1671,17 @@ def _get_diff_table_rows(request, patch, context):
 
 
 @patch_required
-def diff_skipped_lines(request, id_before, id_after, where):
+def diff_skipped_lines(request, id_before, id_after, where, column_width):
   """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines"""
   patchset = request.patchset
   patch = request.patch
 
+  column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
+                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+
   # TODO: allow context = None?
   try:
-    rows = _get_diff_table_rows(request, patch, 10000)
+    rows = _get_diff_table_rows(request, patch, 10000, column_width)
   except engine.FetchError, err:
     # Return HttpResponse because the JS part expects a 200 status code.
     return HttpResponse('<font color="red">Error: %s; please report!</font>' %
@@ -1691,7 +1720,8 @@ def _get_skipped_lines_response(rows, id_before, id_after, where):
   return HttpResponse(simplejson.dumps(response))
 
 
-def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context):
+def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
+                    column_width):
   """Helper function that returns objects for diff2 views"""
   ps_left = models.PatchSet.get_by_id(int(ps_left_id), parent=request.issue)
   if ps_left is None:
@@ -1724,7 +1754,8 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context):
   rows = engine.RenderDiff2TableRows(request,
                                      new_content_left.lines, patch_left,
                                      new_content_right.lines, patch_right,
-                                     context=context)
+                                     context=context,
+                                     colwidth=column_width)
   rows = list(rows)
   if rows and rows[-1] is None:
     del rows[-1]
@@ -1738,7 +1769,9 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context):
 def diff2(request, ps_left_id, ps_right_id, patch_id):
   """/<issue>/diff2/... - View the delta between two different patch sets."""
   context = _get_context_for_user(request)
-  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context)
+  column_width = _get_column_width_for_user(request)
+  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
+                         column_width)
   if isinstance(data, HttpResponseNotFound):
     return data
 
@@ -1753,14 +1786,19 @@ def diff2(request, ps_left_id, ps_right_id, patch_id):
                   'patch_id': patch_id,
                   'context': context,
                   'context_values': models.CONTEXT_CHOICES,
+                  'column_width': column_width,
                   })
 
 
 @issue_required
 def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
-                        id_before, id_after, where):
+                        id_before, id_after, where, column_width):
   """/<issue>/diff2/... - Returns a fragment of skipped lines"""
-  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, 10000)
+  column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
+                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+
+  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, 10000,
+                         column_width)
   if isinstance(data, HttpResponseNotFound):
     return data
   return _get_skipped_lines_response(data["rows"], id_before, id_after, where)
@@ -2432,8 +2470,10 @@ def settings(request):
   if request.method != 'POST':
     nickname = account.nickname
     default_context = account.default_context
+    default_column_width = account.default_column_width
     form = SettingsForm(initial={'nickname': nickname,
                                  'context': default_context,
+                                 'column_width': default_column_width,
                                  })
     return respond(request, 'settings.html', {'form': form})
   form = SettingsForm(request.POST)
@@ -2454,7 +2494,8 @@ def settings(request):
         form.errors['nickname'] = ['This nickname is already in use.']
       else:
         account.nickname = nickname
-        account.default_context = form.cleaned_data.get("context")
+        account.default_context = form.cleaned_data.get('context')
+        account.default_column_width = form.cleaned_data.get('column_width')
         account.fresh = False
         account.put()
   if not form.is_valid():

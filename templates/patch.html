@@ -69,6 +69,10 @@ login_warned = false;
     {%endif%}
   </div>
 </div>
+{%if column_width and context%}
+  <input type="hidden" id="id_context" value="{{context}}" />
+  <input type="hidden" id="id_column_width" value="{{column_width}}" />
+{%endif%}
 <div style="float: right; color: #333333; background-color: #eeeeec; border: 1px solid lightgray; -moz-border-radius: 5px 5px 5px 5px; padding: 5px;">
   <div>
     Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{patchset.key.id}}, true);">
@@ -80,7 +84,7 @@ login_warned = false;
   </div>
   {%if not patch.no_base_file%}
   <div style="margin-top: 5px;">
-    <a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.key.id%}">
+    <a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.key.id%}{%urlappend_view_settings%}">
     View side by-side-diff with in-line comments</a>
   </div>
   {%endif%}
@@ -105,14 +109,14 @@ login_warned = false;
 
 <div class="codenav">
 {%if patch.prev%}
-<a id="prevFile" 
-   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}">
+<a id="prevFile"
+   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}{%urlappend_view_settings%}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
-   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}">
+   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}{%urlappend_view_settings%}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |
@@ -145,13 +149,13 @@ login_warned = false;
 <div class="codenav">
 {%if patch.prev%}
 <a id="prevFile"
-   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}">
+   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}{%urlappend_view_settings%}">
 &laquo; {{patch.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
 <a id="nextFile"
-   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}">
+   href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}{%urlappend_view_settings%}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 </div>
