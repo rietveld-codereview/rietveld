@@ -408,7 +408,7 @@ group.add_option("-s", "--server", action="store", dest="server",
                  default="codereview.appspot.com",
                  metavar="SERVER",
                  help=("The server to upload to. The format is host[:port]. "
-                       "Defaults to 'codereview.appspot.com'."))
+                       "Defaults to '%default'."))
 group.add_option("-e", "--email", action="store", dest="email",
                  metavar="EMAIL", default=None,
                  help="The username to use. Will prompt if omitted.")
