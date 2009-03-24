@@ -1154,6 +1154,10 @@ function M_submitInlineComment(form, cid, lineno, side) {
     return true;
   }
 
+  if (typeof side == "undefined") {
+    side = form.side.value;
+  }
+
   // Clear saved draft state for affected new, edited, and replied comments
   if (typeof cid != "undefined" && typeof lineno != "undefined" && side) {
     var suffix = cid + "-" + lineno + "-" + side;
