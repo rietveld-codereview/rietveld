@@ -279,7 +279,7 @@ class BranchForm(djangoforms.ModelForm):
 
   class Meta:
     model = models.Branch
-    exclude = ['owner']
+    exclude = ['owner', 'repo_name']
 
 
 class PublishForm(forms.Form):
@@ -2429,6 +2429,7 @@ def branch_edit(request, branch_id):
     form = BranchForm(instance=branch)
     return respond(request, 'branch_edit.html',
                    {'branch': branch, 'form': form})
+
   form = BranchForm(request.POST, instance=branch)
   errors = form.errors
   if not errors:
@@ -2439,7 +2440,7 @@ def branch_edit(request, branch_id):
   if errors:
     return respond(request, 'branch_edit.html',
                    {'branch': branch, 'form': form})
-  branch.repo_name = repo.name
+  branch.repo_name = branch.repo.name
   branch.put()
   return HttpResponseRedirect('/repos')
 
