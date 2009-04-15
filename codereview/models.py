@@ -56,7 +56,7 @@ def gql(cls, clause, *args, **kwds):
   return query
 
 
-### Issues, PatchSets, Patches, Contents, Comments, Messages ###
+### Issues, PatchSets, Messages, Contents, Patches, Comments, and Buckets ###
 
 
 class Issue(db.Model):
@@ -160,7 +160,8 @@ class PatchSet(db.Model):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty()
-  
+  build_results = db.StringListProperty()
+
   def update_comment_count(self, n):
     """Increment the n_comments property by n.
 

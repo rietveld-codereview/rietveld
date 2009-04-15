@@ -28,6 +28,7 @@ import binascii
 import datetime
 import urllib
 import md5
+import sha
 from xml.etree import ElementTree
 from cStringIO import StringIO
 
@@ -49,6 +50,7 @@ from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
 import django.template
 from django.utils import simplejson
+from django.utils.html import strip_tags
 from django.utils.safestring import mark_safe
 
 # Local imports
@@ -236,6 +238,34 @@ class UploadPatchForm(forms.Form):
 
   def get_uploaded_patch(self):
     return self.files['data'].read()
+
+
+class UploadBuildResult(forms.Form):
+  platform_id = forms.CharField(max_length=255)
+  # If password is not specified, we use user authetication INSTEAD.
+  password = forms.CharField(max_length=255, required=False)
+  # Not specifying a status removes this build result
+  status = forms.CharField(max_length=255, required=False)
+  details_url = forms.URLField(max_length=2083, required=False)
+  
+  SEPARATOR = '|'
+  _VALID_STATUS = ['failure', 'pending', 'success', '']
+
+  def is_valid(self):
+    if not super(UploadBuildResult, self).is_valid():
+      return False
+    if self.cleaned_data['status'] not in UploadBuildResult._VALID_STATUS:
+      self.errors['status'] = ['"%s" is not a valid build result status' %
+                               self.cleaned_data['status']]
+      return False
+    return True
+
+  def __str__(self):
+    return '%s%s%s%s%s' % (strip_tags(self.cleaned_data['platform_id']),
+                           UploadBuildResult.SEPARATOR,
+                           strip_tags(self.cleaned_data['status']),
+                           UploadBuildResult.SEPARATOR,
+                           strip_tags(self.cleaned_data['details_url']))
 
 
 class EditForm(IssueBaseForm):
@@ -916,6 +946,71 @@ def upload_patch(request):
   return HttpResponse(msg, content_type='text/plain')
 
 
+@post_required
+@patchset_required
+def upload_build_result(request):
+  """/<issue>/upload_build_result/<patchset> - Set build result for a patchset.
+
+  Used to upload results from a build made with the patchset on a given
+  platform.
+  """
+  form = UploadBuildResult(request.POST, request.FILES)
+  if not form.is_valid():
+    return HttpResponse('ERROR: Upload build result errors:\n%s' %
+                        repr(form.errors), content_type='text/plain')
+  # Use a backdoor password for automated builds to be able to push data here.
+  if sha.new(form.cleaned_data.get('password', '')).hexdigest() != \
+      '980954318b0845754d89cd5410edbace13487356':
+    if request.user is None:
+      if False and IS_DEV:
+        request.user = users.User(request.POST.get('user', 'test@example.com'))
+      else:
+        return HttpResponse('Error: Login required', status=401)
+    if request.user != request.issue.owner:
+      return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
+                          (request.user, request.issue.key().id()))
+  # Do we already have build results for this patchset on this platform?
+  platform_id = strip_tags(form.cleaned_data['platform_id'])
+  patchset = request.patchset
+  existing = False
+  for index, build_result in enumerate(patchset.build_results):
+    if build_result.split(UploadBuildResult.SEPARATOR)[0] == platform_id:
+      existing = True
+      break
+  if existing:
+    if form.cleaned_data['status']:
+      patchset.build_results[index] = str(form)
+      message = 'Updated existing result.'
+    else:
+      # An empty status means remove this build result.
+      patchset.build_results.pop(index)
+      message = 'Removed existing result.'
+  elif form.cleaned_data['status']:
+    patchset.build_results.append(str(form))
+    message = 'Adding new status result.'
+  else:
+    message = 'Not adding empty status result.'
+
+  patchset.put()
+  return HttpResponse(message, content_type='text/plain')
+
+
+@patchset_required
+def get_build_results(request):
+  """/<issue>/get_build_results/<patchset> - Get build results for a patchset.
+
+  Used to retrieve the build results for a given patchset. The format of the
+  returned data is as follows:
+    <platform_id>|<status>|<details_url>
+    <platform_id>|<status>|<details_url>
+    etc...
+  """
+  response = ""
+  for build_result in request.patchset.build_results:
+    response = "%s%s\n" % (response, str(build_result))
+  return HttpResponse(response, content_type='text/plain')
+
+
 class EmptyPatchSet(Exception):
   """Exception used inside _make_new() to break out of the transaction."""
 
@@ -1258,6 +1353,13 @@ def _get_patchset_info(request, patchset_id):
           response = HttpResponseRedirect('%s?attempt=%d' %
                                           (request.path, attempt + 1))
         break
+      patchset.build_results_list = []
+      for build_result in patchset.build_results:
+        (platform_id, status, details_url) = build_result.split(
+            UploadBuildResult.SEPARATOR)
+        patchset.build_results_list.append({'platform_id': platform_id,
+                                            'status': status,
+                                            'details_url': details_url})
   # Reduce memory usage (see above comment).
   for patchset in patchsets:
     patchset.parsed_patches = None
