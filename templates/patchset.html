@@ -91,4 +91,19 @@
     {%endfor%}
 
   </table>
+  {%if patchset.build_results_list%}
+    <table style="background: transparent">
+      <tr>
+	<td><i>Trybot&nbsp;results:</i></td>
+	{%for build_result in patchset.build_results_list%}
+	  <td><a class="build-result build-status-color-{{build_result.status}}"
+		 href="{{build_result.details_url}}"
+                 title="{{build_result.status}}"
+                 target="_blank">&nbsp;{{build_result.platform_id}}&nbsp;</a>
+	  </td>
+	{%endfor%}
+	<td width="100%"></td>
+      </tr>
+    </table>
+  {%endif%}
 </div>

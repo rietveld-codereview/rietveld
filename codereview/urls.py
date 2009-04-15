@@ -57,6 +57,8 @@ urlpatterns = patterns(
      'diff2_skipped_lines'),
     (r'^(\d+)/upload_content/(\d+)/(\d+)$', 'upload_content'),
     (r'^(\d+)/upload_patch/(\d+)$', 'upload_patch'),
+    (r'^(\d+)/upload_build_result/(\d+)$', 'upload_build_result'),
+    (r'^(\d+)/get_build_results/(\d+)$', 'get_build_results'),
     (r'^(\d+)/description$', 'description'),
     (r'^(\d+)/star$', 'star'),
     (r'^(\d+)/unstar$', 'unstar'),
