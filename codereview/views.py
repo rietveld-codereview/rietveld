@@ -1138,7 +1138,7 @@ def _get_emails(form, label):
             account = models.Account.get_account_for_nickname(email)
             if account is None:
               raise db.BadValueError('Unknown user: %s' % email)
-            db_email = db.Email(accounts[0].user.email().lower())
+            db_email = db.Email(account.user.email().lower())
           elif email.count('@') != 1:
             raise db.BadValueError('Invalid email address: %s' % email)
           else:
