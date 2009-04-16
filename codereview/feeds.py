@@ -67,14 +67,21 @@ class BaseFeed(Feed):
 
 class BaseUserFeed(BaseFeed):
 
-  def get_object(self,bits):
+  def get_object(self, bits):
+    """Returns the account for the requested user feed.
+
+    bits is a list of URL path elements. The first element of this list
+    should be the user's nickname. A 404 is raised if the list is empty or
+    has more than one element or if the a user with that nickname
+    doesn't exist.
+    """
     if len(bits) != 1:
       raise ObjectDoesNotExist
     obj = bits[0]
-    user = models.Account.get_accounts_for_nickname('%s' % obj)
-    if len(user) == 1:
-      return user[0]
-    raise ObjectDoesNotExist
+    account = models.Account.get_account_for_nickname('%s' % obj)
+    if account is None:
+      raise ObjectDoesNotExist
+    return account
 
 
 class ReviewsFeed(BaseUserFeed):

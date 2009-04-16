@@ -332,6 +332,33 @@ class SettingsForm(forms.Form):
                                     min_value=engine.MIN_COLUMN_WIDTH,
                                     max_value=engine.MAX_COLUMN_WIDTH)
 
+  def clean_nickname(self):
+    nickname = self.cleaned_data.get('nickname')
+    # Check for allowed characters
+    match = re.match(r'[\w\.\-_\(\) ]+$', nickname, re.UNICODE|re.IGNORECASE)
+    if not match:
+      raise forms.ValidationError('Allowed characters are letters, digits, '
+                                  '".-_()" and spaces.')
+    # Check for sane whitespaces
+    if re.search(r'\s{2,}', nickname):
+      raise forms.ValidationError('Use single spaces between words.')
+    if len(nickname) != len(nickname.strip()):
+      raise forms.ValidationError('Leading and trailing whitespaces are '
+                                  'not allowed.')
+
+    if nickname.lower() == 'me':
+      raise forms.ValidationError('Choose a different nickname.')
+
+    # Look for existing nicknames
+    accounts = list(models.Account.gql('WHERE lower_nickname = :1',
+                                       nickname.lower()))
+    for account in accounts:
+      if account.key() == models.Account.current_user_account.key():
+        continue
+      raise forms.ValidationError('This nickname is already in use.')
+
+    return nickname
+
 ### Helper functions ###
 
 
@@ -486,12 +513,12 @@ def user_key_required(func):
     if '@' in user_key:
       request.user_to_show = users.User(user_key)
     else:
-      accounts = models.Account.get_accounts_for_nickname(user_key)
-      if not accounts:
+      account = models.Account.get_account_for_nickname(user_key)
+      if not account:
         logging.info("account not found for nickname %s" % user_key)
         return HttpResponseNotFound('No user found with that key (%s)' %
                                     user_key)
-      request.user_to_show = accounts[0].user
+      request.user_to_show = account.user
     return func(request, *args, **kwds)
 
   return user_key_wrapper
@@ -1108,8 +1135,8 @@ def _get_emails(form, label):
       if email:
         try:
           if '@' not in email:
-            accounts = models.Account.get_accounts_for_nickname(email)
-            if len(accounts) != 1:
+            account = models.Account.get_account_for_nickname(email)
+            if account is None:
               raise db.BadValueError('Unknown user: %s' % email)
             db_email = db.Email(accounts[0].user.email().lower())
           elif email.count('@') != 1:
@@ -2479,27 +2506,12 @@ def settings(request):
     return respond(request, 'settings.html', {'form': form})
   form = SettingsForm(request.POST)
   if form.is_valid():
-    nickname = form.cleaned_data['nickname'].strip()
-    if not nickname:
-      form.errors['nickname'] = ['Your nickname cannot be empty.']
-    elif '@' in nickname:
-      form.errors['nickname'] = ['Your nickname cannot contain "@".']
-    elif ',' in nickname:
-      form.errors['nickname'] = ['Your nickname cannot contain ",".']
-    elif nickname == 'me':
-      form.errors['nickname'] = ['Of course, you are what you are. '
-                                 'But \'me\' is for everyone.']
-    else:
-      accounts = models.Account.get_accounts_for_nickname(nickname)
-      if nickname != account.nickname and accounts:
-        form.errors['nickname'] = ['This nickname is already in use.']
-      else:
-        account.nickname = nickname
-        account.default_context = form.cleaned_data.get('context')
-        account.default_column_width = form.cleaned_data.get('column_width')
-        account.fresh = False
-        account.put()
-  if not form.is_valid():
+    account.nickname = form.cleaned_data.get('nickname')
+    account.default_context = form.cleaned_data.get('context')
+    account.default_column_width = form.cleaned_data.get('column_width')
+    account.fresh = False
+    account.put()
+  else:
     return respond(request, 'settings.html', {'form': form})
   return HttpResponseRedirect('/mine')
 

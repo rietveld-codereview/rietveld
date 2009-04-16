@@ -531,12 +531,24 @@ class Account(db.Model):
     account = cls.get_by_key_name(key)
     if account is not None:
       return account
-    nickname = user.nickname()
-    if '@' in nickname:
-      nickname = nickname.split('@', 1)[0]
-    assert nickname
+    nickname = cls.create_nickname_for_user(user)
     return cls.get_or_insert(key, user=user, email=email, nickname=nickname,
                              fresh=True)
+
+  @classmethod
+  def create_nickname_for_user(cls, user):
+    """Returns a unique nickname for a user."""
+    name = nickname = user.email().split('@', 1)[0]
+    next_char = chr(ord(nickname[0].lower())+1)
+    existing_nicks = [account.lower_nickname
+                      for account in cls.gql(('WHERE lower_nickname >= :1 AND '
+                                              'lower_nickname < :2'),
+                                             nickname.lower(), next_char)]
+    suffix = 0
+    while nickname.lower() in existing_nicks:
+      suffix += 1
+      nickname = '%s%d' % (name, suffix)
+    return nickname
 
   @classmethod
   def get_nickname_for_user(cls, user):
@@ -568,18 +580,14 @@ class Account(db.Model):
       return account.nickname
     if default is not None:
       return default
-    nickname = email
-    if '@' in nickname:
-      nickname = nickname.split('@', 1)[0]
-    assert nickname
-    return nickname
+    return email.replace('@', '_')
 
   @classmethod
-  def get_accounts_for_nickname(cls, nickname):
+  def get_account_for_nickname(cls, nickname):
     """Get the list of Accounts that have this nickname."""
     assert nickname
     assert '@' not in nickname
-    return list(gql(cls, 'WHERE nickname = :1', nickname))
+    return cls.all().filter('lower_nickname =', nickname.lower()).get()
 
   @classmethod
   def get_email_for_nickname(cls, nickname):
@@ -587,10 +595,10 @@ class Account(db.Model):
 
     If the nickname is not unique or does not exist, this returns None.
     """
-    accounts = cls.get_accounts_for_nickname(nickname)
-    if len(accounts) != 1:
+    account = cls.get_account_for_nickname(nickname)
+    if account is None:
       return None
-    return accounts[0].email
+    return account.email
 
   def user_has_selected_nickname(self):
     """Return True if the user picked the nickname.
