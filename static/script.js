@@ -1281,9 +1281,8 @@ function M_setValueFromDivs(divs, text) {
     lines = lines.concat(divs[i].innerHTML.split("\n"));
   }
   for (var i = 0; i < lines.length; i++) {
-    // Undo the <a> tags added by urlize and enliven
-    lines[i] = lines[i].replace(/<a[^>]*>/ig, "");
-    lines[i] = lines[i].replace(/<\/a>/ig, "");
+    // Undo the <a> tags added by urlize and urlizetrunc
+    lines[i] = lines[i].replace(/<a (.*?)href=[\'\"]([^\'\"]+?)[\'\"](.*?)>(.*?)<\/a>/ig, '$2');
     // Undo the escape Django filter
     lines[i] = lines[i].replace(/&gt;/ig, ">");
     lines[i] = lines[i].replace(/&lt;/ig, "<");

@@ -48,7 +48,7 @@ draftMessage = new M_draftMessage({{issue.key.id}}, true);
 {%if preview%}
 <div style="margin-top: 3em;">
   <h3>Unpublished Drafts:</h3>
-  <pre class="description">{{preview|wordwrap:"80"|urlize}}</pre>
+  <pre class="description">{{preview|wordwrap:"80"|urlizetrunc:80}}</pre>
 </div>
 {%endif%}
 <div style="clear:both"></div>

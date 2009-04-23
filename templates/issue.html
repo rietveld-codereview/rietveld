@@ -21,7 +21,7 @@
      class="toggled-section opentriangle">
     Description</a></h3>
   <div id="issue-description" style="margin-left:15px;">
-    <pre>{{issue.description|wordwrap:80|urlize}}</pre>
+    <pre>{{issue.description|wordwrap:80|urlizetrunc:80}}</pre>
   </div>
 {%endif%}
 
@@ -141,7 +141,7 @@
              {%if forloop.last%}{%else%}style="display: none;"{%endif%}>
           <div class="message-body">
             <pre name="cl-message-{{forloop.counter0}}"
-            >{{message.text|wordwrap:80|urlize}}</pre>
+            >{{message.text|wordwrap:80|urlizetrunc:80}}</pre>
           </div>
           <div class="message-actions">
             {%if user%}

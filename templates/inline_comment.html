@@ -21,7 +21,7 @@
 id="comment-text-{{forloop.parentloop.counter0}}-{{lineno}}-{{side}}-{{forloop.counter0}}"
 class="{%if bucket.quoted%}comment-text-quoted{%else%}comment-text{%endif%}"
 {%if bucket.quoted%}style="display: none"{%endif%}
->{{bucket.text|wordwrap:"80"|escape|urlize}}</div>
+>{{bucket.text|wordwrap:"80"|escape|urlizetrunc:80}}</div>
 {%endfor%}
 {%if c.draft%}
 <a name="comment-reply"
