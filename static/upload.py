@@ -34,7 +34,6 @@ against by using the '--rev' option.
 import cookielib
 import getpass
 import logging
-import md5
 import mimetypes
 import optparse
 import os
@@ -45,6 +44,12 @@ import sys
 import urllib
 import urllib2
 import urlparse
+
+# The md5 module was deprecated in Python 2.5.
+try:
+  from hashlib import md5
+except ImportError:
+  from md5 import md5
 
 try:
   import readline
@@ -674,7 +679,7 @@ class VersionControlSystem(object):
                (type, filename))
         file_too_large = True
         content = ""
-      checksum = md5.new(content).hexdigest()
+      checksum = md5(content).hexdigest()
       if options.verbose > 0 and not file_too_large:
         print "Uploading %s file for %s" % (type, filename)
       url = "/%d/upload_content/%d/%d" % (int(issue), int(patchset), file_id)
@@ -1326,7 +1331,7 @@ def RealMain(argv, data=None):
   base_hashes = ""
   for file, info in files.iteritems():
     if not info[0] is None:
-      checksum = md5.new(info[0]).hexdigest()
+      checksum = md5(info[0]).hexdigest()
       if base_hashes:
         base_hashes += "|"
       base_hashes += checksum + ":" + file
