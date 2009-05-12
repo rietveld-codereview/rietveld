@@ -1492,12 +1492,9 @@ def delete(request):
 
 
 @post_required
-@issue_required
+@issue_editor_required
 def close(request):
   """/<issue>/close - Close an issue."""
-  if request.issue.owner != request.user:
-    if not IS_DEV:
-      return HttpResponse('Login required', status=401)
   issue = request.issue
   issue.closed = True
   if request.method == 'POST':
