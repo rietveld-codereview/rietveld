@@ -32,6 +32,13 @@
 {%block body%}
   <h2>
     {%include "issue_star.html"%}
+{%if issue.edit_allowed and not issue.closed%}
+<span class="issue-close" id="issue-close-{{issue.key.id}}">
+    <a href="javascript:M_closeIssue({{issue.key.id}})">
+      <img src="/static/close.gif" title="Close This Issue" width="15"
+	   height="15" border="0"></a>
+</span>
+{%endif%}
     Issue <a href="{%url codereview.views.show issue.key.id%}"
                onmouseover="M_showPopUp(this, 'popup-issue');">
             {{issue.key.id}}</a>:

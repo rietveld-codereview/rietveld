@@ -2500,6 +2500,22 @@ function M_dashboardKeyPress(evt) {
       if (dashboardState) dashboardState.gotoPrev();
     } else if (key == 'j') {
       if (dashboardState) dashboardState.gotoNext();
+    } else if (key == '#') {
+      if (dashboardState) {
+	var child = dashboardState.curTR.cells[1].firstChild;
+	while (child && child.className != "issue-close") {
+	  child = child.nextSibling;
+	}
+	if (child) {
+	  child = child.firstChild;
+	}
+	while (child && child.nodeName != "A") {
+	  child = child.nextSibling;
+	}
+	if (child) {
+	  location.href = child.href;
+	}
+      }
     } else if (key == 'o' || key == '\r' || key == '\n') {
       if (dashboardState) {
 	var child = dashboardState.curTR.cells[2].firstChild;
@@ -2745,6 +2761,29 @@ function M_addIssueStar(id) {
  */
 function M_removeIssueStar(id) {
   return M_setIssueStar_(id, "/unstar");
+}
+
+/**
+ * Close a given issue.
+ * @param {Integer} id The issue id.
+ */
+function M_closeIssue(id) {
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4) {
+      if (httpreq.status == 200) {
+	  var elem = document.getElementById("issue-close-" + id);
+	  elem.innerHTML = '';
+	  var elem = document.getElementById("issue-title-" + id);
+	  elem.innerHTML += ' (' + httpreq.responseText + ')';
+      }
+    }
+  }
+  httpreq.open("POST", "/" + id + "/close", true);
+  httpreq.send("");
 }
 
 
