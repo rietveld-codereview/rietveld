@@ -100,7 +100,7 @@ class AccountInput(forms.TextInput):
                               scrollHeight: 300,
                               matchContains: true,
                               formatResult : function(row) {
-                                return row[0].replace(/ (\(.+?\))/gi, '');
+                                return row[0].replace(/ .+/gi, '');
                               }
                               });
                               </script>''' % name)
