@@ -79,12 +79,6 @@ indexes:
 # Unused in query history -- copied from input.
 - kind: Issue
   properties:
-  - name: modified
-    direction: desc
-
-# Unused in query history -- copied from input.
-- kind: Issue
-  properties:
   - name: owner
   - name: modified
     direction: desc
