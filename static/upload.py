@@ -66,6 +66,12 @@ verbosity = 1
 # Max size of patch or base file.
 MAX_UPLOAD_SIZE = 900 * 1024
 
+# Constants for version control names.  Used by GuessVCSName.
+VCS_GIT = "Git"
+VCS_MERCURIAL = "Mercurial"
+VCS_SUBVERSION = "Subversion"
+VCS_UNKNOWN = "Unknown"
+
 
 def GetEmail(prompt):
   """Prompts the user for their email address and returns it.
@@ -1211,6 +1217,48 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
   return rv
 
 
+def GuessVCSName():
+  """Helper to guess the version control system.
+
+  This examines the current directory, guesses which VersionControlSystem
+  we're using, and returns an string indicating which VCS is detected.
+
+  Returns:
+    A pair (vcs, output).  vcs is a string indicating which VCS was detected
+    and is one of VCS_GIT, VCS_MERCURIAL, VCS_SUBVERSION, or VCS_UNKNOWN.
+    output is a string containing any interesting output from the vcs
+    detection routine, or None if there is nothing interesting.
+  """
+  # Mercurial has a command to get the base directory of a repository
+  # Try running it, but don't die if we don't have hg installed.
+  # NOTE: we try Mercurial first as it can sit on top of an SVN working copy.
+  try:
+    out, returncode = RunShellWithReturnCode(["hg", "root"])
+    if returncode == 0:
+      return (VCS_MERCURIAL, out.strip())
+  except OSError, (errno, message):
+    if errno != 2:  # ENOENT -- they don't have hg installed.
+      raise
+
+  # Subversion has a .svn in all working directories.
+  if os.path.isdir('.svn'):
+    logging.info("Guessed VCS = Subversion")
+    return (VCS_SUBVERSION, None)
+
+  # Git has a command to test if you're in a git tree.
+  # Try running it, but don't die if we don't have git installed.
+  try:
+    out, returncode = RunShellWithReturnCode(["git", "rev-parse",
+                                              "--is-inside-work-tree"])
+    if returncode == 0:
+      return (VCS_GIT, None)
+  except OSError, (errno, message):
+    if errno != 2:  # ENOENT -- they don't have git installed.
+      raise
+
+  return (VCS_UNKNOWN, None)
+
+
 def GuessVCS(options):
   """Helper to guess the version control system.
 
@@ -1221,32 +1269,13 @@ def GuessVCS(options):
   Returns:
     A VersionControlSystem instance. Exits if the VCS can't be guessed.
   """
-  # Mercurial has a command to get the base directory of a repository
-  # Try running it, but don't die if we don't have hg installed.
-  # NOTE: we try Mercurial first as it can sit on top of an SVN working copy.
-  try:
-    out, returncode = RunShellWithReturnCode(["hg", "root"])
-    if returncode == 0:
-      return MercurialVCS(options, out.strip())
-  except OSError, (errno, message):
-    if errno != 2:  # ENOENT -- they don't have hg installed.
-      raise
-
-  # Subversion has a .svn in all working directories.
-  if os.path.isdir('.svn'):
-    logging.info("Guessed VCS = Subversion")
+  (vcs, extra_output) = GuessVCSName()
+  if vcs == VCS_MERCURIAL:
+    return MercurialVCS(options, extra_output)
+  elif vcs == VCS_SUBVERSION:
     return SubversionVCS(options)
-
-  # Git has a command to test if you're in a git tree.
-  # Try running it, but don't die if we don't have git installed.
-  try:
-    out, returncode = RunShellWithReturnCode(["git", "rev-parse",
-                                              "--is-inside-work-tree"])
-    if returncode == 0:
-      return GitVCS(options)
-  except OSError, (errno, message):
-    if errno != 2:  # ENOENT -- they don't have git installed.
-      raise
+  elif vcs == VCS_GIT:
+    return GitVCS(options)
 
   ErrorExit(("Could not guess version control system. "
              "Are you in a working copy directory?"))
