@@ -163,7 +163,7 @@ class PatchSet(db.Model):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty()
-  
+
   def update_comment_count(self, n):
     """Increment the n_comments property by n.
 
@@ -521,7 +521,7 @@ class Account(db.Model):
   def put(self):
     self.lower_email = str(self.email).lower()
     self.lower_nickname = self.nickname.lower()
-    db.Model.put(self)
+    super(Account, self).put()
 
   @classmethod
   def get_account_for_user(cls, user):
@@ -564,6 +564,14 @@ class Account(db.Model):
     assert email
     key = '<%s>' % email
     return cls.get_by_key_name(key)
+
+  @classmethod
+  def get_by_key_name(cls, key, **kwds):
+    """Override db.Model.get_by_key_name() to use cached value if possible."""
+    if not kwds and cls.current_user_account is not None:
+      if key == cls.current_user_account.key().name():
+        return cls.current_user_account
+    return super(Account, cls).get_by_key_name(key, **kwds)
 
   @classmethod
   def get_nickname_for_email(cls, email, default=None):

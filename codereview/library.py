@@ -99,6 +99,9 @@ def show_user(email, arg=None, autoescape=None, memcache_results=None):
 @register.filter
 def show_users(email_list, arg=None):
   """Render list of links to each user's dashboard."""
+  if not email_list:
+    # Don't wast time calling memcache with an empty list.
+    return ''
   memcache_results = memcache.get_multi(email_list, key_prefix='show_user:')
   return django.utils.safestring.mark_safe(', '.join(
       show_user(email, arg, memcache_results=memcache_results)
