@@ -133,7 +133,8 @@ def FetchBase(base, patch):
     msg = 'Error fetching %s: HTTP status %s' % (url, result.status_code)
     logging.warn('FetchBase: %s', msg)
     raise FetchError(msg)
-  return models.Content(text=ToText(result.content), parent=patch)
+  return models.Content(text=ToText(UnifyLinebreaks(result.content)),
+                        parent=patch)
 
 
 def _MakeUrl(base, filename, rev):
@@ -803,7 +804,23 @@ def ToText(text):
   Returns:
     A db.Text instance.
   """
-  try:
-    return db.Text(text, encoding='utf-8')
-  except UnicodeDecodeError:
-    return db.Text(text, encoding='latin-1')
+  if isinstance(text, unicode):
+    # A TypeError is raised if text is unicode and an encoding is given.
+    return db.Text(text)
+  else:
+    try:
+      return db.Text(text, encoding='utf-8')
+    except UnicodeDecodeError:
+      return db.Text(text, encoding='latin-1')
+
+
+def UnifyLinebreaks(text):
+  """Helper to return a string with all line breaks converted to LF.
+
+  Args:
+    text: a string.
+
+  Returns:
+    A string with all line breaks converted to LF.
+  """
+  return text.replace('\r\n', '\n').replace('\r', '\n')

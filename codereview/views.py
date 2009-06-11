@@ -916,7 +916,7 @@ def upload_content(request):
     if patch.is_binary:
       content.data = data
     else:
-      content.text = engine.ToText(data)
+      content.text = engine.ToText(engine.UnifyLinebreaks(data))
     content.checksum = checksum
   content.put()
   return HttpResponse('OK', content_type='text/plain')
@@ -946,8 +946,9 @@ def upload_patch(request):
   if patchset.data:
     return HttpResponse('ERROR: Can\'t upload patches to patchset with data.',
                         content_type='text/plain')
+  text = engine.ToText(engine.UnifyLinebreaks(form.get_uploaded_patch()))
   patch = models.Patch(patchset=patchset,
-                       text=engine.ToText(form.get_uploaded_patch()),
+                       text=text,
                        filename=form.cleaned_data['filename'], parent=patchset)
   patch.put()
   if form.cleaned_data.get('content_upload'):
@@ -1054,7 +1055,7 @@ def _get_data_url(form):
     return None
 
   if data is not None:
-    data = db.Blob(data.read())
+    data = db.Blob(engine.UnifyLinebreaks(data.read()))
     url = None
   elif url:
     try:
@@ -1065,7 +1066,7 @@ def _get_data_url(form):
     if fetch_result.status_code != 200:
       form.errors['url'] = ['HTTP status code %s' % fetch_result.status_code]
       return None
-    data = db.Blob(fetch_result.content)
+    data = db.Blob(engine.UnifyLinebreaks(fetch_result.content))
 
   return data, url, separate_patches
 
