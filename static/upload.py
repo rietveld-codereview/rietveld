@@ -728,6 +728,13 @@ class VersionControlSystem(object):
       return False
     return mimetype.startswith("image/")
 
+  def IsBinary(self, filename):
+    """Returns true if the guessed mimetyped isnt't in text group."""
+    mimetype = mimetypes.guess_type(filename)[0]
+    if not mimetype:
+      return False  # e.g. README, "real" binaries usually have an extension
+    return not mimetype.startswith("text/")
+
 
 class SubversionVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Subversion."""
@@ -996,9 +1003,11 @@ class SubversionVCS(VersionControlSystem):
 class GitVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Git."""
 
+  NULL_HASH = "0"*40
+
   def __init__(self, options):
     super(GitVCS, self).__init__(options)
-    # Map of filename -> hash of base file.
+    # Map of filename -> (hash before, hash after) of base file.
     self.base_hashes = {}
 
   def GenerateDiff(self, extra_args):
@@ -1021,9 +1030,9 @@ class GitVCS(VersionControlSystem):
         # The "index" line in a git diff looks like this (long hashes elided):
         #   index 82c0d44..b2cee3f 100755
         # We want to save the left hash, as that identifies the base file.
-        match = re.match(r"index (\w+)\.\.", line)
+        match = re.match(r"index (\w+)\.\.(\w+)", line)
         if match:
-          self.base_hashes[filename] = match.group(1)
+          self.base_hashes[filename] = (match.group(1), match.group(2))
       svndiff.append(line + "\n")
     if not filecount:
       ErrorExit("No valid patches found in output from git diff")
@@ -1034,19 +1043,33 @@ class GitVCS(VersionControlSystem):
                       silent_ok=True)
     return status.splitlines()
 
+  def GetFileContent(self, file_hash, is_binary):
+    """Returns the content of a file identified by its git hash."""
+    data, retcode = RunShellWithReturnCode(["git", "show", file_hash],
+                                            universal_newlines=not is_binary)
+    if retcode:
+      ErrorExit("Got error status from 'git show %s'" % file_hash)
+    return data
+
   def GetBaseFile(self, filename):
-    hash = self.base_hashes[filename]
+    hash_before, hash_after = self.base_hashes[filename]
     base_content = None
     new_content = None
-    is_binary = False
-    if hash == "0" * 40:  # All-zero hash indicates no base file.
+    is_binary = self.IsBinary(filename)
+
+    if hash_before == self.NULL_HASH:  # All-zero hash indicates no base file.
       status = "A"
       base_content = ""
     else:
       status = "M"
-      base_content, returncode = RunShellWithReturnCode(["git", "show", hash])
-      if returncode:
-        ErrorExit("Got error status from 'git show %s'" % hash)
+      if not is_binary or self.IsImage(filename):
+        base_content = self.GetFileContent(hash_before, is_binary)
+
+    if is_binary and self.IsImage(filename) and not hash_after == "0" * 40:
+      new_content = self.GetFileContent(hash_after, is_binary)
+
+    if hash_after == self.NULL_HASH:
+      status = "D"
     return (base_content, new_content, is_binary, status)
 
 
