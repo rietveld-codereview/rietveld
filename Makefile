@@ -22,14 +22,11 @@ serve_email:
 serve_remote_email:
 	$(DEV_APPSERVER) --enable_sendmail --address 0.0.0.0 .
 
-release: make_release.sh django/.svn
-	sh make_release.sh
-
-update: release
+update:
 	@echo "Updating `cat app.yaml | sed -n 's/^application: *//p'`"
 	@echo "This is Rietveld r`svn info | sed -n 's/^Revision: *//p'`" \
 		>templates/live_revision.html
-	$(APPCFG) update release
+	$(APPCFG) update .
 	@svn revert templates/live_revision.html
 
 upload: update
