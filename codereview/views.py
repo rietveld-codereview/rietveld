@@ -2357,7 +2357,13 @@ def repos(request):
   bad_branches = list(models.Branch.gql('WHERE owner = :1', None))
   if bad_branches:
     db.delete(bad_branches)
-  branches = models.Branch.gql('ORDER BY repo, category, name')
+  repo_map = {}
+  for repo in list(models.Repository.all()):
+    repo_map[str(repo.key())] = repo
+  branches = []
+  for branch in list(models.Branch.gql('ORDER BY repo, category, name')):
+    branch.repository = repo_map[str(branch._repo)]
+    branches.append(branch)
   return respond(request, 'repos.html', {'branches': branches})
 
 
