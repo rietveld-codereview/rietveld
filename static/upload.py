@@ -1155,8 +1155,12 @@ class MercurialVCS(VersionControlSystem):
       status = "M"
     else:
       status, _ = out[0].split(' ', 1)
+    if ":" in self.base_rev:
+      base_rev = self.base_rev.split(":", 1)[0]
+    else:
+      base_rev = self.base_rev
     if status != "A":
-      base_content = RunShell(["hg", "cat", "-r", self.base_rev, oldrelpath],
+      base_content = RunShell(["hg", "cat", "-r", base_rev, oldrelpath],
         silent_ok=True)
       is_binary = "\0" in base_content  # Mercurial's heuristic
     if status != "R":
@@ -1164,7 +1168,7 @@ class MercurialVCS(VersionControlSystem):
       is_binary = is_binary or "\0" in new_content
     if is_binary and base_content:
       # Fetch again without converting newlines
-      base_content = RunShell(["hg", "cat", "-r", self.base_rev, oldrelpath],
+      base_content = RunShell(["hg", "cat", "-r", base_rev, oldrelpath],
         silent_ok=True, universal_newlines=False)
     if not is_binary or not self.IsImage(relpath):
       new_content = None
