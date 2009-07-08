@@ -93,6 +93,13 @@
           <div><b>SVN Base:</b><br/>
             {%firstof issue.base%}
           </div>
+          <div><b>Visibility:</b><br/>
+            {%if issue.private%}
+                Private. Only viewable by reviewers and CCs.
+            {% else %}
+                Public.
+            {%endif%}
+          </div>
         </div>
       </td>
 

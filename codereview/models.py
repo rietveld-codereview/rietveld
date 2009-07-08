@@ -75,6 +75,7 @@ class Issue(db.Model):
   reviewers = db.ListProperty(db.Email)
   cc = db.ListProperty(db.Email)
   closed = db.BooleanProperty(default=False)
+  private = db.BooleanProperty(default=False)
   n_comments = db.IntegerProperty()
 
   _is_starred = None

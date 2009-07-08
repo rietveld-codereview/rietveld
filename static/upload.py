@@ -445,6 +445,9 @@ group.add_option("-r", "--reviewers", action="store", dest="reviewers",
 group.add_option("--cc", action="store", dest="cc",
                  metavar="CC", default=None,
                  help="Add CC (comma separated email addresses).")
+group.add_option("--private", action="store_true", dest="private",
+                 default=False,
+                 help="Make the issue restricted to reviewers and those CCed")
 # Upload options
 group = parser.add_option_group("Patch options")
 group.add_option("-m", "--message", action="store", dest="message",
@@ -1392,6 +1395,11 @@ def RealMain(argv, data=None):
         base_hashes += "|"
       base_hashes += checksum + ":" + file
   form_fields.append(("base_hashes", base_hashes))
+  if options.private:
+    if options.issue:
+      print "Warning: Private flag ignored when updating an existing issue."
+    else:
+      form_fields.append(("private", "1"))
   # If we're uploading base files, don't send the email before the uploads, so
   # that it contains the file status.
   if options.send_mail and options.download_base:

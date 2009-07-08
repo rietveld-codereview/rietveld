@@ -57,6 +57,7 @@ indexes:
 - kind: Issue
   properties:
   - name: closed
+  - name: private
   - name: modified
     direction: desc
 

@@ -124,6 +124,7 @@ class IssueBaseForm(forms.Form):
                        max_length=1000,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
+  private = forms.BooleanField(required=False, initial=False)
 
   def set_branch_choices(self, base=None):
     branches = models.Branch.gql('ORDER BY repo, category, name')
@@ -198,6 +199,7 @@ class UploadForm(forms.Form):
   description = forms.CharField(max_length=10000, required=False)
   reviewers = forms.CharField(max_length=1000, required=False)
   cc = forms.CharField(max_length=1000, required=False)
+  private = forms.BooleanField(required=False, initial=False)
   send_mail = forms.BooleanField(required=False)
   base_hashes = forms.CharField(required=False)
 
@@ -262,6 +264,7 @@ class EditLocalBaseForm(forms.Form):
                        max_length=1000,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
+  private = forms.BooleanField(required=False, initial=False)
   closed = forms.BooleanField(required=False)
 
   def get_base(self):
@@ -451,6 +454,14 @@ def _clean_int(value, default, min_value=None, max_value=None):
   return value
 
 
+def _can_view_issue(user, issue):
+  user_email = db.Email(user.email())
+  return (not issue.private
+          or issue.owner == user
+          or user_email in issue.cc
+          or user_email in issue.reviewers)
+
+
 ### Decorators for request handlers ###
 
 
@@ -499,6 +510,13 @@ def issue_required(func):
     if issue is None:
       return HttpResponseNotFound('No issue exists with that id (%s)' %
                                   issue_id)
+    if issue.private:
+      if request.user is None:
+        return HttpResponseRedirect(
+            users.create_login_url(request.get_full_path().encode('utf-8')))
+      if not _can_view_issue(request.user, issue):
+        return HttpResponseForbidden('You do not have permission to '
+                                     'view this issue')
     request.issue = issue
     return func(request, *args, **kwds)
 
@@ -627,7 +645,8 @@ def all(request):
   limit = _clean_int(request.GET.get('limit'), DEFAULT_LIMIT, 1, 100)
 
   query = db.GqlQuery('SELECT * FROM Issue '
-                      'WHERE closed = FALSE ORDER BY modified DESC')
+                      'WHERE closed = FALSE AND private = FALSE '
+                      'ORDER BY modified DESC')
   # Fetch one more to see if there should be a 'next' link
   issues = query.fetch(limit+1, offset)
   more = bool(issues[limit:])
@@ -691,7 +710,8 @@ def starred(request):
     issues = []
   else:
     issues = [issue for issue in models.Issue.get_by_id(stars)
-                    if issue is not None]
+                    if issue is not None
+                    and _can_view_issue(request.user, issue)]
     _optimize_draft_counts(issues)
   return respond(request, 'starred.html', {'issues': issues})
 
@@ -710,13 +730,15 @@ def _show_user(request):
       user))
   review_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
-      user.email()) if issue.owner != user]
-  closed_issues = list(db.GqlQuery(
+      'WHERE closed = FALSE AND reviewers = :1 '
+      'ORDER BY modified DESC', user.email())
+      if issue.owner != user and _can_view_issue(request.user, issue)]
+  closed_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
       'ORDER BY modified DESC',
-      datetime.datetime.now() - datetime.timedelta(days=7), user))
+      datetime.datetime.now() - datetime.timedelta(days=7), user)
+      if _can_view_issue(request.user, issue)]
   _optimize_draft_counts(my_issues + review_issues + closed_issues)
   return respond(request, 'user.html',
                  {'email': user.email(),
@@ -996,6 +1018,7 @@ def _make_new(request, form):
                          base=base,
                          reviewers=reviewers,
                          cc=cc,
+                         private=form.cleaned_data.get('private', False),
                          n_comments=0)
     issue.put()
 
@@ -1413,6 +1436,7 @@ def edit(request):
                              'reviewers': ', '.join(reviewers),
                              'cc': ', '.join(ccs),
                              'closed': issue.closed,
+                             'private': issue.private,
                              })
     if not issue.local_base:
       form.set_branch_choices(base)
@@ -1438,6 +1462,7 @@ def edit(request):
   issue.subject = cleaned_data['subject']
   issue.description = cleaned_data['description']
   issue.closed = cleaned_data['closed']
+  issue.private = cleaned_data.get('private', False)
   base_changed = (issue.base != base)
   issue.base = base
   issue.reviewers = reviewers
