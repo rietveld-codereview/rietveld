@@ -455,6 +455,8 @@ def _clean_int(value, default, min_value=None, max_value=None):
 
 
 def _can_view_issue(user, issue):
+  if user is None:
+    return not issue.private
   user_email = db.Email(user.email())
   return (not issue.private
           or issue.owner == user
