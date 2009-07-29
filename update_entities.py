@@ -5,15 +5,16 @@
 #  - Make sure that the remote API is included in app.yaml.
 #  - Run "tools/appengine_console.py APP_ID".
 #  - Import this module.
+#  - Import models from codereview.
 #  - update_entities.run(models.Issue) updates issues.
 
 
 import logging
 from google.appengine.ext import db
 from codereview import models
+import urllib2
 
-def run(model_class, batch_size=100):
-    last_key = None
+def run(model_class, batch_size=100, last_key=None):
     while True:
       q = model_class.all()
       if last_key:
@@ -23,7 +24,13 @@ def run(model_class, batch_size=100):
 
       while True:
         try:
-          batch = q.fetch(this_batch_size)
+          try:
+            batch = q.fetch(this_batch_size)
+          except urllib2.URLError, err:
+            if 'timed out' in str(err):
+              raise db.Timeout
+            else:
+              raise
           break
         except db.Timeout:
           logging.warn("Query timed out, retrying")
