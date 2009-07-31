@@ -129,14 +129,28 @@ class UrlAppendViewSettingsNode(django.template.Node):
 
   def render(self, context):
     """Returns a HTML fragment."""
+    url_params = []
+
+    current_context = -1
     try:
-      current_context = int(self.view_context.resolve(context))
-      current_colwidth = int(self.view_colwidth.resolve(context))
-    except (django.template.VariableDoesNotExist, TypeError, ValueError):
-      return ''
-    if current_context is not None and current_colwidth is not None:
-      return ('?context=%d&column_width=%d'
-              % (current_context, current_colwidth))
+      current_context = self.view_context.resolve(context)
+    except django.template.VariableDoesNotExist:
+      pass
+    if current_context is None:
+      url_params.append('context=')
+    elif isinstance(current_context, int) and current_context > 0:
+      url_params.append('context=%d' % current_context)
+
+    current_colwidth = None
+    try:
+      current_colwidth = self.view_colwidth.resolve(context)
+    except django.template.VariableDoesNotExist:
+      pass
+    if current_colwidth is not None:
+      url_params.append('colum_width=%d' % current_colwidth)
+
+    if url_params:
+      return '?%s' % '&'.join(url_params)
     return ''
 
 @register.tag

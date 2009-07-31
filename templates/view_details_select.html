@@ -6,6 +6,9 @@
       {%ifequal val context%} selected="selected"{%endifequal%}>
       {{val}} lines</option>
     {%endfor%}
+    <option value=""
+	    {%if not context %} selected="selected"{%endif%}>
+      Whole file</option>
   </select>
   <label for="id_column_width">Column Width:</label>
   <input type="text" value="{{column_width}}" id="id_column_width"

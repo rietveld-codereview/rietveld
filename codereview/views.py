@@ -321,7 +321,8 @@ class MiniPublishForm(forms.Form):
                                     widget=forms.HiddenInput())
 
 
-FORM_CONTEXT_VALUES = [(x, "%d lines" % x) for x in models.CONTEXT_CHOICES]
+FORM_CONTEXT_VALUES = [(x, '%d lines' % x) for x in models.CONTEXT_CHOICES]
+FORM_CONTEXT_VALUES.append(('', 'Whole file'))
 
 
 class SettingsForm(forms.Form):
@@ -329,6 +330,7 @@ class SettingsForm(forms.Form):
   nickname = forms.CharField(max_length=30)
   context = forms.IntegerField(
     widget=forms.Select(choices=FORM_CONTEXT_VALUES),
+    required=False,
     label='Context')
   column_width = forms.IntegerField(label='Column Width',
                                     initial=engine.DEFAULT_COLUMN_WIDTH,
@@ -1631,13 +1633,17 @@ def _get_context_for_user(request):
   If an invalid value is found, the value is overwritten with
   engine.DEFAULT_CONTEXT.
   """
+  get_param = request.GET.get('context') or None
+  if 'context' in request.GET and get_param is None:
+    # User wants to see whole file. No further processing is needed.
+    return get_param
   if request.user:
     account = models.Account.current_user_account
     default_context = account.default_context
   else:
     default_context = engine.DEFAULT_CONTEXT
-  context = _clean_int(request.GET.get('context'), default_context)
-  if context not in models.CONTEXT_CHOICES:
+  context = _clean_int(get_param, default_context)
+  if context is not None and context not in models.CONTEXT_CHOICES:
     context = engine.DEFAULT_CONTEXT
   return context
 
@@ -1724,43 +1730,58 @@ def _get_diff_table_rows(request, patch, context, column_width):
 
 @patch_required
 def diff_skipped_lines(request, id_before, id_after, where, column_width):
-  """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines"""
+  """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines.
+
+  *where* indicates which lines should be expanded:
+    'b' - move marker line to bottom and expand above
+    't' - move marker line to top and expand below
+    'a' - expand all skipped lines
+  """
   patchset = request.patchset
   patch = request.patch
+  if where == 'a':
+    context = None
+  else:
+    context = _get_context_for_user(request) or 100
 
   column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
                             engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
 
-  # TODO: allow context = None?
   try:
-    rows = _get_diff_table_rows(request, patch, 10000, column_width)
+    rows = _get_diff_table_rows(request, patch, None, column_width)
   except engine.FetchError, err:
-    # Return HttpResponse because the JS part expects a 200 status code.
-    return HttpResponse('<font color="red">Error: %s; please report!</font>' %
-                        err)
-  return _get_skipped_lines_response(rows, id_before, id_after, where)
+    return HttpResponse('Error: %s; please report!' % err, status=500)
+  return _get_skipped_lines_response(rows, id_before, id_after, where, context)
 
 
-def _get_skipped_lines_response(rows, id_before, id_after, where):
+def _get_skipped_lines_response(rows, id_before, id_after, where, context):
   """Helper function that creates a Response object for skipped lines"""
   response_rows = []
-  id_before = int(id_before)
-  id_after = int(id_after)
-
-  if where == "b":
-    rows.reverse()
+  id_before_start = int(id_before)
+  id_after_end = int(id_after)
+  if context is not None:
+    id_before_end = id_before_start+context
+    id_after_start = id_after_end-context
+  else:
+    id_before_end = id_after_start = None
 
   for row in rows:
     m = re.match('^<tr( name="hook")? id="pair-(?P<rowcount>\d+)">', row)
     if m:
       curr_id = int(m.groupdict().get("rowcount"))
-      if curr_id < id_before or curr_id > id_after:
-        continue
-      if where == "b" and curr_id <= id_after:
+      # expand below marker line
+      if (where == 'b'
+          and curr_id > id_after_start and curr_id <= id_after_end+1):
         response_rows.append(row)
-      elif where == "t" and curr_id >= id_before:
+      # expand above marker line
+      elif (where == 't'
+            and curr_id >= id_before_start and curr_id < id_before_end):
         response_rows.append(row)
-      if len(response_rows) >= 10:
+      # expand all skipped lines
+      elif (where == 'a'
+            and curr_id >= id_before_start and curr_id <= id_after_end):
+        response_rows.append(row)
+      if context is not None and len(response_rows) >= 2*context:
         break
 
   # Create a usable structure for the JS part
@@ -1849,11 +1870,17 @@ def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
   column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
                             engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
 
+  if where == 'a':
+    context = None
+  else:
+    context = _get_context_for_user(request) or 100
+
   data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, 10000,
                          column_width)
   if isinstance(data, HttpResponseNotFound):
     return data
-  return _get_skipped_lines_response(data["rows"], id_before, id_after, where)
+  return _get_skipped_lines_response(data["rows"], id_before, id_after,
+                                     where, context)
 
 
 def _add_next_prev(patchset, patch):

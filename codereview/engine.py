@@ -268,7 +268,8 @@ def _ShortenBuffer(buffer, context):
 
   Args:
     buffer: a list of strings representing HTML table rows.
-    context: Maximum number of visible context lines.
+    context: Maximum number of visible context lines. If None all lines are
+      returned.
 
   Yields:
     If the buffer has fewer than 3 times context items, yield all
@@ -276,7 +277,7 @@ def _ShortenBuffer(buffer, context):
     table row representing the contraction, and the last context
     items.
   """
-  if len(buffer) < 3*context:
+  if context is None or len(buffer) < 3*context:
     for t in buffer:
       yield t
   else:
@@ -287,23 +288,31 @@ def _ShortenBuffer(buffer, context):
         last_id = int(m.groupdict().get("rowcount"))
       yield t
     skip = len(buffer) - 2*context
-    if skip <= 10:
-      expand_link = ('<a href="javascript:M_expandSkipped(%(before)d, '
-                     '%(after)d, \'b\', %(skip)d)">Show</a>')
-    else:
-      expand_link = ('<a href="javascript:M_expandSkipped(%(before)d, '
-                     '%(after)d, \'t\', %(skip)d)">Show 10 above</a> '
-                     '<a href="javascript:M_expandSkipped(%(before)d, '
-                     '%(after)d, \'b\', %(skip)d)">Show 10 below</a> ')
-    expand_link = expand_link % {'before': last_id+1,
-                                 'after': last_id+skip,
-                                 'skip': last_id}
+    expand_link = []
+    if skip > 3*context:
+      expand_link.append(('<a href="javascript:M_expandSkipped(%(before)d, '
+                          '%(after)d, \'t\', %(skip)d)">'
+                          'Expand %(context)d before'
+                          '</a> | '))
+    expand_link.append(('<a href="javascript:M_expandSkipped(%(before)d, '
+                        '%(after)d, \'a\', %(skip)d)">Expand all</a>'))
+    if skip > 3*context:
+      expand_link.append((' | '
+                          '<a href="javascript:M_expandSkipped(%(before)d, '
+                          '%(after)d, \'b\', %(skip)d)">'
+                          'Expand %(context)d after'
+                          '</a>'))
+    expand_link = ''.join(expand_link) % {'before': last_id+1,
+                                          'after': last_id+skip,
+                                          'skip': last_id,
+                                          'context': max(context, None)}
     yield ('<tr id="skip-%d"><td colspan="2" align="center" '
            'style="background:lightblue">'
            '(...skipping <span id="skipcount-%d">%d</span> matching lines...) '
-           '<span id="skiplinks-%d">%s</span>'
+           '<span id="skiplinks-%d">%s</span>  '
+           '<span id="skiploading-%d" style="visibility:hidden;">Loading...</span>'
            '</td></tr>\n' % (last_id, last_id, skip,
-                             last_id, expand_link))
+                             last_id, expand_link, last_id))
     for t in buffer[-context:]:
       yield t
 

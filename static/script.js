@@ -2551,23 +2551,35 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
     html = html + '</td>';
     tr.innerHTML = html;
   }
+  document.getElementById('skiploading-'+id_skip).style.visibility = 'visible';
+  var context_select = document.getElementById('id_context');
+  var context = null;
+  if (context_select) {
+    context = context_select.value;
+  }
   aborted = false;
   httpreq.onreadystatechange = function () {
     if (httpreq.readyState == 4 && !aborted) {
       if (httpreq.status == 200) {
         response = eval('('+httpreq.responseText+')');
+	var last_row = null;
         for (var i=0; i<response.length; i++) {
           var data = response[i];
           var row = document.createElement("tr");
           for (var j=0; j<data[0].length; j++) {
             row.setAttribute(data[0][j][0], data[0][j][1]);
           }
-          if ( where == 't' ) {
+          if ( where == 't' || where == 'a') {
             tr.parentNode.insertBefore(row, tr);
           } else {
-            tr.parentNode.insertBefore(row, tr.nextSibling);
+	    if (last_row) {
+              tr.parentNode.insertBefore(row, last_row.nextSibling);
+	    } else {
+	      tr.parentNode.insertBefore(row, tr.nextSibling);
+	    }
           }
           row.innerHTML = data[1];
+	  last_row = row;
         }
         var curr = document.getElementById('skipcount-'+id_skip);
         var new_count = parseInt(curr.innerHTML)-response.length/2;
@@ -2580,23 +2592,46 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
             var new_after = id_after;
           }
           curr.innerHTML = new_count;
-          if ( new_count <= 10 ) {
-  	    html = '<a href="javascript:M_expandSkipped('+new_before;
-            html += ','+new_after+',\'b\','+id_skip+');">Show</a>  ';
-          } else {
-            var html = '<a href="javascript:M_expandSkipped('+new_before;
-            html += ','+new_after+',\'t\', '+id_skip+');">Show 10 above</a> ';
-            html += '<a href="javascript:M_expandSkipped('+new_before;
-            html += ','+new_after+',\'b\','+id_skip+');">Show 10 below</a> ';
+	  html = '';
+	  if ( new_count > 3*context ) {
+	    html += '<a href="javascript:M_expandSkipped('+new_before;
+            html += ','+new_after+',\'t\', '+id_skip+');">';
+	    html += 'Expand '+context+' before';
+	    html += '</a> | ';
+	  }
+	  html += '<a href="javascript:M_expandSkipped('+new_before;
+	  html += ','+new_after+',\'a\','+id_skip+');">Expand all</a>';
+          if ( new_count > 3*context ) {
+	    var val = parseInt(new_after)+1;
+            html += ' | <a href="javascript:M_expandSkipped('+new_before;
+            html += ','+val+',\'b\','+id_skip+');">';
+	    html += 'Expand '+context+' after';
+	    html += '</a>';
           }
           document.getElementById('skiplinks-'+(id_skip)).innerHTML = html;
+	  var loading_node = document.getElementById('skiploading-'+id_skip);
+	  loading_node.style.visibility = 'hidden';
         } else {
           tr.parentNode.removeChild(tr);
         }
+	hookState.updateHooks();
         if (hookState.hookPos != -2 &&
-            M_isElementVisible(window, hookState.indicator)) {
-          hookState.gotoHook(-1);
+	    M_isElementVisible(window, hookState.indicator)) {
+	  // Restore indicator position on screen, but only if the indicator
+	  // is visible. We don't know if we have to scroll up or down to
+	  // make the indicator visible. Therefore the current hook is
+	  // internally set to the previous hook and
+	  // then gotoNextHook() does everything needed to end up with a
+	  // clean hookState and the indicator visible on screen.
+          hookState.hookPos = hookState.hookPos - 1;
+	  hookState.gotoNextHook();
         }
+      } else {
+	msg = '<td colspan="2" align="center"><span style="color:red;">';
+	msg += 'An error occurred ['+httpreq.status+']. ';
+	msg += 'Please report.';
+	msg += '</span></td>';
+	tr.innerHTML = msg;
       }
     }
   }
@@ -2604,6 +2639,9 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
   colwidth = document.getElementById('id_column_width').value;
 
   url = skipped_lines_url+id_before+'/'+id_after+'/'+where+'/'+colwidth;
+  if (context) {
+    url += '?context='+context;
+  }
   httpreq.open('GET', url, true);
   httpreq.send('');
 }
