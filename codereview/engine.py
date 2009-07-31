@@ -724,8 +724,16 @@ def RenderUnifiedTableRows(request, parsed_lines):
     elif new_line_no:
       row1_id = 'id="newcode%d"' % new_line_no
       row2_id = 'id="new-line-%d"' % new_line_no
-    rows.append('<tr><td class="udiff" %s>%s</td></tr>' %
-                (row1_id, cgi.escape(line_text)))
+
+    if line_text[0] == '+':
+      style = 'udiffadd'
+    elif line_text[0] == '-':
+      style = 'udiffremove'
+    else:
+      style = ''
+    
+    rows.append('<tr><td class="udiff %s" %s>%s</td></tr>' %
+                (style, row1_id, cgi.escape(line_text)))
 
     frags = []
     if old_line_no in old_dict or new_line_no in new_dict:
