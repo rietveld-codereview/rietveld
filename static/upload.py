@@ -259,8 +259,8 @@ class AbstractRpcServer(object):
         us to the URL we provided.
 
     If we attempt to access the upload API without first obtaining an
-    authentication cookie, it returns a 401 response and directs us to
-    authenticate ourselves with ClientLogin.
+    authentication cookie, it returns a 401 response (or a 302) and
+    directs us to authenticate ourselves with ClientLogin.
     """
     for i in range(3):
       credentials = self.auth_function()
@@ -341,7 +341,7 @@ class AbstractRpcServer(object):
         except urllib2.HTTPError, e:
           if tries > 3:
             raise
-          elif e.code == 401:
+          elif e.code == 401 or e.code == 302:
             self._Authenticate()
 ##           elif e.code >= 500 and e.code < 600:
 ##             # Server Error - try again.
