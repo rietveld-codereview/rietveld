@@ -147,7 +147,7 @@ class UrlAppendViewSettingsNode(django.template.Node):
     except django.template.VariableDoesNotExist:
       pass
     if current_colwidth is not None:
-      url_params.append('colum_width=%d' % current_colwidth)
+      url_params.append('colum_width=%s' % current_colwidth)
 
     if url_params:
       return '?%s' % '&'.join(url_params)
