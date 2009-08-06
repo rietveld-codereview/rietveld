@@ -1609,8 +1609,9 @@ def patch_helper(request, nav_type='patch'):
                   'patchset': request.patchset,
                   'rows': rows,
                   'issue': request.issue,
-                  'context': request.GET.get('context'),
-                  'column_width': request.GET.get('column_width'),
+                  'context': _clean_int(request.GET.get('context'), -1),
+                  'column_width': _clean_int(request.GET.get('column_width'),
+                                             None),
                   })
 
 
@@ -1654,7 +1655,6 @@ def _get_column_width_for_user(request):
     default_column_width = account.default_column_width
   else:
     default_column_width = engine.DEFAULT_COLUMN_WIDTH
-
   column_width = _clean_int(request.GET.get('column_width'),
                             default_column_width,
                             engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
