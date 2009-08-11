@@ -728,10 +728,10 @@ def show_user(request):
 
 def _show_user(request):
   user = request.user_to_show
-  my_issues = list(db.GqlQuery(
+  my_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC',
-      user))
+      'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC', user)
+      if _can_view_issue(request.user, issue)]
   review_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1 '
