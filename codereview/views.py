@@ -21,6 +21,7 @@
 # Python imports
 import os
 import cgi
+import email
 import random
 import re
 import logging
@@ -2388,6 +2389,56 @@ def lint_patch(request):
     request.patch.put()
 
   return HttpResponse(''.join(result))
+
+  
+@post_required
+def updatefromemail(request):
+  """/updatefromemail - Update an issue by email."""
+  #logging.error('raw_post_data: %s', request.raw_post_data)
+  message = email.message_from_string(request.raw_post_data)
+
+  xsender = message.get('X-Sender')
+  if xsender and xsender.find('@apphosting.bounces.google.com') != -1:
+    #logging.error('3 %s', body)
+    return HttpResponse('OK')  # Message sent from Rietveld.
+
+  body = ''
+  sender = message.get('From')
+  if message.is_multipart():
+    for payload in message.get_payload():
+      if payload.get_content_maintype() == 'text' and payload.get_content_subtype() == 'plain':
+        body = payload.get_payload()
+  else:
+    if message.get_content_maintype() == 'text' and message.get_content_subtype() == 'plain':
+      body = message.get_payload()
+
+  if not sender or not body:
+    return HttpResponse('OK')
+  if sender.find('<') != -1 and sender.endswith('>'):
+    sender = sender[sender.find('<') + 1:]
+    sender = sender[0:-1]
+
+  index = body.rfind('http://codereview.chromium.org/')
+  if index == -1:
+    return HttpResponse('OK')
+
+  last_url = body[index:]
+  match = re.search(r"http://codereview.chromium.org/(\d+)",last_url)
+  if not match:
+    return HttpResponse('OK')
+
+  issue_id = int(match.group(1))
+  #logging.error('sender %s, body %s, issue %d.', sender, body, issue_id)
+  issue = models.Issue.get_by_id(issue_id)
+  if not issue:
+    return HttpResponse('OK')
+
+  sender = db.Email(sender)
+  msg = models.Message(issue=issue, sender=sender, text=db.Text(body),  parent=issue)
+  msg.put()
+  
+  return HttpResponse('OK')
+
 
 
 ### Repositories and Branches ###
