@@ -1,7 +1,7 @@
 <tr {%if issue.num_drafts%}style="color:red"{%endif%} name="issue">
   <td class="first" width="14"><img src="/static/closedtriangle.gif" 
     style="visibility: hidden;" width="12" height="9" /></td>
-  <td width="34" align="center">{%include "issue_star.html"%}
+  <td width="34" align="center" style="white-space: nowrap">{%include "issue_star.html"%}
 {%if issue.edit_allowed and not issue.closed%}
 <span class="issue-close" id="issue-close-{{issue.key.id}}">
     <a href="javascript:M_closeIssue({{issue.key.id}})">
