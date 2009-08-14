@@ -11,7 +11,11 @@
 {%block mainmenu2%}
   {%if user%}
     {%comment%}
-    <a href="{%url codereview.views.new%}">Create Issue</a>
+    {%if uploadpy_hint%}
+      <a href="{%url codereview.views.use_uploadpy%}">Create Issue</a>
+    {%else%}
+      <a href="{%url codereview.views.new%}">Create Issue</a>
+    {%endif%}
     |
     {%endcomment%}
     <a href="{%url codereview.views.mine%}">My Issues</a>
@@ -32,6 +36,13 @@
 {%block body%}
   <h2>
     {%include "issue_star.html"%}
+{%if issue.edit_allowed and not issue.closed%}
+<span class="issue-close" id="issue-close-{{issue.key.id}}">
+    <a href="javascript:M_closeIssue({{issue.key.id}})">
+      <img src="/static/close.gif" title="Close This Issue" width="15"
+	   height="15" border="0"></a>
+</span>
+{%endif%}
     Issue <a href="{%url codereview.views.show issue.key.id%}"
                onmouseover="M_showPopUp(this, 'popup-issue');">
             {{issue.key.id}}</a>:
@@ -85,6 +96,13 @@
           </div>
           <div><b>SVN Base:</b><br/>
             {%firstof issue.base%}
+          </div>
+          <div><b>Visibility:</b><br/>
+            {%if issue.private%}
+                Private. Only viewable by reviewers and CCs.
+            {% else %}
+                Public.
+            {%endif%}
           </div>
         </div>
       </td>

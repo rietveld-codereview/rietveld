@@ -133,7 +133,8 @@ def FetchBase(base, patch):
     msg = 'Error fetching %s: HTTP status %s' % (url, result.status_code)
     logging.warn('FetchBase: %s', msg)
     raise FetchError(msg)
-  return models.Content(text=ToText(result.content), parent=patch)
+  return models.Content(text=ToText(UnifyLinebreaks(result.content)),
+                        parent=patch)
 
 
 def _MakeUrl(base, filename, rev):
@@ -180,10 +181,13 @@ def _MakeUrl(base, filename, rev):
 
 
 DEFAULT_CONTEXT = 10
-
+DEFAULT_COLUMN_WIDTH = 80
+MIN_COLUMN_WIDTH = 3
+MAX_COLUMN_WIDTH = 2000
 
 def RenderDiffTableRows(request, old_lines, chunks, patch,
-                        colwidth=80, debug=False, context=DEFAULT_CONTEXT):
+                        colwidth=DEFAULT_COLUMN_WIDTH, debug=False,
+                        context=DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff for a patch.
 
   Args:
@@ -206,7 +210,8 @@ def RenderDiffTableRows(request, old_lines, chunks, patch,
 
 
 def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                         colwidth=80, debug=False, context=DEFAULT_CONTEXT):
+                         colwidth=DEFAULT_COLUMN_WIDTH, debug=False,
+                         context=DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff between two patches.
 
   Args:
@@ -263,7 +268,8 @@ def _ShortenBuffer(buffer, context):
 
   Args:
     buffer: a list of strings representing HTML table rows.
-    context: Maximum number of visible context lines.
+    context: Maximum number of visible context lines. If None all lines are
+      returned.
 
   Yields:
     If the buffer has fewer than 3 times context items, yield all
@@ -271,7 +277,7 @@ def _ShortenBuffer(buffer, context):
     table row representing the contraction, and the last context
     items.
   """
-  if len(buffer) < 3*context:
+  if context is None or len(buffer) < 3*context:
     for t in buffer:
       yield t
   else:
@@ -282,29 +288,37 @@ def _ShortenBuffer(buffer, context):
         last_id = int(m.groupdict().get("rowcount"))
       yield t
     skip = len(buffer) - 2*context
-    if skip <= 10:
-      expand_link = ('<a href="javascript:M_expandSkipped(%(before)d, '
-                     '%(after)d, \'b\', %(skip)d)">Show</a>')
-    else:
-      expand_link = ('<a href="javascript:M_expandSkipped(%(before)d, '
-                     '%(after)d, \'t\', %(skip)d)">Show 10 above</a> '
-                     '<a href="javascript:M_expandSkipped(%(before)d, '
-                     '%(after)d, \'b\', %(skip)d)">Show 10 below</a> ')
-    expand_link = expand_link % {'before': last_id+1,
-                                 'after': last_id+skip,
-                                 'skip': last_id}
+    expand_link = []
+    if skip > 3*context:
+      expand_link.append(('<a href="javascript:M_expandSkipped(%(before)d, '
+                          '%(after)d, \'t\', %(skip)d)">'
+                          'Expand %(context)d before'
+                          '</a> | '))
+    expand_link.append(('<a href="javascript:M_expandSkipped(%(before)d, '
+                        '%(after)d, \'a\', %(skip)d)">Expand all</a>'))
+    if skip > 3*context:
+      expand_link.append((' | '
+                          '<a href="javascript:M_expandSkipped(%(before)d, '
+                          '%(after)d, \'b\', %(skip)d)">'
+                          'Expand %(context)d after'
+                          '</a>'))
+    expand_link = ''.join(expand_link) % {'before': last_id+1,
+                                          'after': last_id+skip,
+                                          'skip': last_id,
+                                          'context': max(context, None)}
     yield ('<tr id="skip-%d"><td colspan="2" align="center" '
            'style="background:lightblue">'
            '(...skipping <span id="skipcount-%d">%d</span> matching lines...) '
-           '<span id="skiplinks-%d">%s</span>'
+           '<span id="skiplinks-%d">%s</span>  '
+           '<span id="skiploading-%d" style="visibility:hidden;">Loading...</span>'
            '</td></tr>\n' % (last_id, last_id, skip,
-                             last_id, expand_link))
+                             last_id, expand_link, last_id))
     for t in buffer[-context:]:
       yield t
 
 
 def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                          colwidth=80, debug=False):
+                          colwidth=DEFAULT_COLUMN_WIDTH, debug=False):
   """Internal version of RenderDiff2TableRows().
 
   Args:
@@ -376,7 +390,7 @@ def _GetComments(request):
 
 
 def _RenderDiffTableRows(request, old_lines, chunks, patch,
-                         colwidth=80, debug=False):
+                         colwidth=DEFAULT_COLUMN_WIDTH, debug=False):
   """Internal version of RenderDiffTableRows().
 
   Args:
@@ -398,7 +412,8 @@ def _RenderDiffTableRows(request, old_lines, chunks, patch,
 
 def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                        new_patch, new_dict, new_max, new_snapshot,
-                       triple_iterator, colwidth=80, debug=False):
+                       triple_iterator, colwidth=DEFAULT_COLUMN_WIDTH,
+                       debug=False):
   """Helper function to render side-by-side table rows.
 
   Args:
@@ -718,8 +733,16 @@ def RenderUnifiedTableRows(request, parsed_lines):
     elif new_line_no:
       row1_id = 'id="newcode%d"' % new_line_no
       row2_id = 'id="new-line-%d"' % new_line_no
-    rows.append('<tr><td class="udiff" %s>%s</td></tr>' %
-                (row1_id, cgi.escape(line_text)))
+
+    if line_text[0] == '+':
+      style = 'udiffadd'
+    elif line_text[0] == '-':
+      style = 'udiffremove'
+    else:
+      style = ''
+    
+    rows.append('<tr><td class="udiff %s" %s>%s</td></tr>' %
+                (style, row1_id, cgi.escape(line_text)))
 
     frags = []
     if old_line_no in old_dict or new_line_no in new_dict:
@@ -798,7 +821,23 @@ def ToText(text):
   Returns:
     A db.Text instance.
   """
-  try:
-    return db.Text(text, encoding='utf-8')
-  except UnicodeDecodeError:
-    return db.Text(text, encoding='latin-1')
+  if isinstance(text, unicode):
+    # A TypeError is raised if text is unicode and an encoding is given.
+    return db.Text(text)
+  else:
+    try:
+      return db.Text(text, encoding='utf-8')
+    except UnicodeDecodeError:
+      return db.Text(text, encoding='latin-1')
+
+
+def UnifyLinebreaks(text):
+  """Helper to return a string with all line breaks converted to LF.
+
+  Args:
+    text: a string.
+
+  Returns:
+    A string with all line breaks converted to LF.
+  """
+  return text.replace('\r\n', '\n').replace('\r', '\n')

@@ -69,12 +69,13 @@ class Issue(db.Model):
   description = db.TextProperty()
   base = db.StringProperty()
   local_base = db.BooleanProperty(default=False)
-  owner = db.UserProperty(required=True)
+  owner = db.UserProperty(auto_current_user_add=True, required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   reviewers = db.ListProperty(db.Email)
   cc = db.ListProperty(db.Email)
   closed = db.BooleanProperty(default=False)
+  private = db.BooleanProperty(default=False)
   n_comments = db.IntegerProperty()
 
   _is_starred = None
@@ -90,12 +91,17 @@ class Issue(db.Model):
 
   def user_can_edit(self, user):
     """Return true if the given user has permission to edit this issue."""
-    return user == self.owner or user.email().endswith("@chromium.org")
+    # TODO(jam/evan): Commented this out for now since the new UI with close buttons makes it
+    # too easy to accidently close another person's issues.
+    return user == self.owner # or user.email().endswith("@chromium.org")
 
   @property
   def edit_allowed(self):
     """Whether the current user can edit this issue."""
-    return self.user_can_edit(Account.current_user_account.user)
+    account = Account.current_user_account
+    if account is None:
+      return False
+    return self.user_can_edit(account.user)
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n.
@@ -156,7 +162,7 @@ class PatchSet(db.Model):
   message = db.StringProperty()
   data = db.BlobProperty()
   url = db.LinkProperty()
-  owner = db.UserProperty(required=True)
+  owner = db.UserProperty(auto_current_user_add=True, required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty()
@@ -202,6 +208,7 @@ class Message(db.Model):
   recipients = db.ListProperty(db.Email)
   date = db.DateTimeProperty(auto_now_add=True)
   text = db.TextProperty()
+  draft = db.BooleanProperty(default=False)
 
 
 class Content(db.Model):
@@ -420,7 +427,7 @@ class Comment(db.Model):
 
   patch = db.ReferenceProperty(Patch)  # == parent
   message_id = db.StringProperty()  # == key_name
-  author = db.UserProperty()
+  author = db.UserProperty(auto_current_user_add=True)
   date = db.DateTimeProperty(auto_now=True)
   lineno = db.IntegerProperty()
   text = db.TextProperty()
@@ -456,7 +463,7 @@ class Repository(db.Model):
 
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
-  owner = db.UserProperty()
+  owner = db.UserProperty(auto_current_user_add=True)
 
   def __str__(self):
     return self.name
@@ -466,11 +473,14 @@ class Branch(db.Model):
   """A trunk, branch, or atag in a specific Subversion repository."""
 
   repo = db.ReferenceProperty(Repository, required=True)
+  # Cache repo.name as repo_name, to speed up set_branch_choices()
+  # in views.IssueBaseForm.
+  repo_name = db.StringProperty()
   category = db.StringProperty(required=True,
                                choices=('*trunk*', 'branch', 'tag'))
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
-  owner = db.UserProperty()
+  owner = db.UserProperty(auto_current_user_add=True)
 
 
 ### Accounts ###
@@ -494,15 +504,17 @@ class Account(db.Model):
   starred issues we'd have to think of a different approach.)
   """
 
-  user = db.UserProperty(required=True)
+  user = db.UserProperty(auto_current_user_add=True, required=True)
   email = db.EmailProperty(required=True)  # key == <email>
   nickname = db.StringProperty(required=True)
   default_context = db.IntegerProperty(default=engine.DEFAULT_CONTEXT,
                                        choices=CONTEXT_CHOICES)
+  default_column_width = db.IntegerProperty(default=engine.DEFAULT_COLUMN_WIDTH)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   stars = db.ListProperty(int)  # Issue ids of all starred issues
   fresh = db.BooleanProperty()
+  uploadpy_hint = db.BooleanProperty(default=True)
 
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
@@ -514,7 +526,7 @@ class Account(db.Model):
   def put(self):
     self.lower_email = str(self.email).lower()
     self.lower_nickname = self.nickname.lower()
-    db.Model.put(self)
+    super(Account, self).put()
 
   @classmethod
   def get_account_for_user(cls, user):
@@ -527,12 +539,24 @@ class Account(db.Model):
     account = cls.get_by_key_name(key)
     if account is not None:
       return account
-    nickname = user.nickname()
-    if '@' in nickname:
-      nickname = nickname.split('@', 1)[0]
-    assert nickname
+    nickname = cls.create_nickname_for_user(user)
     return cls.get_or_insert(key, user=user, email=email, nickname=nickname,
                              fresh=True)
+
+  @classmethod
+  def create_nickname_for_user(cls, user):
+    """Returns a unique nickname for a user."""
+    name = nickname = user.email().split('@', 1)[0]
+    next_char = chr(ord(nickname[0].lower())+1)
+    existing_nicks = [account.lower_nickname
+                      for account in cls.gql(('WHERE lower_nickname >= :1 AND '
+                                              'lower_nickname < :2'),
+                                             nickname.lower(), next_char)]
+    suffix = 0
+    while nickname.lower() in existing_nicks:
+      suffix += 1
+      nickname = '%s%d' % (name, suffix)
+    return nickname
 
   @classmethod
   def get_nickname_for_user(cls, user):
@@ -545,6 +569,14 @@ class Account(db.Model):
     assert email
     key = '<%s>' % email
     return cls.get_by_key_name(key)
+
+  @classmethod
+  def get_by_key_name(cls, key, **kwds):
+    """Override db.Model.get_by_key_name() to use cached value if possible."""
+    if not kwds and cls.current_user_account is not None:
+      if key == cls.current_user_account.key().name():
+        return cls.current_user_account
+    return super(Account, cls).get_by_key_name(key, **kwds)
 
   @classmethod
   def get_nickname_for_email(cls, email, default=None):
@@ -564,18 +596,14 @@ class Account(db.Model):
       return account.nickname
     if default is not None:
       return default
-    nickname = email
-    if '@' in nickname:
-      nickname = nickname.split('@', 1)[0]
-    assert nickname
-    return nickname
+    return email.replace('@', '_')
 
   @classmethod
-  def get_accounts_for_nickname(cls, nickname):
+  def get_account_for_nickname(cls, nickname):
     """Get the list of Accounts that have this nickname."""
     assert nickname
     assert '@' not in nickname
-    return list(gql(cls, 'WHERE nickname = :1', nickname))
+    return cls.all().filter('lower_nickname =', nickname.lower()).get()
 
   @classmethod
   def get_email_for_nickname(cls, nickname):
@@ -583,10 +611,10 @@ class Account(db.Model):
 
     If the nickname is not unique or does not exist, this returns None.
     """
-    accounts = cls.get_accounts_for_nickname(nickname)
-    if len(accounts) != 1:
+    account = cls.get_account_for_nickname(nickname)
+    if account is None:
       return None
-    return accounts[0].email
+    return account.email
 
   def user_has_selected_nickname(self):
     """Return True if the user picked the nickname.

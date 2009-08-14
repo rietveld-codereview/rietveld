@@ -1154,6 +1154,10 @@ function M_submitInlineComment(form, cid, lineno, side) {
     return true;
   }
 
+  if (typeof side == "undefined") {
+    side = form.side.value;
+  }
+
   // Clear saved draft state for affected new, edited, and replied comments
   if (typeof cid != "undefined" && typeof lineno != "undefined" && side) {
     var suffix = cid + "-" + lineno + "-" + side;
@@ -1277,9 +1281,8 @@ function M_setValueFromDivs(divs, text) {
     lines = lines.concat(divs[i].innerHTML.split("\n"));
   }
   for (var i = 0; i < lines.length; i++) {
-    // Undo the <a> tags added by urlize and enliven
-    lines[i] = lines[i].replace(/<a[^>]*>/ig, "");
-    lines[i] = lines[i].replace(/<\/a>/ig, "");
+    // Undo the <a> tags added by urlize and urlizetrunc
+    lines[i] = lines[i].replace(/<a (.*?)href=[\'\"]([^\'\"]+?)[\'\"](.*?)>(.*?)<\/a>/ig, '$2');
     // Undo the escape Django filter
     lines[i] = lines[i].replace(/&gt;/ig, ">");
     lines[i] = lines[i].replace(/&lt;/ig, "<");
@@ -1379,9 +1382,11 @@ function M_handleTableDblClick(evt) {
  * Makes all inline comments visible. This is the default view.
  */
 function M_showAllInlineComments() {
-  var hide = document.getElementById("hide-all-inline");
-  var show = document.getElementById("show-all-inline");
-  hide.style.display = "";
+  var hide_elements = document.getElementsByName("hide-all-inline");
+  var show_elements = document.getElementsByName("show-all-inline");
+  for (var i = 0; i < hide_elements.length; i++) {
+    hide_elements[i].style.display = "";
+  }
   var elements = document.getElementsByName("comment-border");
   var elementsLength = elements.length;
   for (var i = 0; i < elementsLength; i++) {
@@ -1389,7 +1394,9 @@ function M_showAllInlineComments() {
     tr.style.display = "";
     tr.name = "hook";
   }
-  show.style.display = "none";
+  for (var i = 0; i < show_elements.length; i++) {
+    show_elements[i].style.display = "none";
+  }
   hookState.updateHooks();
 }
 
@@ -1397,9 +1404,11 @@ function M_showAllInlineComments() {
  * Hides all inline comments, to make code easier ot read.
  */
 function M_hideAllInlineComments() {
-  var hide = document.getElementById("hide-all-inline");
-  var show = document.getElementById("show-all-inline");
-  show.style.display = "";
+  var hide_elements = document.getElementsByName("hide-all-inline");
+  var show_elements = document.getElementsByName("show-all-inline");
+  for (var i = 0; i < show_elements.length; i++) {
+    show_elements[i].style.display = "";
+  }
   var elements = document.getElementsByName("comment-border");
   var elementsLength = elements.length;
   for (var i = 0; i < elementsLength; i++) {
@@ -1407,7 +1416,9 @@ function M_hideAllInlineComments() {
     tr.style.display = "none";
     tr.name = "";
   }
-  hide.style.display = "none";
+  for (var i = 0; i < hide_elements.length; i++) {
+    hide_elements[i].style.display = "none";
+  }
   hookState.updateHooks();
 }
 
@@ -1415,11 +1426,11 @@ function M_hideAllInlineComments() {
  * Flips between making inline comments visible and invisible.
  */
 function M_toggleAllInlineComments() {
-  var show = document.getElementById("show-all-inline");
-  if (!show) {
+  var show_elements = document.getElementsByName("show-all-inline");
+  if (!show_elements) {
     return;
   }
-  if (show.style.display == "none") {
+  if (show_elements[0].style.display == "none") {
     M_hideAllInlineComments();
   } else {
     M_showAllInlineComments();
@@ -2009,7 +2020,11 @@ function M_commentTextKeyPress_(evt, src, code, key) {
     } else {
       if (code == (window.event ? 27 /* ASCII code for Escape */
                                 : evt.DOM_VK_ESCAPE)) {
-        return src.form.cancel.onclick();
+	if (draftMessage) {
+	  return draftMessage.dialog_hide(true);
+	} else {
+	  return src.form.cancel.onclick();
+        }
       }
     }
   }
@@ -2053,6 +2068,8 @@ function M_keyPress(evt) {
       }
     } else if (key == 'm') {
       document.location.href = publish_link;
+    } else if (key == 'M') {
+      if (draftMessage) { draftMessage.dialog_show(); }
     } else if (key == 'u') {
       // up to CL
       M_upToChangelist();
@@ -2483,6 +2500,22 @@ function M_dashboardKeyPress(evt) {
       if (dashboardState) dashboardState.gotoPrev();
     } else if (key == 'j') {
       if (dashboardState) dashboardState.gotoNext();
+    } else if (key == '#') {
+      if (dashboardState) {
+	var child = dashboardState.curTR.cells[1].firstChild;
+	while (child && child.className != "issue-close") {
+	  child = child.nextSibling;
+	}
+	if (child) {
+	  child = child.firstChild;
+	}
+	while (child && child.nodeName != "A") {
+	  child = child.nextSibling;
+	}
+	if (child) {
+	  location.href = child.href;
+	}
+      }
     } else if (key == 'o' || key == '\r' || key == '\n') {
       if (dashboardState) {
 	var child = dashboardState.curTR.cells[2].firstChild;
@@ -2518,23 +2551,35 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
     html = html + '</td>';
     tr.innerHTML = html;
   }
+  document.getElementById('skiploading-'+id_skip).style.visibility = 'visible';
+  var context_select = document.getElementById('id_context');
+  var context = null;
+  if (context_select) {
+    context = context_select.value;
+  }
   aborted = false;
   httpreq.onreadystatechange = function () {
     if (httpreq.readyState == 4 && !aborted) {
       if (httpreq.status == 200) {
         response = eval('('+httpreq.responseText+')');
+	var last_row = null;
         for (var i=0; i<response.length; i++) {
           var data = response[i];
           var row = document.createElement("tr");
           for (var j=0; j<data[0].length; j++) {
             row.setAttribute(data[0][j][0], data[0][j][1]);
           }
-          if ( where == 't' ) {
+          if ( where == 't' || where == 'a') {
             tr.parentNode.insertBefore(row, tr);
           } else {
-            tr.parentNode.insertBefore(row, tr.nextSibling);
+	    if (last_row) {
+              tr.parentNode.insertBefore(row, last_row.nextSibling);
+	    } else {
+	      tr.parentNode.insertBefore(row, tr.nextSibling);
+	    }
           }
           row.innerHTML = data[1];
+	  last_row = row;
         }
         var curr = document.getElementById('skipcount-'+id_skip);
         var new_count = parseInt(curr.innerHTML)-response.length/2;
@@ -2547,28 +2592,56 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
             var new_after = id_after;
           }
           curr.innerHTML = new_count;
-          if ( new_count <= 10 ) {
-  	    html = '<a href="javascript:M_expandSkipped('+new_before;
-            html += ','+new_after+',\'b\','+id_skip+');">Show</a>  ';
-          } else {
-            var html = '<a href="javascript:M_expandSkipped('+new_before;
-            html += ','+new_after+',\'t\', '+id_skip+');">Show 10 above</a> ';
-            html += '<a href="javascript:M_expandSkipped('+new_before;
-            html += ','+new_after+',\'b\','+id_skip+');">Show 10 below</a> ';
+	  html = '';
+	  if ( new_count > 3*context ) {
+	    html += '<a href="javascript:M_expandSkipped('+new_before;
+            html += ','+new_after+',\'t\', '+id_skip+');">';
+	    html += 'Expand '+context+' before';
+	    html += '</a> | ';
+	  }
+	  html += '<a href="javascript:M_expandSkipped('+new_before;
+	  html += ','+new_after+',\'a\','+id_skip+');">Expand all</a>';
+          if ( new_count > 3*context ) {
+	    var val = parseInt(new_after)+1;
+            html += ' | <a href="javascript:M_expandSkipped('+new_before;
+            html += ','+val+',\'b\','+id_skip+');">';
+	    html += 'Expand '+context+' after';
+	    html += '</a>';
           }
           document.getElementById('skiplinks-'+(id_skip)).innerHTML = html;
+	  var loading_node = document.getElementById('skiploading-'+id_skip);
+	  loading_node.style.visibility = 'hidden';
         } else {
           tr.parentNode.removeChild(tr);
         }
+	hookState.updateHooks();
         if (hookState.hookPos != -2 &&
-            M_isElementVisible(window, hookState.indicator)) {
-          hookState.gotoHook(-1);
+	    M_isElementVisible(window, hookState.indicator)) {
+	  // Restore indicator position on screen, but only if the indicator
+	  // is visible. We don't know if we have to scroll up or down to
+	  // make the indicator visible. Therefore the current hook is
+	  // internally set to the previous hook and
+	  // then gotoNextHook() does everything needed to end up with a
+	  // clean hookState and the indicator visible on screen.
+          hookState.hookPos = hookState.hookPos - 1;
+	  hookState.gotoNextHook();
         }
+      } else {
+	msg = '<td colspan="2" align="center"><span style="color:red;">';
+	msg += 'An error occurred ['+httpreq.status+']. ';
+	msg += 'Please report.';
+	msg += '</span></td>';
+	tr.innerHTML = msg;
       }
     }
   }
 
-  url = skipped_lines_url+id_before+'/'+id_after+'/'+where;
+  colwidth = document.getElementById('id_column_width').value;
+
+  url = skipped_lines_url+id_before+'/'+id_after+'/'+where+'/'+colwidth;
+  if (context) {
+    url += '?context='+context;
+  }
   httpreq.open('GET', url, true);
   httpreq.send('');
 }
@@ -2669,15 +2742,25 @@ function M_showPopUp(obj, id) {
 }
 
 /**
- * TODO(andi): docstring
+ * Jump to a patch in the changelist.
+ * @param {Element} select The select form element.
+ * @param {Integer} issue The issue id.
+ * @param {Integer} patchset The patchset id.
+ * @param {Boolean} unified If True show unified diff else s-b-s view.
  */
 function M_jumpToPatch(select, issue, patchset, unified) {
-  if ( unified ) {
+  if (unified) {
     part = 'patch';
   } else {
     part = 'diff';
   }
-  document.location.href = '/'+issue+'/'+part+'/'+patchset+'/'+select.value;
+  var url = '/'+issue+'/'+part+'/'+patchset+'/'+select.value;
+  var context = document.getElementById('id_context');
+  var colwidth = document.getElementById('id_column_width');
+  if (context && colwidth) {
+    url = url+'?context='+context.value+'&column_width='+colwidth.value;
+  }
+  document.location.href = url;
 }
 
 /**
@@ -2717,3 +2800,223 @@ function M_addIssueStar(id) {
 function M_removeIssueStar(id) {
   return M_setIssueStar_(id, "/unstar");
 }
+
+/**
+ * Close a given issue.
+ * @param {Integer} id The issue id.
+ */
+function M_closeIssue(id) {
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4) {
+      if (httpreq.status == 200) {
+	  var elem = document.getElementById("issue-close-" + id);
+	  elem.innerHTML = '';
+	  var elem = document.getElementById("issue-title-" + id);
+	  elem.innerHTML += ' (' + httpreq.responseText + ')';
+      }
+    }
+  }
+  httpreq.open("POST", "/" + id + "/close", true);
+  httpreq.send("");
+}
+
+
+/**
+ * Generic callback when page is unloaded.
+ */
+function M_unloadPage() {
+  if (draftMessage) { draftMessage.save(); }
+}
+
+
+/**
+ * Draft message dialog class.
+ * @param {Integer} issue_id ID of current issue.
+ * @param {Boolean} headless If true, the dialog is not
+                             initialized (default: false).
+ */
+
+var draftMessage = null;
+
+function M_draftMessage(issue_id, headless) {
+  this.issue_id = issue_id;
+  this.id_dlg_container = 'reviewmsgdlg';
+  this.id_textarea = 'reviewmsg';
+  this.id_hidden = 'reviewmsgorig';
+  this.id_status = 'reviewmsgstatus';
+  this.is_modified = false;
+  if (! headless) { this.initialize(); }
+}
+
+/**
+ * Constructor.
+ * Sets keypress callback and loads draft message if any.
+ */
+M_draftMessage.prototype.initialize = function() {
+  this.load();
+}
+
+/**
+ * Shows the dialog and focusses on textarea.
+ */
+M_draftMessage.prototype.dialog_show = function() {
+  dlg = this.get_dialog_();
+  dlg.style.display = "";
+  this.set_status('');
+  textarea = document.getElementById(this.id_textarea);
+  textarea.focus();
+}
+
+/**
+ * Hides the dialog and optionally saves the current content.
+ * @param {Boolean} save If true, the content is saved.
+ */
+M_draftMessage.prototype.dialog_hide = function(save) {
+  if (save) {
+    this.save();
+  }
+  dlg = this.get_dialog_();
+  dlg.style.display = "none";
+}
+
+/**
+ * Discards draft message.
+ */
+M_draftMessage.prototype.dialog_discard = function() {
+  this.discard(function(response) {
+    draftMessage.set_status('OK');
+    textarea = document.getElementById(draftMessage.id_textarea);
+    textarea.value = '';
+    });
+  return false;
+}
+
+/**
+ * Saves the content without closing the dialog.
+ */
+M_draftMessage.prototype.dialog_save = function() {
+  this.set_status('');
+  textarea = document.getElementById(this.id_textarea);
+  this.save(function(response) {
+    if (response.status != 200) {
+      draftMessage.set_status('An error occurred.');
+    } else {
+      draftMessage.set_status('Message saved.');
+    }
+    textarea.focus();
+    return false;
+  });
+  return false;
+}
+
+/**
+ * Sets a status message in the dialog.
+ * Additionally a timeout function is created to hide the message again.
+ * @param {String} msg The message to display.
+ */
+M_draftMessage.prototype.set_status = function(msg) {
+  status = document.getElementById(this.id_status);
+  if (status) {
+    status.innerHTML = msg;
+    this.status_timeout = setTimeout(function() {
+      draftMessage.set_status('');
+      }, 3000);
+  }
+}
+
+/**
+ * Saves the content of the draft message.
+ * @param {Function} cb A function called with the response object.
+ */
+M_draftMessage.prototype.save = function(cb) {
+  textarea = document.getElementById(this.id_textarea);
+  hidden = document.getElementById(this.id_hidden);
+  if (textarea == null || textarea.value == hidden.value || textarea.value == "") {
+    return;
+  }
+  text = textarea.value;
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4 && cb) {
+      /* XXX set hidden before cb */
+      hidden = document.getElementById(draftMessage.id_hidden);
+      hidden.value = text;
+      cb(httpreq);
+    }
+  }
+  httpreq.open("POST", "/" + this.issue_id + "/draft_message", true);
+  httpreq.send("reviewmsg="+encodeURIComponent(text));
+}
+
+/**
+ * Loads the content of the draft message from the datastore.
+ */
+M_draftMessage.prototype.load = function() {
+  elem = document.getElementById(this.id_textarea);
+  elem.disabled = "disabled";
+  this.set_status("Loading...");
+  if (elem) {
+    var httpreq = M_getXMLHttpRequest();
+    if (!httpreq) {
+      return true;
+    }
+    httpreq.onreadystatechange = function () {
+      if (httpreq.readyState == 4) {
+	if (httpreq.status != 200) {
+	  draftMessage.set_status('An error occurred.');
+	} else {
+	  if (elem) {
+	    elem.value = httpreq.responseText;
+	    hidden = document.getElementById(draftMessage.id_hidden);
+	    hidden.value = elem.value;
+	  }
+	}
+	elem.removeAttribute("disabled");
+	draftMessage.set_status('');
+	elem.focus();
+      }
+    }
+    httpreq.open("GET", "/" + this.issue_id + "/draft_message", true);
+    httpreq.send("");
+  }
+}
+
+/**
+ * Discards the draft message.
+ * @param {Function} cb A function called with response object.
+ */
+M_draftMessage.prototype.discard = function(cb) {
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function () {
+    if (httpreq.readyState == 4 && cb) {
+      elem = document.getElementById(this.id_textarea);
+      if (elem) {
+	elem.value = "";
+	hidden = document.getElementById(this.id_hidden);
+	hidden.value = elem.value;
+      }
+      cb(httpreq);
+    }
+  }
+  httpreq.open("DELETE", "/" + this.issue_id + "/draft_message", true);
+  httpreq.send("");
+}
+
+/**
+ * Helper function that returns the dialog's HTML container.
+ */
+M_draftMessage.prototype.get_dialog_ = function() {
+  return document.getElementById(this.id_dlg_container);
+}
+
+

@@ -53,7 +53,7 @@
             View
           </a>
         </td>
-        <td>
+        <td style="white-space: nowrap">
         {%for delta in patch.parsed_deltas%}
           <a href="/{{issue.key.id}}/diff2/{{delta.1}}:{{patchset.key.id}}/{{patch.key.id}}"
              title="Delta from patch set {{delta.0}}">{{delta.0}}</a>

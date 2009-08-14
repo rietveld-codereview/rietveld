@@ -3,7 +3,7 @@
 {%block body%}
 <h2>Edit Branch '{{branch.name}}' in Repository '{{branch.repo.name}}'</h2>
 
-<form action="{%url codereview.views.branch_new branch.repo.key.id%}" method="post">
+<form action="{%url codereview.views.branch_edit branch.key.id%}" method="post">
 <table>
 {{form}}
 <tr><td><input type="submit" value="Update Branch"></td></tr>

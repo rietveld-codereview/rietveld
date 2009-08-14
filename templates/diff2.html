@@ -82,7 +82,7 @@ login_warned = false;
   </div>
 </div>
 <div style="float: right; color: #333333; background-color: #eeeeec; border: 1px solid lightgray; -moz-border-radius: 5px 5px 5px 5px; padding: 5px;">
-  <div>{%include "context_select.html"%}</div>
+  <div>{%include "view_details_select.html"%}</div>
   <div>
     Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{ps_right.key.id}});">
       {% for jump_patch in ps_right.patches %}
@@ -92,13 +92,13 @@ login_warned = false;
     </select>
   </div>
   <div>
-    Left: <a href="{%url codereview.views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}"
+    Left: <a href="{%url codereview.views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}{%urlappend_view_settings%}"
              title="View regular side by side diff">Side by side diff</a>
           |
           <a href="{%url codereview.views.download_patch issue.key.id,ps_left.key.id,patch_left.key.id%}"
              title="Download patch for {{patch_left.filename}}">Download</a>
           <br/>
-    Right: <a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}"
+    Right: <a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}{%urlappend_view_settings%}"
               title="View regular side by side diff">Side by side diff</a>
            |
            <a href="{%url codereview.views.download_patch issue.key.id,ps_right.key.id,patch_right.key.id%}"
@@ -108,6 +108,8 @@ login_warned = false;
   <div style="margin-top: 5px;">
     <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
     Comments</a> ('m')
+    |
+    <a class="novisit" href="javascript:draftMessage.dialog_show()">Edit draft message</a> ('M')
     {%endif%}
   </div>
 </div>
@@ -123,13 +125,13 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {%endcomment%}
 {%if patch_right.prev%}
 <a id="prevFile" 
-   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.prev.key.id}}">
+   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.prev.key.id}}{%urlappend_view_settings%}">
 &laquo; {{patch_right.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch_right.next%}
 <a id="nextFile"
-   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.next.key.id}}">
+   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.next.key.id}}{%urlappend_view_settings%}">
 {{patch_right.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |
@@ -140,10 +142,10 @@ Toggle Intra-line Diffs</a> ('i')
 |
 <a href="javascript:M_collapseAllInlineComments()">Collapse Comments</a> ('c')
 |
-<a id="show-all-inline"
+<a name="show-all-inline"
    style="display:none"
    href="javascript:M_showAllInlineComments()">Show Comments</a>
-<a id="hide-all-inline"
+<a name="hide-all-inline"
    href="javascript:M_hideAllInlineComments()">Hide Comments</a> ('s')
 </div>
 <div style="position:relative" id="table-top">
@@ -177,13 +179,13 @@ Toggle Intra-line Diffs</a> ('i')
 <div class="codenav">
 {%if patch_right.prev%}
 <a id="prevFile"
-   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.prev.key.id}}">
+   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.prev.key.id}}{%urlappend_view_settings%}">
 &laquo; {{patch_right.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch_right.next%}
 <a id="nextFile"
-   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.next.key.id}}">
+   href="/{{issue.key.id}}/diff2/{{ps_left.key.id}}:{{ps_right.key.id}}/{{patch_right.next.key.id}}{%urlappend_view_settings%}">
 {{patch_right.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |
@@ -212,4 +214,7 @@ var skipped_lines_url = ('/' + {{issue.key.id}} + '/diff2_skipped_lines/' +
                          {{patch_id}} + '/');
 // -->
 </script>
+
+{%include "draft_message.html"%}
+
 {%endblock%}

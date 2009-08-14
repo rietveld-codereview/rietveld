@@ -1,5 +1,5 @@
 application: chromiumcodereview
-version: 2
+version: 3
 runtime: python
 api_version: 1
 
@@ -7,6 +7,10 @@ default_expiration: 7d  # This is good for images, which never change
 
 handlers:
 
+- url: /remote_api
+  script: $PYTHON_LIB/google/appengine/ext/remote_api/handler.py
+  login: admin
+  
 - url: /(robots.txt|favicon.ico)
   static_files: static/\1
   upload: static/(robots.txt|favicon.ico)

@@ -41,6 +41,7 @@ from google.appengine.api import urlfetch
 from google.appengine.ext import db
 from google.appengine.ext.db import djangoforms
 from google.appengine.runtime import DeadlineExceededError
+from google.appengine.runtime.apiproxy_errors import CapabilityDisabledError
 
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
@@ -102,7 +103,7 @@ class AccountInput(forms.TextInput):
                               scrollHeight: 300,
                               matchContains: true,
                               formatResult : function(row) {
-                                return row[0].replace(/ (\(.+?\))/gi, '');
+                                return row[0].replace(/ .+/gi, '');
                               }
                               });
                               </script>''' % name)
@@ -126,17 +127,23 @@ class IssueBaseForm(forms.Form):
                        max_length=1000,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
+  private = forms.BooleanField(required=False, initial=False)
 
   def set_branch_choices(self, base=None):
     branches = models.Branch.gql('ORDER BY repo, category, name')
     bound_field = self['branch']
-    choices = [('', '[See Base]')]
+    choices = []
     default = None
     for b in branches:
-      pair = (b.key(), '%s - %s - %s' % (b.repo.name, b.category, b.name))
+      if not b.repo_name:
+        b.repo_name = b.repo.name
+        b.put()
+      pair = (b.key(), '%s - %s - %s' % (b.repo_name, b.category, b.name))
       choices.append(pair)
       if default is None and (base is None or b.url == base):
         default = b.key()
+    choices.sort(key=lambda pair: pair[1].lower())
+    choices.insert(0, ('', '[See Base]'))
     bound_field.field.choices = choices
     if default is not None:
       self.initial['branch'] = default
@@ -195,6 +202,7 @@ class UploadForm(forms.Form):
   description = forms.CharField(max_length=10000, required=False)
   reviewers = forms.CharField(max_length=1000, required=False)
   cc = forms.CharField(max_length=1000, required=False)
+  private = forms.BooleanField(required=False, initial=False)
   send_mail = forms.BooleanField(required=False)
   base_hashes = forms.CharField(required=False)
 
@@ -287,6 +295,7 @@ class EditLocalBaseForm(forms.Form):
                        max_length=1000,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
+  private = forms.BooleanField(required=False, initial=False)
   closed = forms.BooleanField(required=False)
 
   def get_base(self):
@@ -304,7 +313,7 @@ class BranchForm(djangoforms.ModelForm):
 
   class Meta:
     model = models.Branch
-    exclude = ['owner']
+    exclude = ['owner', 'repo_name']
 
 
 class PublishForm(forms.Form):
@@ -343,15 +352,48 @@ class MiniPublishForm(forms.Form):
                                     widget=forms.HiddenInput())
 
 
-FORM_CONTEXT_VALUES = [(x, "%d lines" % x) for x in models.CONTEXT_CHOICES]
+FORM_CONTEXT_VALUES = [(x, '%d lines' % x) for x in models.CONTEXT_CHOICES]
+FORM_CONTEXT_VALUES.append(('', 'Whole file'))
 
 
 class SettingsForm(forms.Form):
 
   nickname = forms.CharField(max_length=30)
-  context = forms.IntegerField(widget=forms.Select(choices=FORM_CONTEXT_VALUES),
-                               label='Context')
+  context = forms.IntegerField(
+    widget=forms.Select(choices=FORM_CONTEXT_VALUES),
+    required=False,
+    label='Context')
+  column_width = forms.IntegerField(label='Column Width',
+                                    initial=engine.DEFAULT_COLUMN_WIDTH,
+                                    min_value=engine.MIN_COLUMN_WIDTH,
+                                    max_value=engine.MAX_COLUMN_WIDTH)
 
+  def clean_nickname(self):
+    nickname = self.cleaned_data.get('nickname')
+    # Check for allowed characters
+    match = re.match(r'[\w\.\-_\(\) ]+$', nickname, re.UNICODE|re.IGNORECASE)
+    if not match:
+      raise forms.ValidationError('Allowed characters are letters, digits, '
+                                  '".-_()" and spaces.')
+    # Check for sane whitespaces
+    if re.search(r'\s{2,}', nickname):
+      raise forms.ValidationError('Use single spaces between words.')
+    if len(nickname) != len(nickname.strip()):
+      raise forms.ValidationError('Leading and trailing whitespaces are '
+                                  'not allowed.')
+
+    if nickname.lower() == 'me':
+      raise forms.ValidationError('Choose a different nickname.')
+
+    # Look for existing nicknames
+    accounts = list(models.Account.gql('WHERE lower_nickname = :1',
+                                       nickname.lower()))
+    for account in accounts:
+      if account.key() == models.Account.current_user_account.key():
+        continue
+      raise forms.ValidationError('This nickname is already in use.')
+
+    return nickname
 
 ### Helper functions ###
 
@@ -381,9 +423,11 @@ def respond(request, template, params=None):
   if params is None:
     params = {}
   must_choose_nickname = False
+  uploadpy_hint = False
   if request.user is not None:
     account = models.Account.current_user_account
     must_choose_nickname = not account.user_has_selected_nickname()
+    uploadpy_hint = account.uploadpy_hint
   params['request'] = request
   params['counter'] = counter
   params['user'] = request.user
@@ -395,14 +439,20 @@ def respond(request, template, params=None):
   else:
     params['sign_out'] = users.create_logout_url(full_path)
   params['must_choose_nickname'] = must_choose_nickname
+  params['uploadpy_hint'] = uploadpy_hint
   try:
     return render_to_response(template, params)
   except DeadlineExceededError:
     logging.exception('DeadlineExceededError')
-    return HttpResponse('DeadlineExceededError')
+    return HttpResponse('DeadlineExceededError', status=503)
+  except CapabilityDisabledError, err:
+    logging.exception('CapabilityDisabledError: %s', err)
+    return HttpResponse('Rietveld: App Engine is undergoing maintenance. '
+                        'Please try again in a while. ' + str(err),
+                        status=503)
   except MemoryError:
     logging.exception('MemoryError')
-    return HttpResponse('MemoryError')
+    return HttpResponse('MemoryError', status=503)
   except AssertionError:
     logging.exception('AssertionError')
     return HttpResponse('AssertionError')
@@ -411,6 +461,40 @@ def respond(request, template, params=None):
 def _random_bytes(n):
   """Helper returning a string of random bytes of given length."""
   return ''.join(map(chr, (random.randrange(256) for i in xrange(n))))
+
+
+def _clean_int(value, default, min_value=None, max_value=None):
+  """Helper to cast value to int and to clip it to min or max_value.
+
+  Args:
+    value: Any value (preferably something that can be casted to int).
+    default: Default value to be used when type casting fails.
+    min_value: Minimum allowed value (default: None).
+    max_value: Maximum allowed value (default: None).
+
+  Returns:
+    An integer between min_value and max_value.
+  """
+  if not isinstance(value, (int, long)):
+    try:
+      value = int(value)
+    except (TypeError, ValueError), err:
+      value = default
+  if min_value is not None:
+    value = max(min_value, value)
+  if max_value is not None:
+    value = min(value, max_value)
+  return value
+
+
+def _can_view_issue(user, issue):
+  if user is None:
+    return not issue.private
+  user_email = db.Email(user.email())
+  return (not issue.private
+          or issue.owner == user
+          or user_email in issue.cc
+          or user_email in issue.reviewers)
 
 
 ### Decorators for request handlers ###
@@ -461,6 +545,13 @@ def issue_required(func):
     if issue is None:
       return HttpResponseNotFound('No issue exists with that id (%s)' %
                                   issue_id)
+    if issue.private:
+      if request.user is None:
+        return HttpResponseRedirect(
+            users.create_login_url(request.get_full_path().encode('utf-8')))
+      if not _can_view_issue(request.user, issue):
+        return HttpResponseForbidden('You do not have permission to '
+                                     'view this issue')
     request.issue = issue
     return func(request, *args, **kwds)
 
@@ -475,12 +566,12 @@ def user_key_required(func):
     if '@' in user_key:
       request.user_to_show = users.User(user_key)
     else:
-      accounts = models.Account.get_accounts_for_nickname(user_key)
-      if not accounts:
+      account = models.Account.get_account_for_nickname(user_key)
+      if not account:
         logging.info("account not found for nickname %s" % user_key)
         return HttpResponseNotFound('No user found with that key (%s)' %
                                     user_key)
-      request.user_to_show = accounts[0].user
+      request.user_to_show = account.user
     return func(request, *args, **kwds)
 
   return user_key_wrapper
@@ -585,28 +676,12 @@ DEFAULT_LIMIT = 10
 
 def all(request):
   """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
-  offset = request.GET.get('offset')
-  if offset:
-    try:
-      offset = int(offset)
-    except:
-      offset = 0
-    else:
-      offset = max(0, offset)
-  else:
-    offset = 0
-  limit = request.GET.get('limit')
-  if limit:
-    try:
-      limit = int(limit)
-    except:
-      limit = DEFAULT_LIMIT
-    else:
-      limit = max(1, min(limit, 100))
-  else:
-    limit = DEFAULT_LIMIT
+  offset = _clean_int(request.GET.get('offset'), 0, 0)
+  limit = _clean_int(request.GET.get('limit'), DEFAULT_LIMIT, 1, 100)
+
   query = db.GqlQuery('SELECT * FROM Issue '
-                      'WHERE closed = FALSE ORDER BY modified DESC')
+                      'WHERE closed = FALSE AND private = FALSE '
+                      'ORDER BY modified DESC')
   # Fetch one more to see if there should be a 'next' link
   issues = query.fetch(limit+1, offset)
   more = bool(issues[limit:])
@@ -688,7 +763,8 @@ def starred(request):
     issues = []
   else:
     issues = [issue for issue in models.Issue.get_by_id(stars)
-                    if issue is not None]
+                    if issue is not None
+                    and _can_view_issue(request.user, issue)]
     _optimize_draft_counts(issues)
   return respond(request, 'starred.html', {'issues': issues})
 
@@ -701,23 +777,25 @@ def show_user(request):
 
 def _show_user(request):
   user = request.user_to_show
-  my_issues = list(db.GqlQuery(
+  my_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC',
-      user))
+      'WHERE closed = FALSE AND owner = :1 ORDER BY modified DESC', user)
+      if _can_view_issue(request.user, issue)]
   review_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
-      user.email()) if issue.owner != user]
+      'WHERE closed = FALSE AND reviewers = :1 '
+      'ORDER BY modified DESC', user.email())
+      if issue.owner != user and _can_view_issue(request.user, issue)]
   cc_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND cc = :1 ORDER BY modified DESC',
-      user.email()) if issue.owner != user]
-  closed_issues = list(db.GqlQuery(
+      'WHERE closed = FALSE AND cc = :1 ORDER BY modified DESC', user.email())
+      if issue.owner != user and _can_view_issue(request.user, issue)]
+  closed_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
       'ORDER BY modified DESC',
-      datetime.datetime.now() - datetime.timedelta(days=7), user))
+      datetime.datetime.now() - datetime.timedelta(days=7), user)
+      if _can_view_issue(request.user, issue)]
   _optimize_draft_counts(my_issues + review_issues + closed_issues)
   return respond(request, 'user.html',
                  {'email': user.email(),
@@ -746,6 +824,21 @@ def new(request):
     return respond(request, 'new.html', {'form': form})
   else:
     return HttpResponseRedirect('/%s' % issue.key().id())
+
+
+@login_required
+def use_uploadpy(request):
+  """Show an intermediate page about upload.py."""
+  if request.method == 'POST':
+    if 'disable_msg' in request.POST:
+      models.Account.current_user_account.uploadpy_hint = False
+      models.Account.current_user_account.put()
+    if 'download' in request.POST:
+      url = '/static/upload.py'
+    else:
+      url = '/new'
+    return HttpResponseRedirect(url)
+  return respond(request, 'use_uploadpy.html')
 
 
 @post_required
@@ -903,7 +996,7 @@ def upload_content(request):
     if patch.is_binary:
       content.data = data
     else:
-      content.text = engine.ToText(data)
+      content.text = engine.ToText(engine.UnifyLinebreaks(data))
     content.checksum = checksum
   content.put()
   return HttpResponse('OK', content_type='text/plain')
@@ -933,8 +1026,9 @@ def upload_patch(request):
   if patchset.data:
     return HttpResponse('ERROR: Can\'t upload patches to patchset with data.',
                         content_type='text/plain')
+  text = engine.ToText(engine.UnifyLinebreaks(form.get_uploaded_patch()))
   patch = models.Patch(patchset=patchset,
-                       text=engine.ToText(form.get_uploaded_patch()),
+                       text=text,
                        filename=form.cleaned_data['filename'], parent=patchset)
   patch.put()
   if form.cleaned_data.get('content_upload'):
@@ -1047,12 +1141,11 @@ def _make_new(request, form):
                          base=base,
                          reviewers=reviewers,
                          cc=cc,
-                         owner=request.user,
+                         private=form.cleaned_data.get('private', False),
                          n_comments=0)
     issue.put()
 
-    patchset = models.PatchSet(issue=issue, data=data, url=url,
-                               owner=request.user, parent=issue)
+    patchset = models.PatchSet(issue=issue, data=data, url=url, parent=issue)
     patchset.put()
     issue.patchset = patchset
 
@@ -1096,11 +1189,11 @@ def _get_data_url(form):
   url = cleaned_data.get('url')
   separate_patches = cleaned_data.get('separate_patches')
   if not (data or url or separate_patches):
-    form.errors['data'] = ['You must specify a URL or upload a file']
+    form.errors['data'] = ['You must specify a URL or upload a file (< 1 MB).']
     return None
   if data and url:
     form.errors['data'] = ['You must specify either a URL or upload a file '
-                           'but not both']
+                           'but not both.']
     return None
   if separate_patches and (data or url):
     form.errors['data'] = ['If the patches will be uploaded separately later, '
@@ -1108,7 +1201,7 @@ def _get_data_url(form):
     return None
 
   if data is not None:
-    data = db.Blob(data.read())
+    data = db.Blob(engine.UnifyLinebreaks(data.read()))
     url = None
   elif url:
     try:
@@ -1119,7 +1212,7 @@ def _get_data_url(form):
     if fetch_result.status_code != 200:
       form.errors['url'] = ['HTTP status code %s' % fetch_result.status_code]
       return None
-    data = db.Blob(fetch_result.content)
+    data = db.Blob(engine.UnifyLinebreaks(fetch_result.content))
 
   return data, url, separate_patches
 
@@ -1146,7 +1239,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   data, url, separate_patches = data_url
   message = form.cleaned_data[message_key]
   patchset = models.PatchSet(issue=issue, message=message, data=data, url=url,
-                             owner=request.user, parent=issue)
+                             parent=issue)
   patchset.put()
 
   if not separate_patches:
@@ -1189,10 +1282,10 @@ def _get_emails(form, label):
       if email:
         try:
           if '@' not in email:
-            accounts = models.Account.get_accounts_for_nickname(email)
-            if len(accounts) != 1:
+            account = models.Account.get_account_for_nickname(email)
+            if account is None:
               raise db.BadValueError('Unknown user: %s' % email)
-            db_email = db.Email(accounts[0].user.email().lower())
+            db_email = db.Email(account.user.email().lower())
           elif email.count('@') != 1:
             raise db.BadValueError('Invalid email address: %s' % email)
           else:
@@ -1304,7 +1397,7 @@ def _get_patchset_info(request, patchset_id):
       # Reorder the list of patches to put .h files before .cc.
       _reorder_patches_by_filename(patchset.patches)
       try:
-        attempt = int(request.GET.get('attempt', 0))
+        attempt = _clean_int(request.GET.get('attempt'), 0, 0)
         if attempt < 0:
           response = HttpResponse('Invalid parameter', status=404)
           break
@@ -1380,12 +1473,19 @@ def show(request, form=None):
     last_patchset = patchsets[-1]
     if last_patchset.patches:
       first_patch = last_patchset.patches[0]
-  messages = list(issue.message_set.order('date'))
+  messages = []
+  has_draft_message = False
+  for msg in issue.message_set.order('date'):
+    if not msg.draft:
+      messages.append(msg)
+    elif msg.draft and request.user and msg.sender == request.user.email():
+      has_draft_message = True
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
                   'last_patchset': last_patchset,
                   'first_patch': first_patch,
+                  'has_draft_message': has_draft_message,
                   })
 
 
@@ -1411,7 +1511,7 @@ def account(request):
   """/account/?q=blah&limit=10&timestamp=blah - Used for autocomplete."""
   def searchAccounts(property, added, response):
     query = request.GET.get('q').lower()
-    limit = int(request.GET.get('limit'))
+    limit = _clean_int(request.GET.get('limit'), 10, 10, 100)
 
     accounts = models.Account.all()
     accounts.filter("lower_%s >= " % property, query)
@@ -1478,6 +1578,7 @@ def edit(request):
                              'reviewers': ', '.join(reviewers),
                              'cc': ', '.join(ccs),
                              'closed': issue.closed,
+                             'private': issue.private,
                              })
     if not issue.local_base:
       form.set_branch_choices(base)
@@ -1503,6 +1604,7 @@ def edit(request):
   issue.subject = cleaned_data['subject']
   issue.description = cleaned_data['description']
   issue.closed = cleaned_data['closed']
+  issue.private = cleaned_data.get('private', False)
   base_changed = (issue.base != base)
   issue.base = base
   issue.reviewers = reviewers
@@ -1558,12 +1660,9 @@ def delete(request):
 
 
 @post_required
-@issue_required
+@issue_editor_required
 def close(request):
   """/<issue>/close - Close an issue."""
-  if request.issue.owner != request.user:
-    if not IS_DEV:
-      return HttpResponse('Login required', status=401)
   issue = request.issue
   issue.closed = True
   if request.method == 'POST':
@@ -1648,6 +1747,9 @@ def patch_helper(request, nav_type='patch'):
                   'patchset': request.patchset,
                   'rows': rows,
                   'issue': request.issue,
+                  'context': _clean_int(request.GET.get('context'), -1),
+                  'column_width': _clean_int(request.GET.get('column_width'),
+                                             None),
                   })
 
 
@@ -1670,18 +1772,31 @@ def _get_context_for_user(request):
   If an invalid value is found, the value is overwritten with
   engine.DEFAULT_CONTEXT.
   """
+  get_param = request.GET.get('context') or None
+  if 'context' in request.GET and get_param is None:
+    # User wants to see whole file. No further processing is needed.
+    return get_param
   if request.user:
     account = models.Account.current_user_account
     default_context = account.default_context
   else:
     default_context = engine.DEFAULT_CONTEXT
-  try:
-    context = int(request.GET.get("context", default_context))
-  except ValueError:
-    context = default_context
-  if context not in models.CONTEXT_CHOICES:
+  context = _clean_int(get_param, default_context)
+  if context is not None and context not in models.CONTEXT_CHOICES:
     context = engine.DEFAULT_CONTEXT
   return context
+
+def _get_column_width_for_user(request):
+  """Returns the column width setting for a user."""
+  if request.user:
+    account = models.Account.current_user_account
+    default_column_width = account.default_column_width
+  else:
+    default_column_width = engine.DEFAULT_COLUMN_WIDTH
+  column_width = _clean_int(request.GET.get('column_width'),
+                            default_column_width,
+                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+  return column_width
 
 
 @patch_required
@@ -1696,11 +1811,12 @@ def diff(request):
   patch = request.patch
 
   context = _get_context_for_user(request)
+  column_width = _get_column_width_for_user(request)
   if patch.is_binary:
     rows = None
   else:
     try:
-      rows = _get_diff_table_rows(request, patch, context)
+      rows = _get_diff_table_rows(request, patch, context, column_width)
     except engine.FetchError, err:
       return HttpResponseNotFound(str(err))
 
@@ -1712,10 +1828,11 @@ def diff(request):
                   'rows': rows,
                   'context': context,
                   'context_values': models.CONTEXT_CHOICES,
+                  'column_width': column_width,
                   })
 
 
-def _get_diff_table_rows(request, patch, context):
+def _get_diff_table_rows(request, patch, context, column_width):
   """Helper function that returns rendered rows for a patch.
 
   Raises:
@@ -1730,7 +1847,8 @@ def _get_diff_table_rows(request, patch, context):
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
                                          chunks, patch,
-                                         context=context))
+                                         context=context,
+                                         colwidth=column_width))
   if rows and rows[-1] is None:
     del rows[-1]
     # Get rid of content, which may be bad
@@ -1749,41 +1867,59 @@ def _get_diff_table_rows(request, patch, context):
 
 
 @patch_required
-def diff_skipped_lines(request, id_before, id_after, where):
-  """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines"""
+def diff_skipped_lines(request, id_before, id_after, where, column_width):
+  """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines.
+
+  *where* indicates which lines should be expanded:
+    'b' - move marker line to bottom and expand above
+    't' - move marker line to top and expand below
+    'a' - expand all skipped lines
+  """
   patchset = request.patchset
   patch = request.patch
+  if where == 'a':
+    context = None
+  else:
+    context = _get_context_for_user(request) or 100
 
-  # TODO: allow context = None?
+  column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
+                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+
   try:
-    rows = _get_diff_table_rows(request, patch, 10000)
+    rows = _get_diff_table_rows(request, patch, None, column_width)
   except engine.FetchError, err:
-    # Return HttpResponse because the JS part expects a 200 status code.
-    return HttpResponse('<font color="red">Error: %s; please report!</font>' %
-                        err)
-  return _get_skipped_lines_response(rows, id_before, id_after, where)
+    return HttpResponse('Error: %s; please report!' % err, status=500)
+  return _get_skipped_lines_response(rows, id_before, id_after, where, context)
 
 
-def _get_skipped_lines_response(rows, id_before, id_after, where):
+def _get_skipped_lines_response(rows, id_before, id_after, where, context):
   """Helper function that creates a Response object for skipped lines"""
   response_rows = []
-  id_before = int(id_before)
-  id_after = int(id_after)
-
-  if where == "b":
-    rows.reverse()
+  id_before_start = int(id_before)
+  id_after_end = int(id_after)
+  if context is not None:
+    id_before_end = id_before_start+context
+    id_after_start = id_after_end-context
+  else:
+    id_before_end = id_after_start = None
 
   for row in rows:
     m = re.match('^<tr( name="hook")? id="pair-(?P<rowcount>\d+)">', row)
     if m:
       curr_id = int(m.groupdict().get("rowcount"))
-      if curr_id < id_before or curr_id > id_after:
-        continue
-      if where == "b" and curr_id <= id_after:
+      # expand below marker line
+      if (where == 'b'
+          and curr_id > id_after_start and curr_id <= id_after_end+1):
         response_rows.append(row)
-      elif where == "t" and curr_id >= id_before:
+      # expand above marker line
+      elif (where == 't'
+            and curr_id >= id_before_start and curr_id < id_before_end):
         response_rows.append(row)
-      if len(response_rows) >= 10:
+      # expand all skipped lines
+      elif (where == 'a'
+            and curr_id >= id_before_start and curr_id <= id_after_end):
+        response_rows.append(row)
+      if context is not None and len(response_rows) >= 2*context:
         break
 
   # Create a usable structure for the JS part
@@ -1795,7 +1931,8 @@ def _get_skipped_lines_response(rows, id_before, id_after, where):
   return HttpResponse(simplejson.dumps(response))
 
 
-def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context):
+def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
+                    column_width):
   """Helper function that returns objects for diff2 views"""
   ps_left = models.PatchSet.get_by_id(int(ps_left_id), parent=request.issue)
   if ps_left is None:
@@ -1828,7 +1965,8 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context):
   rows = engine.RenderDiff2TableRows(request,
                                      new_content_left.lines, patch_left,
                                      new_content_right.lines, patch_right,
-                                     context=context)
+                                     context=context,
+                                     colwidth=column_width)
   rows = list(rows)
   if rows and rows[-1] is None:
     del rows[-1]
@@ -1842,7 +1980,9 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context):
 def diff2(request, ps_left_id, ps_right_id, patch_id):
   """/<issue>/diff2/... - View the delta between two different patch sets."""
   context = _get_context_for_user(request)
-  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context)
+  column_width = _get_column_width_for_user(request)
+  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
+                         column_width)
   if isinstance(data, HttpResponseNotFound):
     return data
 
@@ -1857,17 +1997,28 @@ def diff2(request, ps_left_id, ps_right_id, patch_id):
                   'patch_id': patch_id,
                   'context': context,
                   'context_values': models.CONTEXT_CHOICES,
+                  'column_width': column_width,
                   })
 
 
 @issue_required
 def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
-                        id_before, id_after, where):
+                        id_before, id_after, where, column_width):
   """/<issue>/diff2/... - Returns a fragment of skipped lines"""
-  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, 10000)
+  column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
+                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+
+  if where == 'a':
+    context = None
+  else:
+    context = _get_context_for_user(request) or 100
+
+  data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, 10000,
+                         column_width)
   if isinstance(data, HttpResponseNotFound):
     return data
-  return _get_skipped_lines_response(data["rows"], id_before, id_after, where)
+  return _get_skipped_lines_response(data["rows"], id_before, id_after,
+                                     where, context)
 
 
 def _add_next_prev(patchset, patch):
@@ -1955,7 +2106,6 @@ def _inline_draft(request):
     comment.patch = patch
     comment.lineno = lineno
     comment.left = left
-    comment.author = request.user
     comment.text = db.Text(text)
     comment.message_id = message_id
     comment.put()
@@ -2046,6 +2196,12 @@ def publish(request):
     form_class = PublishForm
   else:
     form_class = MiniPublishForm
+  draft_message = None
+  if not request.POST.get('message_only', None):
+    query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
+                                'AND draft = TRUE'), issue,
+                               request.user.email())
+    draft_message = query.get()
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
     cc = issue.cc[:]
@@ -2060,14 +2216,20 @@ def publish(request):
     ccs = [models.Account.get_nickname_for_email(cc, default=cc) for cc in cc]
     tbd, comments = _get_draft_comments(request, issue, True)
     preview = _get_draft_details(request, comments)
+    if draft_message is None:
+      msg = ''
+    else:
+      msg = draft_message.text
     form = form_class(initial={'subject': issue.subject,
                                'reviewers': ', '.join(reviewers),
                                'cc': ', '.join(ccs),
                                'send_mail': True,
+                               'message': msg,
                                })
     return respond(request, 'publish.html', {'form': form,
                                              'issue': issue,
                                              'preview': preview,
+                                             'draft_message': draft_message,
                                              })
 
   form = form_class(request.POST)
@@ -2105,7 +2267,8 @@ def publish(request):
   msg = _make_message(request, issue,
                       form.cleaned_data['message'],
                       comments,
-                      form.cleaned_data['send_mail'])
+                      form.cleaned_data['send_mail'],
+                      draft=draft_message)
   tbd.append(msg)
 
   for obj in tbd:
@@ -2216,7 +2379,8 @@ def _get_draft_details(request, comments):
   return '\n'.join(output)
 
 
-def _make_message(request, issue, message, comments=None, send_mail=False):
+def _make_message(request, issue, message, comments=None, send_mail=False,
+                  draft=None):
   """Helper to create a Message instance and optionally send an email."""
   template, context = _get_mail_template(request, issue)
   # Decide who should receive mail
@@ -2237,12 +2401,20 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
     details = ''
   message = message.replace('\r\n', '\n')
   text = ((message.strip() + '\n\n' + details.strip())).strip()
-  msg = models.Message(issue=issue,
-                       subject=subject,
-                       sender=my_email,
-                       recipients=reply_to,
-                       text=db.Text(text),
-                       parent=issue)
+  if draft is None:
+    msg = models.Message(issue=issue,
+                         subject=subject,
+                         sender=my_email,
+                         recipients=reply_to,
+                         text=db.Text(text),
+                         parent=issue)
+  else:
+    msg = draft
+    msg.subject = subject
+    msg.recipients = reply_to
+    msg.text = db.Text(text)
+    msg.draft = False
+    msg.date = datetime.datetime.now()
 
   if send_mail:
     url = request.build_absolute_uri('/%s' % issue.key().id())
@@ -2251,8 +2423,6 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
     cc_nicknames = ', '.join(library.nickname(cc_temp, True)
                              for cc_temp in cc)
     my_nickname = library.nickname(request.user, True)
-    to = ', '.join(to)
-    cc = ', '.join(cc)
     reply_to = ', '.join(reply_to)
     description = (issue.description or '').replace('\r\n', '\n')
     home = request.build_absolute_uri('/')
@@ -2263,12 +2433,12 @@ def _make_message(request, issue, message, comments=None, send_mail=False):
                     'description': description, 'home': home,
                     })
     body = django.template.loader.render_to_string(template, context)
-    logging.warn('Mail: to=%s; cc=%s', to, cc)
+    logging.warn('Mail: to=%s; cc=%s', ', '.join(to), ', '.join(cc))
     kwds = {}
     if cc:
-      kwds['cc'] = _encode_safely(cc)
+      kwds['cc'] = [_encode_safely(address) for address in cc]
     mail.send_mail(sender=my_email,
-                   to=_encode_safely(to),
+                   to=[_encode_safely(address) for address in to],
                    subject=_encode_safely(subject),
                    body=_encode_safely(body),
                    reply_to=_encode_safely(reply_to),
@@ -2305,6 +2475,72 @@ def unstar(request):
     account.stars[:] = [i for i in account.stars if i != id]
     account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
+
+
+@login_required
+@issue_required
+def draft_message(request):
+  """/<issue>/draft_message - Retrieve, modify and delete draft messages."""
+  query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
+                              'AND draft = TRUE'),
+                             request.issue, request.user.email())
+  if query.count() == 0:
+    draft_message = None
+  else:
+    draft_message = query.get()
+  if request.method == 'GET':
+    return _get_draft_message(request, draft_message)
+  elif request.method == 'POST':
+    return _post_draft_message(request, draft_message)
+  elif request.method == 'DELETE':
+    return _delete_draft_message(request, draft_message)
+  return HttpResponse('An error occurred.', content_type='text/plain',
+                      status=500)
+
+
+def _get_draft_message(request, draft):
+  """Handles GET requests to /<issue>/draft_message.
+
+  Arguments:
+    request: The current request.
+    draft: A Message instance or None.
+
+  Returns the content of a draft message or an empty string if draft is None.
+  """
+  if draft is None:
+    return HttpResponse('', content_type='text/plain')
+  return HttpResponse(draft.text, content_type='text/plain')
+
+
+def _post_draft_message(request, draft):
+  """Handles POST requests to /<issue>/draft_message.
+
+  If draft is None a new message is created.
+
+  Arguments:
+    request: The current request.
+    draft: A Message instance or None.
+  """
+  if draft is None:
+    draft = models.Message(issue=request.issue, parent=request.issue,
+                           sender=request.user.email(), draft=True)
+  draft.text = request.POST.get('reviewmsg')
+  draft.put()
+  return HttpResponse(draft.text, content_type='text/plain')
+
+
+def _delete_draft_message(request, draft):
+  """Handles DELETE requests to /<issue>/draft_message.
+
+  Deletes a draft message.
+
+  Arguments:
+    request: The current request.
+    draft: A Message instance or None.
+  """
+  if draft is not None:
+    draft.delete()
+  return HttpResponse('OK', content_type='text/plain')
 
 
 def _lint_patch(patch):
@@ -2440,7 +2676,6 @@ def updatefromemail(request):
   return HttpResponse('OK')
 
 
-
 ### Repositories and Branches ###
 
 
@@ -2450,7 +2685,13 @@ def repos(request):
   bad_branches = list(models.Branch.gql('WHERE owner = :1', None))
   if bad_branches:
     db.delete(bad_branches)
-  branches = models.Branch.gql('ORDER BY repo, category, name')
+  repo_map = {}
+  for repo in list(models.Repository.all()):
+    repo_map[str(repo.key())] = repo
+  branches = []
+  for branch in list(models.Branch.gql('ORDER BY repo, category, name')):
+    branch.repository = repo_map[str(branch._repo)]
+    branches.append(branch)
   return respond(request, 'repos.html', {'branches': branches})
 
 
@@ -2469,15 +2710,14 @@ def repo_new(request):
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'repo_new.html', {'form': form})
-  repo.owner = request.user
   repo.put()
   branch_url = repo.url
   if not branch_url.endswith('/'):
     branch_url += '/'
   branch_url += 'trunk/'
-  branch = models.Branch(repo=repo, category='*trunk*', name='Trunk',
+  branch = models.Branch(repo=repo, repo_name=repo.name,
+                         category='*trunk*', name='Trunk',
                          url=branch_url)
-  branch.owner = request.user
   branch.put()
   return HttpResponseRedirect('/repos')
 
@@ -2496,7 +2736,7 @@ def repo_init(request):
   """/repo_init - Initialze the list of known Subversion repositories."""
   python = models.Repository.gql("WHERE name = 'Python'").get()
   if python is None:
-    python = models.Repository(name='Python', url=SVN_ROOT, owner=request.user)
+    python = models.Repository(name='Python', url=SVN_ROOT)
     python.put()
     pybranches = []
   else:
@@ -2507,8 +2747,8 @@ def repo_init(request):
       if (br.category, br.name, br.url) == (category, name, url):
         break
     else:
-      br = models.Branch(repo=python, category=category, name=name, url=url,
-                         owner=request.user)
+      br = models.Branch(repo=python, repo_name='Python',
+                         category=category, name=name, url=url)
       br.put()
   return HttpResponseRedirect('/repos')
 
@@ -2533,7 +2773,7 @@ def branch_new(request, repo_id):
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
-  branch.owner = request.user
+  branch.repo_name = repo.name
   branch.put()
   return HttpResponseRedirect('/repos')
 
@@ -2548,6 +2788,7 @@ def branch_edit(request, branch_id):
     form = BranchForm(instance=branch)
     return respond(request, 'branch_edit.html',
                    {'branch': branch, 'form': form})
+
   form = BranchForm(request.POST, instance=branch)
   errors = form.errors
   if not errors:
@@ -2558,6 +2799,7 @@ def branch_edit(request, branch_id):
   if errors:
     return respond(request, 'branch_edit.html',
                    {'branch': branch, 'form': form})
+  branch.repo_name = branch.repo.name
   branch.put()
   return HttpResponseRedirect('/repos')
 
@@ -2588,32 +2830,20 @@ def settings(request):
   if request.method != 'POST':
     nickname = account.nickname
     default_context = account.default_context
+    default_column_width = account.default_column_width
     form = SettingsForm(initial={'nickname': nickname,
                                  'context': default_context,
+                                 'column_width': default_column_width,
                                  })
     return respond(request, 'settings.html', {'form': form})
   form = SettingsForm(request.POST)
   if form.is_valid():
-    nickname = form.cleaned_data['nickname'].strip()
-    if not nickname:
-      form.errors['nickname'] = ['Your nickname cannot be empty.']
-    elif '@' in nickname:
-      form.errors['nickname'] = ['Your nickname cannot contain "@".']
-    elif ',' in nickname:
-      form.errors['nickname'] = ['Your nickname cannot contain ",".']
-    elif nickname == 'me':
-      form.errors['nickname'] = ['Of course, you are what you are. '
-                                 'But \'me\' is for everyone.']
-    else:
-      accounts = models.Account.get_accounts_for_nickname(nickname)
-      if nickname != account.nickname and accounts:
-        form.errors['nickname'] = ['This nickname is already in use.']
-      else:
-        account.nickname = nickname
-        account.default_context = form.cleaned_data.get("context")
-        account.fresh = False
-        account.put()
-  if not form.is_valid():
+    account.nickname = form.cleaned_data.get('nickname')
+    account.default_context = form.cleaned_data.get('context')
+    account.default_column_width = form.cleaned_data.get('column_width')
+    account.fresh = False
+    account.put()
+  else:
     return respond(request, 'settings.html', {'form': form})
   return HttpResponseRedirect('/mine')
 
@@ -2641,7 +2871,7 @@ def _user_popup(request):
     num_issues_reviewed = db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1',
-      user).count()
+      user.email()).count()
 
     user.nickname = models.Account.get_nickname_for_email(user.email())
     popup_html = render_to_response('user_popup.html',

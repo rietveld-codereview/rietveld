@@ -10,7 +10,7 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
-# Used 12 times in query history.
+# Unused in query history -- copied from input.
 - kind: Branch
   properties:
   - name: repo
@@ -32,7 +32,7 @@ indexes:
   - name: patch
   - name: date
 
-# Used 7 times in query history.
+# Used 2 times in query history.
 - kind: Comment
   properties:
   - name: patch
@@ -53,14 +53,7 @@ indexes:
 - kind: Content
   ancestor: yes
 
-# Used 5 times in query history.
-- kind: Issue
-  properties:
-  - name: closed
-  - name: modified
-    direction: desc
-
-# Used 12 times in query history.
+# Used 4 times in query history.
 - kind: Issue
   properties:
   - name: closed
@@ -68,7 +61,15 @@ indexes:
   - name: modified
     direction: desc
 
-# Used 6 times in query history.
+# Unused in query history -- copied from input.
+- kind: Issue
+  properties:
+  - name: closed
+  - name: private
+  - name: modified
+    direction: desc
+
+# Used 2 times in query history.
 - kind: Issue
   properties:
   - name: closed
@@ -87,12 +88,6 @@ indexes:
 # Unused in query history -- copied from input.
 - kind: Issue
   properties:
-  - name: modified
-    direction: desc
-
-# Unused in query history -- copied from input.
-- kind: Issue
-  properties:
   - name: owner
   - name: modified
     direction: desc
@@ -104,7 +99,7 @@ indexes:
   - name: modified
     direction: desc
 
-# Used 29 times in query history.
+# Used 2 times in query history.
 - kind: Message
   properties:
   - name: issue
@@ -114,7 +109,7 @@ indexes:
 - kind: Message
   ancestor: yes
 
-# Used 93 times in query history.
+# Used 4 times in query history.
 - kind: Patch
   properties:
   - name: patchset
@@ -124,7 +119,7 @@ indexes:
 - kind: Patch
   ancestor: yes
 
-# Used 36 times in query history.
+# Used 2 times in query history.
 - kind: PatchSet
   properties:
   - name: issue

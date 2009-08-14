@@ -4,11 +4,11 @@
 <h2>Repositories and Branches</h2>
 
 {%for br in branches%}
-{%ifchanged%}<h3>Repository: {{br.repo.name}}</h3>
+{%ifchanged%}<h3>Repository: {{br.repository.name}}</h3>
 {%if user%}
-<p>(<a href="{%url codereview.views.branch_new br.repo.key.id%}">add branch</a>)
+<p>(<a href="{%url codereview.views.branch_new br.repository.key.id%}">add branch</a>)</p>
 {%endif%}
-{%endifchanged%}</p>
+{%endifchanged%}
 {{br.category}} {{br.name}} {{br.url}}
 {%ifequal br.owner user%}
 &nbsp; (<a href="{%url codereview.views.branch_edit br.key.id%}">edit</a>)

@@ -5,11 +5,11 @@ This project shows how to create a somewhat substantial web application
 using Django on Google App Engine.  It requires Django version 1.0.
 
 In addition, I hope it will serve as a practical tool for the Python
-developer community, and hopefully for other open source
-communities. As I've learned over the last two years at Google, where
-I developed a similar tool named Mondrian, proper code review habits
-can really improve the quality of a code base, and good tools for code
-review will improve developers' life.
+developer community, and hopefully for other open source communities.
+As I've learned over the last two years at Google, where I developed a
+similar tool named Mondrian, proper code review habits can really
+improve the quality of a code base, and good tools for code review
+will improve developers' life.
 
 Some code in this project was derived from Mondrian, but this is not
 the full Mondrian tool.
@@ -33,6 +33,23 @@ The license is Apache 2.0.  See the file COPYING.
 
 Running
 -------
+
+*** NEW *** YOU MUST INSTALL DJANGO 1.0 FIRST BEFORE RUNNING LOCALLY.
+
+Download Django-1.0.2-final.tar.gz from www.djangoproject.com (or
+whatever the latest micro-version of 1.0 is) and follow the
+installation instructions.  Typically:
+
+  tar xzf Django-1.0.2-final.tar.gz
+  cd Django-1.0.2-final
+  sudo python setup.py install
+
+NOTE: On the Mac, if you are using the Google App Engine Launcher, the
+Python version it uses may differ from the default you have on the
+command line.  To install Django into the correct Python version, you
+may have to do the following:
+
+  sudo /usr/bin/python setup.py install
 
 To run the app locally (e.g. for testing), download the Google App
 Engine SDK from http://code.google.com/appengine/downloads.html.  You
