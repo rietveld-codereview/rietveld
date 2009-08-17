@@ -72,6 +72,9 @@ VCS_MERCURIAL = "Mercurial"
 VCS_SUBVERSION = "Subversion"
 VCS_UNKNOWN = "Unknown"
 
+# whitelist for non-binary filetypes which do not start with "text/"
+TEXT_MIMETYPES = ['application/javascript', 'application/x-javascript']
+
 
 def GetEmail(prompt):
   """Prompts the user for their email address and returns it.
@@ -736,6 +739,9 @@ class VersionControlSystem(object):
     mimetype = mimetypes.guess_type(filename)[0]
     if not mimetype:
       return False  # e.g. README, "real" binaries usually have an extension
+    # special case for text files which don't start with text/
+    if mimetype in TEXT_MIMETYPES:
+      return False
     return not mimetype.startswith("text/")
 
 
