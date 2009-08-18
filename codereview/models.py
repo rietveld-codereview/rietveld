@@ -91,9 +91,7 @@ class Issue(db.Model):
 
   def user_can_edit(self, user):
     """Return true if the given user has permission to edit this issue."""
-    # TODO(jam/evan): Commented this out for now since the new UI with close buttons makes it
-    # too easy to accidently close another person's issues.
-    return user == self.owner # or user.email().endswith("@chromium.org")
+    return user == self.owner or user.email().endswith("@chromium.org")
 
   @property
   def edit_allowed(self):
