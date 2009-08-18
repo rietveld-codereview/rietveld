@@ -1812,6 +1812,8 @@ def diff(request):
 
   context = _get_context_for_user(request)
   column_width = _get_column_width_for_user(request)
+  if patch.filename.startswith('webkit/api'):
+    column_width = engine.MAX_COLUMN_WIDTH
   if patch.is_binary:
     rows = None
   else:
