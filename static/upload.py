@@ -1014,19 +1014,26 @@ class SubversionVCS(VersionControlSystem):
 class GitVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Git."""
 
-  NULL_HASH = "0"*40
-
   def __init__(self, options):
     super(GitVCS, self).__init__(options)
     # Map of filename -> (hash before, hash after) of base file.
-    self.base_hashes = {}
+    # Hashes for "no such file" are represented as None.
+    self.hashes = {}
+    # Map of new filename -> old filename for renames.
+    self.renames = {}
 
   def GenerateDiff(self, extra_args):
     # This is more complicated than svn's GenerateDiff because we must convert
     # the diff output to include an svn-style "Index:" line as well as record
-    # the hashes of the base files, so we can upload them along with our diff.
+    # the hashes of the files, so we can upload them along with our diff.
+
+    # Special used by git to indicate "no such content".
+    NULL_HASH = "0"*40
+
+    extra_args = extra_args[:]
     if self.options.revision:
       extra_args = [self.options.revision] + extra_args
+    extra_args.append('-M')
 
     # --no-ext-diff is broken in some versions of Git, so try to work around
     # this by overriding the environment (but there is still a problem if the
@@ -1039,18 +1046,26 @@ class GitVCS(VersionControlSystem):
     filecount = 0
     filename = None
     for line in gitdiff.splitlines():
-      match = re.match(r"diff --git a/(.*) b/.*$", line)
+      match = re.match(r"diff --git a/(.*) b/(.*)$", line)
       if match:
         filecount += 1
-        filename = match.group(1)
+        # Intentionally use the "after" filename so we can show renames.
+        filename = match.group(2)
         svndiff.append("Index: %s\n" % filename)
+        if match.group(1) != match.group(2):
+          self.renames[match.group(2)] = match.group(1)
       else:
         # The "index" line in a git diff looks like this (long hashes elided):
         #   index 82c0d44..b2cee3f 100755
         # We want to save the left hash, as that identifies the base file.
         match = re.match(r"index (\w+)\.\.(\w+)", line)
         if match:
-          self.base_hashes[filename] = (match.group(1), match.group(2))
+          before, after = (match.group(1), match.group(2))
+          if before == NULL_HASH:
+            before = None
+          if after == NULL_HASH:
+            after = None
+          self.hashes[filename] = (before, after)
       svndiff.append(line + "\n")
     if not filecount:
       ErrorExit("No valid patches found in output from git diff")
@@ -1070,24 +1085,38 @@ class GitVCS(VersionControlSystem):
     return data
 
   def GetBaseFile(self, filename):
-    hash_before, hash_after = self.base_hashes[filename]
+    hash_before, hash_after = self.hashes.get(filename, (None,None))
     base_content = None
     new_content = None
     is_binary = self.IsBinary(filename)
+    status = None
 
-    if hash_before == self.NULL_HASH:  # All-zero hash indicates no base file.
+    if filename in self.renames:
+      status = "A +"  # Match svn attribute name for renames.
+      if filename not in self.hashes:
+        # If a rename doesn't change the content, we never get a hash.
+        base_content = RunShell(["git", "show", filename])
+    elif not hash_before:
       status = "A"
       base_content = ""
+    elif not hash_after:
+      status = "D"
     else:
       status = "M"
-      if not is_binary or self.IsImage(filename):
+
+    is_image = self.IsImage(filename)
+
+    # Grab the before/after content if we need it.
+    # We should include file contents if it's text or it's an image.
+    if not is_binary or is_image:
+      # Grab the base content if we don't have it already.
+      if base_content is None and hash_before:
         base_content = self.GetFileContent(hash_before, is_binary)
+      # Only include the "after" file if it's an image; otherwise it
+      # it is reconstructed from the diff.
+      if is_image and hash_after:
+        new_content = self.GetFileContent(hash_after, is_binary)
 
-    if is_binary and self.IsImage(filename) and not hash_after == "0" * 40:
-      new_content = self.GetFileContent(hash_after, is_binary)
-
-    if hash_after == self.NULL_HASH:
-      status = "D"
     return (base_content, new_content, is_binary, status)
 
 
