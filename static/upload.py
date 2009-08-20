@@ -556,7 +556,8 @@ def GetContentType(filename):
 use_shell = sys.platform.startswith("win")
 
 def RunShellWithReturnCode(command, print_output=False,
-                           universal_newlines=True):
+                           universal_newlines=True,
+                           env=os.environ):
   """Executes a command and returns the output from stdout and the return code.
 
   Args:
@@ -570,7 +571,8 @@ def RunShellWithReturnCode(command, print_output=False,
   """
   logging.info("Running %s", command)
   p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                       shell=use_shell, universal_newlines=universal_newlines)
+                       shell=use_shell, universal_newlines=universal_newlines,
+                       env=env)
   if print_output:
     output_array = []
     while True:
@@ -592,9 +594,9 @@ def RunShellWithReturnCode(command, print_output=False,
 
 
 def RunShell(command, silent_ok=False, universal_newlines=True,
-             print_output=False):
+             print_output=False, env=os.environ):
   data, retcode = RunShellWithReturnCode(command, print_output,
-                                         universal_newlines)
+                                         universal_newlines, env)
   if retcode:
     ErrorExit("Got error status from %s:\n%s" % (command, data))
   if not silent_ok and not data:
@@ -1025,7 +1027,14 @@ class GitVCS(VersionControlSystem):
     # the hashes of the base files, so we can upload them along with our diff.
     if self.options.revision:
       extra_args = [self.options.revision] + extra_args
-    gitdiff = RunShell(["git", "diff", "--full-index"] + extra_args)
+
+    # --no-ext-diff is broken in some versions of Git, so try to work around
+    # this by overriding the environment (but there is still a problem if the
+    # git config key "diff.external" is used).
+    env = os.environ.copy()
+    if 'GIT_EXTERNAL_DIFF' in env: del env['GIT_EXTERNAL_DIFF']
+    gitdiff = RunShell(["git", "diff", "--no-ext-diff", "--full-index"]
+                       + extra_args, env=env)
     svndiff = []
     filecount = 0
     filename = None
