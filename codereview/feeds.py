@@ -58,9 +58,13 @@ class BaseFeed(Feed):
     return 'Rietveld'
 
   def item_pubdate(self, item):
-    if isinstance(item, models.Issue) or isinstance(item, models.PatchSet):
+    if isinstance(item, models.Issue):
       return item.modified
-    if isinstance(item, models.Comment):
+    if isinstance(item, models.PatchSet):
+      # Use created, not modified, so that commenting on
+      # a patch set does not bump its place in the RSS feed.
+      return item.created
+    if isinstance(item, models.Comment) or isinstance(item, models.Message):
       return item.date
     return None
 
@@ -130,9 +134,9 @@ class OneIssueFeed(BaseFeed):
     return 'Code review - Issue %d: %s' % (obj.key().id(),obj.subject)
 
   def items(self, obj):
-    patchsets = list(obj.patchset_set.order('created'))
-    messages = list(obj.message_set.order('date'))
-    return patchsets + messages
+    all = list(obj.patchset_set) + list(obj.message_set)
+    all.sort(key=self.item_pubdate)
+    return all
 
 
 ### RSS feeds ###
