@@ -2574,6 +2574,14 @@ def settings(request):
   return HttpResponseRedirect('/mine')
 
 
+@post_required
+@login_required
+def account_delete(request):
+  account = models.Account.current_user_account
+  account.delete()
+  return HttpResponseRedirect(users.create_logout_url('/'))
+
+
 @user_key_required
 def user_popup(request):
   """/user_popup - Pop up to show the user info."""
