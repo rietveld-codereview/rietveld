@@ -589,6 +589,17 @@ def patchset_required(func):
 
   return patchset_wrapper
 
+def patchset_owner_required(func):
+  """Decorator to process the patchset_id argument and insists you own it."""
+
+  @login_required
+  @patchset_required
+  def patchset_owner_wrapper(request, *args, **kwds):
+    if request.patchset.owner != request.user:
+      return HttpResponseForbidden('You do not own this patchset')
+    return func(request, *args, **kwds)
+
+  return patchset_owner_wrapper
 
 def patch_required(func):
   """Decorator that processes the patch_id argument."""
@@ -608,7 +619,7 @@ def patch_required(func):
 
 def image_required(func):
   """Decorator that processes the image argument.
-  
+
   Attributes set on the request:
    content: a Content entity.
   """
@@ -1184,7 +1195,7 @@ def _get_emails(form, label):
 
 def _calculate_delta(patch, patchset_id, patchsets):
   """Calculates which files in earlier patchsets this file differs from.
-  
+
   Args:
     patch: The file to compare.
     patchset_id: The file's patchset's key id.
@@ -1200,7 +1211,7 @@ def _calculate_delta(patch, patchset_id, patchsets):
     if patchset_id == other.key().id():
       break
     if other.data or other.parsed_patches:
-      # Loading all the Patch entities in every PatchSet takes too long 
+      # Loading all the Patch entities in every PatchSet takes too long
       # (DeadLineExceeded) and consumes a lot of memory (MemoryError) so instead
       # just parse the patchset's data.  Note we can only do this if the
       # patchset was small enough to fit in the data property.
@@ -1342,10 +1353,12 @@ def show(request, form=None):
       messages.append(msg)
     elif msg.draft and request.user and msg.sender == request.user.email():
       has_draft_message = True
+  num_patchsets = len(patchsets)
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
                   'last_patchset': last_patchset,
+                  'num_patchsets': num_patchsets,
                   'first_patch': first_patch,
                   'has_draft_message': has_draft_message,
                   })
@@ -1519,6 +1532,48 @@ def delete(request):
     tbd += cls.gql('WHERE ANCESTOR IS :1', issue)
   db.delete(tbd)
   return HttpResponseRedirect('/mine')
+
+
+@post_required
+@patchset_owner_required
+def delete_patchset(request):
+  """/<issue>/patch/<patchset>/delete - Delete a patchset.
+
+  There is no way back.
+  """
+  issue = request.issue
+  ps_delete = request.patchset
+  ps_id = ps_delete.key().id()
+  patchsets_after = issue.patchset_set.filter('created >', ps_delete.created)
+  patches = []
+  for patchset in patchsets_after:
+    for patch in patchset.patch_set:
+      if patch.delta_calculated:
+        if ps_id in patch.delta:
+          patches.append(patch)
+  db.run_in_transaction(_patchset_delete, ps_delete, patches)
+  return HttpResponseRedirect('/' + str(issue.key().id()))
+
+
+def _patchset_delete(ps_delete, patches):
+  """Transational helper for delete_patchset.
+
+  Args:
+    ps_delete: The patchset to be deleted.
+    patches: Patches that have delta against patches of ps_delete.
+
+  """
+  patchset_id = ps_delete.key().id()
+  tbp = []
+  for patch in patches:
+    patch.delta.remove(patchset_id)
+    tbp.append(patch)
+  if tbp:
+    db.put(tbp)
+  tbd = [ps_delete]
+  for cls in [models.Patch, models.Comment]:
+    tbd += cls.gql('WHERE ANCESTOR IS :1', ps_delete)
+  db.delete(tbd)
 
 
 @post_required

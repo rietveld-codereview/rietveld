@@ -661,6 +661,23 @@ span.visualtab {
   border-left: 1px solid lightgray;
 }
 
+.issue-list form {
+  display: inline;
+}
+
+.issue-list input.link-to {
+  color: #4182fa;
+  border: 0px;
+  margin: 0px;
+  padding: 0px;
+  width: auto;
+  overflow: visible;
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+  display: inline-block;
+}
 
 .issue_details_sidebar div {
   margin-top: .8em;
