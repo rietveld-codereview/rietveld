@@ -73,7 +73,9 @@ VCS_SUBVERSION = "Subversion"
 VCS_UNKNOWN = "Unknown"
 
 # whitelist for non-binary filetypes which do not start with "text/"
-TEXT_MIMETYPES = ['application/javascript', 'application/x-javascript']
+# .mm (Objective-C) shows up as application/x-freemind on my Linux box.
+TEXT_MIMETYPES = ['application/javascript', 'application/x-javascript',
+                  'application/x-freemind']
 
 
 def GetEmail(prompt):

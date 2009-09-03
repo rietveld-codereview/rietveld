@@ -66,6 +66,7 @@ urlpatterns = patterns(
     (r'^account_delete$', 'account_delete'),
     (r'^user_popup/(.+)$', 'user_popup'),
     (r'^(\d+)/patchset/(\d+)$', 'patchset'),
+    (r'^(\d+)/patchset/(\d+)/delete$', 'delete_patchset'),
     (r'^account$', 'account'),
     (r'^use_uploadpy$', 'use_uploadpy'),
     (r'^update_accounts$', 'update_accounts'),

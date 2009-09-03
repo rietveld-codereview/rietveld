@@ -105,9 +105,11 @@
       <a href="javascript:M_hideAllComments('cl', {{messages|length}})">
         Collapse All Messages</a>
     </div>
- 
+
     {%for message in messages%}
-      <div class="message">
+      <div class="message" id="msg-{{message.key}}"
+	   name="{{forloop.counter0}}">
+	<a name="msg-{{message.key}}"></a>
         <div class="header">
           <table border="0" width="100%" cellspacing="0" cellpadding="0">
             <tr class="comment_title"
@@ -175,6 +177,7 @@
   <!--
     document.onkeypress = function(evt) { return M_changelistKeyPress(evt); }
     var dashboardState = new M_DashboardState(window, 'patch', 'M_CLPatchMarker');
+    M_switchChangelistCommentByAnchor();
   // -->
 </script>
 

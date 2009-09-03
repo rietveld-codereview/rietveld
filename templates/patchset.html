@@ -14,8 +14,16 @@
     {%if patchset.data%}
     <div style="float: right;">
       <a href="{%url codereview.views.download issue.key.id,patchset.key.id%}">
-        Download raw patch set
-      </a>
+        Download raw patch set</a>
+      {%ifnotequal 1 num_patchsets%}
+        {%ifequal patchset.owner user%}
+        <form method="post" action="{%url codereview.views.delete_patchset issue.key.id patchset.key.id %}">
+          <input type="hidden" name="_method" value="delete" />
+          |<input onclick="return confirm('Are you sure?');"
+            type="submit" value="Delete patch set" class="link-to"/>
+        </form>
+        {%endifequal%}
+      {%endifnotequal%}
     </div>
     {%else%}
     <div class="disabled" style="float: right;">
@@ -38,7 +46,7 @@
 
     {%for patch in patchset.patches%}
       <tr name="patch">
-	<td class="first" width="14"><img src="/static/closedtriangle.gif" 
+        <td class="first" width="14"><img src="/static/closedtriangle.gif" 
     style="visibility: hidden;" width="12" height="9" /></td>
         <td>{%if patch.status%}{{patch.status}}{%endif%}</td>
         <td>

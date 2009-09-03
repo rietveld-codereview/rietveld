@@ -43,8 +43,8 @@ class BaseFeed(Feed):
       else:
         # Patch set is too large, only the splitted diffs are available.
         return '/%s' % (item.parent_key().id())
-    if isinstance(item, models.Comment):
-      return '/%s' % (item.parent_key().parent().parent().id())
+    if isinstance(item, models.Message):
+      return '/%s#msg-%s' % (item.issue.key().id(), item.key())
     return '/%s' % (item.key().id())
 
   def item_title(self, item):
@@ -53,8 +53,8 @@ class BaseFeed(Feed):
   def item_author_name(self, item):
     if isinstance(item, models.Issue) or isinstance(item, models.PatchSet):
       return item.owner
-    if isinstance(item, models.Comment):
-      return item.author
+    if isinstance(item, models.Message):
+      return library.nickname(item.sender)
     return 'Rietveld'
 
   def item_pubdate(self, item):
@@ -64,7 +64,7 @@ class BaseFeed(Feed):
       # Use created, not modified, so that commenting on
       # a patch set does not bump its place in the RSS feed.
       return item.created
-    if isinstance(item, models.Comment) or isinstance(item, models.Message):
+    if isinstance(item, models.Message):
       return item.date
     return None
 

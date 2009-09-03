@@ -474,6 +474,22 @@ function M_switchChangelistComment(cid) {
 }
 
 /**
+ * Toggles a comment if the anchor is of the form '#msg-KEY'.
+ */
+function M_switchChangelistCommentByAnchor() {
+  var href = window.location.href;
+  var idx_hash = href.lastIndexOf('#');
+  if (idx_hash != -1) {
+    var anchor = href.slice(idx_hash+1, href.length);
+    if (anchor.slice(0, 4) == 'msg-') {
+      var elem = document.getElementById(anchor);
+      var num = elem.getAttribute('name');
+      M_switchChangelistComment(num);
+    }
+  }
+}
+
+/**
  * Toggles whether the specified file comment is expanded/collapsed.
  * @param {Integer} cid The comment id, 0-indexed
  */
@@ -3018,5 +3034,4 @@ M_draftMessage.prototype.discard = function(cb) {
 M_draftMessage.prototype.get_dialog_ = function() {
   return document.getElementById(this.id_dlg_container);
 }
-
 
