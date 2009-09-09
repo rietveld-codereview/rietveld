@@ -1493,6 +1493,10 @@ def show(request, form=None):
     elif msg.draft and request.user and msg.sender == request.user.email():
       has_draft_message = True
   num_patchsets = len(patchsets)
+  issue.description = cgi.escape(issue.description)
+  expression = re.compile(r"\nBUG=(\d+)", re.IGNORECASE)
+  issue.description = expression.sub("\nBUG=<a href='http://code.google.com/p/chromium/issues/detail?id=\g<1>'>\g<1></a>", issue.description)
+  issue.description = issue.description.replace('\n', '<br/>')
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
