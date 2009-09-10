@@ -1473,6 +1473,11 @@ def _get_patchset_info(request, patchset_id):
   return issue, patchsets, response
 
 
+def replace_bug(m):
+  bugs = re.split(r"[\s,]+", m.group(1))
+  return ", ".join("<a href='http://code.google.com/p/chromium/issues/detail?id=%s'>%s</a>" % (i, i) for i in bugs if i != "") + "\n"
+
+
 @issue_required
 def show(request, form=None):
   """/<issue> - Show an issue."""
@@ -1496,8 +1501,8 @@ def show(request, form=None):
   num_patchsets = len(patchsets)
   issue.description = cgi.escape(issue.description)
   issue.description = urlize(issue.description)
-  expression = re.compile(r"\nBUG=(\d+)", re.IGNORECASE)
-  issue.description = expression.sub("\nBUG=<a href='http://code.google.com/p/chromium/issues/detail?id=\g<1>'>\g<1></a>", issue.description)
+  expression = re.compile(r"(?<=BUG=)(\s*\d+\s*(?:,\s*\d+\s*)*)", re.IGNORECASE)
+  issue.description = re.sub(expression, replace_bug, issue.description)
   issue.description = issue.description.replace('\n', '<br/>')
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
