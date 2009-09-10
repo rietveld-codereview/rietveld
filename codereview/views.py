@@ -53,6 +53,7 @@ from django.shortcuts import render_to_response
 import django.template
 from django.utils import simplejson
 from django.utils.html import strip_tags
+from django.utils.html import urlize
 from django.utils.safestring import mark_safe
 
 # Local imports
@@ -1494,6 +1495,7 @@ def show(request, form=None):
       has_draft_message = True
   num_patchsets = len(patchsets)
   issue.description = cgi.escape(issue.description)
+  issue.description = urlize(issue.description)
   expression = re.compile(r"\nBUG=(\d+)", re.IGNORECASE)
   issue.description = expression.sub("\nBUG=<a href='http://code.google.com/p/chromium/issues/detail?id=\g<1>'>\g<1></a>", issue.description)
   issue.description = issue.description.replace('\n', '<br/>')
