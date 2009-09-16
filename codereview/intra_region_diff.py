@@ -77,11 +77,12 @@ COLOR_SCHEME = {
           'bckgrnd':    'newlight'
   },
 }
-# Regular expressions to tokenize lines. Default is 'b'.
+# Regular expressions to tokenize lines. Default is 'd'.
 EXPRS = {
          'a': r'(\w+|[^\w\s]+|\s+)',
          'b': r'([A-Za-z0-9]+|[^A-Za-z0-9])',
          'c': r'([A-Za-z0-9_]+|[^A-Za-z0-9_])',
+         'd': r'([^\W_]+|[\W_])',
         }
 # Maximum total characters in old and new lines for doing intra-region diffs.
 # Intra-region diff for larger regions is hard to comprehend and wastes CPU
@@ -215,7 +216,7 @@ def FilterBlocks(blocks, filter_func):
   return res
 
 
-def GetDiffParams(expr='b', min_match_ratio=0.6, min_match_size=2, dbg=False):
+def GetDiffParams(expr='d', min_match_ratio=0.6, min_match_size=2, dbg=False):
   """Returns a tuple of various parameters which affect intra region diffs.
 
   Args:
@@ -277,22 +278,18 @@ def WordDiff(line1, line2, diff_params):
   """
   match_expr, min_match_ratio, min_match_size, dbg = diff_params
   exp = EXPRS[match_expr]
-  # We want to split at proper character boundaries in UTF8 text.
+  # Strings may have been left undecoded up to now. Assume UTF-8.
   try:
-    line1_u = unicode(line1, "utf8")
+    line1 = unicode(line1, "utf8")
   except:
-    line1_u = line1
+    pass
   try:
-    line2_u = unicode(line2, "utf8")
+    line2 = unicode(line2, "utf8")
   except:
-    line2_u = line2
+    pass
 
-  def _ToUTF8(s):
-    if isinstance(s, unicode):
-      return s.encode("utf8")
-    return s
-  a = map(_ToUTF8, re.findall(exp, line1_u, re.U))
-  b = map(_ToUTF8, re.findall(exp, line2_u, re.U))
+  a = re.findall(exp, line1, re.U)
+  b = re.findall(exp, line2, re.U)
   s = difflib.SequenceMatcher(None, a, b)
   matching_blocks = s.get_matching_blocks()
   ratio = s.ratio()
