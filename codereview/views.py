@@ -1475,7 +1475,7 @@ def _get_patchset_info(request, patchset_id):
 
 def replace_bug(m):
   bugs = re.split(r"[\s,]+", m.group(1))
-  return ", ".join("<a href='http://code.google.com/p/chromium/issues/detail?id=%s'>%s</a>" % (i, i) for i in bugs if i != "") + "\n"
+  return ", ".join("<a href='http://code.google.com/p/chromium/issues/detail?id=%s'>%s</a>" % (i, i) for i in bugs if i != "") + "\n\n"
 
 
 @issue_required
