@@ -34,6 +34,8 @@ update:
 
 upload: update
 
+deploy: update
+
 update_indexes:
 	$(APPCFG) $(APPCFG_FLAGS) update_indexes .
 
