@@ -72,6 +72,7 @@ IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
 
 ### Form classes ###
 
+
 class AccountInput(forms.TextInput):
   # Associates the necessary css/js files for the control.  See
   # http://docs.djangoproject.com/en/dev/topics/forms/media/.
@@ -364,6 +365,7 @@ class SettingsForm(forms.Form):
 
     return nickname
 
+
 ### Helper functions ###
 
 
@@ -407,6 +409,9 @@ def respond(request, template, params=None):
     params['sign_in'] = users.create_login_url(full_path)
   else:
     params['sign_out'] = users.create_logout_url(full_path)
+    account = models.Account.current_user_account
+    if account is not None:
+      params['xsrf_token'] = account.get_xsrf_token()
   params['must_choose_nickname'] = must_choose_nickname
   params['uploadpy_hint'] = uploadpy_hint
   try:
@@ -490,6 +495,32 @@ def login_required(func):
     return func(request, *args, **kwds)
 
   return login_wrapper
+
+
+def xsrf_required(func):
+  """Decorator to check XSRF token.
+
+  This only checks if the method is POST.
+  Apply this after @login_required.
+  """
+
+  def xsrf_wrapper(request, *args, **kwds):
+    if request.method == 'XXX':  # POST
+      post_token = request.POST.get('xsrf_token')
+      if not post_token:
+        return HttpResponse('Missing XSRF token.', status=405)
+      account = models.Account.current_user_account
+      if not account:
+        return HttpResponse('Must be logged in for XSRF check.', status=405)
+      xsrf_token = account.get_xsrf_token()
+      if post_token != xsrf_token:
+        # Try the previous hour's token
+        xsrf_token = account.get_xsrf_token(-1)
+        if post_token != xsrf_token:
+          return HttpResponse('Invalid XSRF token.', status=405)
+    return func(request, *args, **kwds)
+
+  return xsrf_wrapper
 
 
 def admin_required(func):
@@ -2606,6 +2637,7 @@ def branch_delete(request, branch_id):
 
 
 @login_required
+@xsrf_required
 def settings(request):
   account = models.Account.current_user_account
   if request.method != 'POST':
@@ -2631,6 +2663,7 @@ def settings(request):
 
 @post_required
 @login_required
+@xsrf_required
 def account_delete(request):
   account = models.Account.current_user_account
   account.delete()
