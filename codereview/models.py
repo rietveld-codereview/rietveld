@@ -16,7 +16,10 @@
 
 # Python imports
 import logging
+import md5
+import os
 import re
+import time
 
 # AppEngine imports
 from google.appengine.ext import db
@@ -517,6 +520,7 @@ class Account(db.Model):
 
   lower_email = db.StringProperty()
   lower_nickname = db.StringProperty()
+  xsrf_secret = db.BlobProperty()
 
   # Note that this doesn't get called when doing multi-entity puts.
   def put(self):
@@ -696,3 +700,17 @@ class Account(db.Model):
     """Save self._drafts to memcache."""
     ##logging.info('SAVING: %s -> %s', self.email, self._drafts)
     memcache.set('user_drafts:' + self.email, self._drafts, 3600)
+
+  def get_xsrf_token(self, offset=0):
+    """Return an XSRF token for the current user."""
+    if not self.xsrf_secret:
+      self.xsrf_secret = os.urandom(8)
+      self.put()
+    m = md5.new(self.xsrf_secret)
+    email_str = self.lower_email
+    if isinstance(email_str, unicode):
+      email_str = email_str.encode('utf-8')
+    m.update(self.lower_email)
+    when = int(time.time()) // 3600 + offset
+    m.update(str(when))
+    return m.hexdigest()
