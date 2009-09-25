@@ -18,6 +18,7 @@
       {%ifnotequal 1 num_patchsets%}
         {%ifequal patchset.owner user%}
         <form method="post" action="{%url codereview.views.delete_patchset issue.key.id patchset.key.id %}">
+          <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
           <input type="hidden" name="_method" value="delete" />
           |<input onclick="return confirm('Are you sure?');"
             type="submit" value="Delete patch set" class="link-to"/>

@@ -500,27 +500,40 @@ def login_required(func):
 def xsrf_required(func):
   """Decorator to check XSRF token.
 
-  This only checks if the method is POST.
-  Apply this after @login_required.
+  This only checks if the method is POST; it lets other method go
+  through unchallenged.  Apply after @login_required and (if
+  applicable) @post_required.  This decorator is mutually exclusive
+  with @upload_required.
   """
 
   def xsrf_wrapper(request, *args, **kwds):
-    if request.method == 'XXX':  # POST
+    if request.method == 'POST':
       post_token = request.POST.get('xsrf_token')
       if not post_token:
-        return HttpResponse('Missing XSRF token.', status=405)
+        return HttpResponse('Missing XSRF token.', status=403)
       account = models.Account.current_user_account
       if not account:
-        return HttpResponse('Must be logged in for XSRF check.', status=405)
+        return HttpResponse('Must be logged in for XSRF check.', status=403)
       xsrf_token = account.get_xsrf_token()
       if post_token != xsrf_token:
         # Try the previous hour's token
         xsrf_token = account.get_xsrf_token(-1)
         if post_token != xsrf_token:
-          return HttpResponse('Invalid XSRF token.', status=405)
+          return HttpResponse('Invalid XSRF token.', status=403)
     return func(request, *args, **kwds)
 
   return xsrf_wrapper
+
+
+def upload_required(func):
+  """Decorator for POST requests from the upload.py script.
+
+  Right now this is for documentation only, but eventually we should
+  change this to insist on a special header that JavaScript cannot
+  add, to prevent XSRF attacks on these URLs.  This decorator is
+  mutually exclusive with @xsrf_required.
+  """
+  return func
 
 
 def admin_required(func):
@@ -795,6 +808,7 @@ def _show_user(request):
 
 
 @login_required
+@xsrf_required
 def new(request):
   """/new - Upload a new patch set.
 
@@ -815,6 +829,7 @@ def new(request):
 
 
 @login_required
+@xsrf_required
 def use_uploadpy(request):
   """Show an intermediate page about upload.py."""
   if request.method == 'POST':
@@ -830,6 +845,7 @@ def use_uploadpy(request):
 
 
 @post_required
+@upload_required
 def upload(request):
   """/upload - Like new() or add(), but from the upload.py script.
 
@@ -940,10 +956,12 @@ def upload(request):
 
 @post_required
 @patch_required
+@upload_required
 def upload_content(request):
   """/<issue>/upload_content/<patchset>/<patch> - Upload base file contents.
 
-  Used by upload.py to upload base files."""
+  Used by upload.py to upload base files.
+  """
   form = UploadContentForm(request.POST, request.FILES)
   if not form.is_valid():
     return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
@@ -992,6 +1010,7 @@ def upload_content(request):
 
 @post_required
 @patchset_required
+@upload_required
 def upload_patch(request):
   """/<issue>/upload_patch/<patchset> - Upload patch to patchset.
 
@@ -1142,6 +1161,7 @@ def _get_data_url(form):
 
 @post_required
 @issue_owner_required
+@xsrf_required
 def add(request):
   """/<issue>/add - Add a new PatchSet to an existing Issue."""
   issue = request.issue
@@ -1439,29 +1459,8 @@ def account(request):
   return HttpResponse(response)
 
 
-@admin_required
-def update_accounts(request):
-  """/update_accounts/?q=nick."""
-  starting_nick = request.GET.get('q', '')
-  try:
-    while True:
-      accounts = db.GqlQuery(
-        'SELECT * FROM Account '
-        'WHERE nickname > :1 LIMIT 50',
-        starting_nick)
-      # Don't use multi-entity puts as they don't call our overridden put().
-      empty = True
-      for account in accounts:
-        empty = False
-        account.put()
-        starting_nick = account.nickname
-      if empty:
-        return HttpResponse('Done', content_type='text/plain')
-  except DeadlineExceededError:
-    return HttpResponseRedirect('/update_accounts?q=' + starting_nick)
-
-
 @issue_editor_required
+@xsrf_required
 def edit(request):
   """/<issue>/edit - Edit an issue."""
   issue = request.issue
@@ -1554,6 +1553,7 @@ def _delete_cached_contents(patch_set):
 
 @post_required
 @issue_owner_required
+@xsrf_required
 def delete(request):
   """/<issue>/delete - Delete an issue.  There is no way back."""
   issue = request.issue
@@ -1567,6 +1567,7 @@ def delete(request):
 
 @post_required
 @patchset_owner_required
+@xsrf_required
 def delete_patchset(request):
   """/<issue>/patch/<patchset>/delete - Delete a patchset.
 
@@ -1609,6 +1610,7 @@ def _patchset_delete(ps_delete, patches):
 
 @post_required
 @issue_editor_required
+@xsrf_required
 def close(request):
   """/<issue>/close - Close an issue."""
   issue = request.issue
@@ -1623,8 +1625,12 @@ def close(request):
 
 @post_required
 @issue_required
+@upload_required
 def mailissue(request):
-  """/<issue>/mail - Send mail for an issue."""
+  """/<issue>/mail - Send mail for an issue.
+
+  Used by upload.py.
+  """
   if request.issue.owner != request.user:
     if not IS_DEV:
       return HttpResponse('Login required', status=401)
@@ -1650,8 +1656,12 @@ def download(request):
 
 
 @issue_required
+@upload_required
 def description(request):
-  """/<issue>/description - Gets/Sets an issue's description."""
+  """/<issue>/description - Gets/Sets an issue's description.
+
+  Used by upload.py or similar scripts.
+  """
   if request.method != 'POST':
     description = request.issue.description or ""
     return HttpResponse(description, content_type='text/plain')
@@ -1992,6 +2002,11 @@ def inline_draft(request):
 
   This wraps _inline_draft(); all exceptions are logged and cause an
   abbreviated response indicating something went wrong.
+
+  Note: creating or editing draft comments is *not* XSRF-protected,
+  because it is not unusual to come back after hours; the XSRF tokens
+  time out after 1 or 2 hours.  The final submit of the drafts for
+  others to view *is* XSRF-protected.
   """
   try:
     return _inline_draft(request)
@@ -2134,6 +2149,7 @@ def _get_mail_template(request, issue):
 
 @login_required
 @issue_required
+@xsrf_required
 def publish(request):
   """ /<issue>/publish - Publish draft comments and send mail."""
   issue = request.issue
@@ -2394,8 +2410,10 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
 
 @post_required
 @login_required
+@xsrf_required
 @issue_required
 def star(request):
+  """Add a star to an Issue."""
   account = models.Account.current_user_account
   account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
@@ -2410,7 +2428,9 @@ def star(request):
 @post_required
 @login_required
 @issue_required
+@xsrf_required
 def unstar(request):
+  """Remove the star from an Issue."""
   account = models.Account.current_user_account
   account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
@@ -2425,7 +2445,13 @@ def unstar(request):
 @login_required
 @issue_required
 def draft_message(request):
-  """/<issue>/draft_message - Retrieve, modify and delete draft messages."""
+  """/<issue>/draft_message - Retrieve, modify and delete draft messages.
+
+  Note: creating or editing draft messages is *not* XSRF-protected,
+  because it is not unusual to come back after hours; the XSRF tokens
+  time out after 1 or 2 hours.  The final submit of the drafts for
+  others to view *is* XSRF-protected.
+  """
   query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
                               'AND draft = TRUE'),
                              request.issue, request.user.email())
@@ -2508,6 +2534,7 @@ def repos(request):
 
 
 @login_required
+@xsrf_required
 def repo_new(request):
   """/repo_new - Create a new Subversion repository record."""
   if request.method != 'POST':
@@ -2543,6 +2570,7 @@ BRANCHES = [
     ]
 
 
+# TODO: Make this a POST request to avoid XSRF attacks.
 @admin_required
 def repo_init(request):
   """/repo_init - Initialze the list of known Subversion repositories."""
@@ -2566,6 +2594,7 @@ def repo_init(request):
 
 
 @login_required
+@xsrf_required
 def branch_new(request, repo_id):
   """/branch_new/<repo> - Add a new Branch to a Repository record."""
   repo = models.Repository.get_by_id(int(repo_id))
@@ -2591,6 +2620,7 @@ def branch_new(request, repo_id):
 
 
 @login_required
+@xsrf_required
 def branch_edit(request, branch_id):
   """/branch_edit/<branch> - Edit a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))
@@ -2618,6 +2648,7 @@ def branch_edit(request, branch_id):
 
 @post_required
 @login_required
+@xsrf_required
 def branch_delete(request, branch_id):
   """/branch_delete/<branch> - Delete a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))

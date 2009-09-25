@@ -4,6 +4,7 @@
 <h2>Create New Branch in Repository '{{repo.name}}'</h2>
 
 <form action="{%url codereview.views.branch_new repo.key.id%}" method="post">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
 <table>
 {{form}}
 <tr><td><input type="submit" value="Create Branch"></td></tr>

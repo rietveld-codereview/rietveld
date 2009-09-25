@@ -2798,7 +2798,7 @@ function M_setIssueStar_(id, url) {
     }
   }
   httpreq.open("POST", "/" + id + url, true);
-  httpreq.send("");
+  httpreq.send("xsrf_token=" + xsrfToken);
 }
 
 /**
@@ -2837,7 +2837,7 @@ function M_closeIssue(id) {
     }
   }
   httpreq.open("POST", "/" + id + "/close", true);
-  httpreq.send("");
+  httpreq.send("xsrf_token=" + xsrfToken);
 }
 
 

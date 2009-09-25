@@ -4,6 +4,7 @@
 <h2>Edit Branch '{{branch.name}}' in Repository '{{branch.repo.name}}'</h2>
 
 <form action="{%url codereview.views.branch_edit branch.key.id%}" method="post">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
 <table>
 {{form}}
 <tr><td><input type="submit" value="Update Branch"></td></tr>
@@ -13,6 +14,7 @@
 <hr>
 
 <form action="{%url codereview.views.branch_delete branch.key.id%}" method="post">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
 <table>
 <tr><td><input type="submit" value="Delete This Branch"></td></tr>
 </table>

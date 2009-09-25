@@ -71,6 +71,7 @@
     <form id="add" style="{%if not form.errors%}display:none{%endif%}"
           action="{%url codereview.views.add issue.key.id%}" method="post"
           enctype="multipart/form-data">
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
       <table>
         {{form}}
         <tr>
@@ -186,6 +187,7 @@
   <div style="display:none;">
     <form method="POST" action="{%url codereview.views.publish issue.key.id%}"
           id="message-reply-form">
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
       <div>
         <textarea rows="7" cols="70" name="message"></textarea>
       </div>
