@@ -77,6 +77,14 @@ VCS_UNKNOWN = "Unknown"
 TEXT_MIMETYPES = ['application/javascript', 'application/x-javascript',
                   'application/x-freemind']
 
+VCS_ABBREVIATIONS = {
+  VCS_MERCURIAL.lower(): VCS_MERCURIAL,
+  "hg": VCS_MERCURIAL,
+  VCS_SUBVERSION.lower(): VCS_SUBVERSION,
+  "svn": VCS_SUBVERSION,
+  VCS_GIT.lower(): VCS_GIT,
+}
+
 
 def GetEmail(prompt):
   """Prompts the user for their email address and returns it.
@@ -472,6 +480,10 @@ group.add_option("--rev", action="store", dest="revision",
 group.add_option("--send_mail", action="store_true",
                  dest="send_mail", default=False,
                  help="Send notification email to reviewers.")
+group.add_option("--vcs", action="store", dest="vcs",
+                 metavar="VCS", default=None,
+                 help=("Version control system (optional, usually upload.py "
+                       "already guesses the right VCS)."))
 
 
 def GetRpcServer(options):
@@ -1141,7 +1153,7 @@ class MercurialVCS(VersionControlSystem):
   def _GetRelPath(self, filename):
     """Get relative path of a file according to the current directory,
     given its logical path in the repo."""
-    assert filename.startswith(self.subdir), filename
+    assert filename.startswith(self.subdir), (filename, self.subdir)
     return filename[len(self.subdir):].lstrip(r"\/")
 
   def GenerateDiff(self, extra_args):
@@ -1338,15 +1350,29 @@ def GuessVCSName():
 def GuessVCS(options):
   """Helper to guess the version control system.
 
-  This examines the current directory, guesses which VersionControlSystem
-  we're using, and returns an instance of the appropriate class.  Exit with an
-  error if we can't figure it out.
+  This verifies any user-specified VersionControlSystem (by command line
+  or environment variable).  If the user didn't specify one, this examines
+  the current directory, guesses which VersionControlSystem we're using,
+  and returns an instance of the appropriate class.  Exit with an error
+  if we can't figure it out.
 
   Returns:
     A VersionControlSystem instance. Exits if the VCS can't be guessed.
   """
-  (vcs, extra_output) = GuessVCSName()
+  vcs = options.vcs
+  if not vcs:
+    vcs = os.environ.get("CODEREVIEW_VCS")
+  if vcs:
+    v = VCS_ABBREVIATIONS.get(vcs.lower())
+    if v is None:
+      ErrorExit("Unknown version control system %r specified." % vcs)
+    (vcs, extra_output) = (v, None)
+  else:
+    (vcs, extra_output) = GuessVCSName()
+
   if vcs == VCS_MERCURIAL:
+    if extra_output is None:
+      extra_output = RunShell(["hg", "root"]).strip()
     return MercurialVCS(options, extra_output)
   elif vcs == VCS_SUBVERSION:
     return SubversionVCS(options)
