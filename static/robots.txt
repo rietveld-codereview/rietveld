@@ -6,3 +6,8 @@ User-agent: puf
 User-agent: MSIECrawler
 User-agent: Nutch
 Disallow: /
+
+User-agent: *
+Disallow: /*/diff/
+Disallow: /*/diff2/
+Disallow: /*/patch/
