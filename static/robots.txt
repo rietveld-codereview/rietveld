@@ -11,3 +11,6 @@ User-agent: *
 Disallow: /*/diff/
 Disallow: /*/diff2/
 Disallow: /*/patch/
+Disallow: /download/
+Disallow: /user/
+Disallow: /rss/
