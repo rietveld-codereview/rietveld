@@ -2,6 +2,9 @@
 {%block title1%}Settings -{%endblock%}
 {%block body%}
 <h2>Settings for {{user|nickname:"x"}}</h2>
+{%if chat_status%}
+<p>Chat status: {{chat_status}}</p>
+{%endif%}
 
 <p>You can change your nickname.  This affects how your name is
 displayed to other users.</p>

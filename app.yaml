@@ -1,5 +1,5 @@
 application: codereview
-version: 3
+version: 9
 runtime: python
 api_version: 1
 
@@ -25,3 +25,6 @@ handlers:
 
 - url: .*
   script: main.py
+
+inbound_services:
+- xmpp_message

@@ -514,6 +514,8 @@ class Account(db.Model):
   stars = db.ListProperty(int)  # Issue ids of all starred issues
   fresh = db.BooleanProperty()
   uploadpy_hint = db.BooleanProperty(default=True)
+  notify_by_email = db.BooleanProperty(default=True)
+  notify_by_chat = db.BooleanProperty(default=False)
 
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
@@ -577,6 +579,23 @@ class Account(db.Model):
       if key == cls.current_user_account.key().name():
         return cls.current_user_account
     return super(Account, cls).get_by_key_name(key, **kwds)
+
+  @classmethod
+  def get_multiple_accounts_by_email(cls, emails):
+    """Get multiple accounts.  Returns a dict by email."""
+    results = {}
+    keys = []
+    for email in emails:
+      if cls.current_user_account and email == cls.current_user_account.email:
+        results[email] = cls.current_user_account
+      else:
+        keys.append('<%s>' % email)
+    if keys:
+      accounts = cls.get_by_key_name(keys)
+      for account in accounts:
+        if account is not None:
+          results[account.email] = account
+    return results
 
   @classmethod
   def get_nickname_for_email(cls, email, default=None):

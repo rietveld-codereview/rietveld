@@ -66,6 +66,7 @@ urlpatterns = patterns(
     (r'^(\d+)/patchset/(\d+)/delete$', 'delete_patchset'),
     (r'^account$', 'account'),
     (r'^use_uploadpy$', 'use_uploadpy'),
+    (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
     )
 
 feed_dict = {
