@@ -65,11 +65,29 @@ indexes:
 - kind: Issue
   properties:
   - name: closed
+  - name: owner
   - name: private
   - name: modified
     direction: desc
 
 # Used 2 times in query history.
+- kind: Issue
+  properties:
+  - name: closed
+  - name: private
+  - name: modified
+    direction: desc
+
+# Used once in query history.
+- kind: Issue
+  properties:
+  - name: closed
+  - name: private
+  - name: reviewers
+  - name: modified
+    direction: desc
+
+# Used once in query history.
 - kind: Issue
   properties:
   - name: closed
