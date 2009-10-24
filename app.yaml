@@ -1,5 +1,5 @@
 application: codereview
-version: 9
+version: 10
 runtime: python
 api_version: 1
 
@@ -22,6 +22,13 @@ handlers:
 
 - url: /static
   static_dir: static
+
+- url: /remote_api
+  script: $PYTHON_LIB/google/appengine/ext/remote_api/handler.py
+  login: admin
+
+- url: /stats.*
+  script: appstats/ui.py
 
 - url: .*
   script: main.py
