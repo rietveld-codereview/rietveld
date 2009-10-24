@@ -7,7 +7,7 @@ def webapp_add_wsgi_middleware(app):
 
   try:
     from appstats import recording
-  except ImportError:
+  except ImportError, err:
     logging.info('Failed to import recording: %s', err)
   else:
     app = recording.appstats_wsgi_middleware(app)
