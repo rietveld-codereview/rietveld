@@ -499,10 +499,10 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
         new_buff.append([new_valid, new_lineno, new_intra_diff])
       else:
         # We render line by line as usual if do_ir_diff is false
-        old_intra_diff = intra_region_diff.Fold(
-          old_intra_diff, colwidth + indent, indent, indent)
-        new_intra_diff = intra_region_diff.Fold(
-          new_intra_diff, colwidth + indent, indent, indent)
+        old_intra_diff = intra_region_diff.Break(
+          old_intra_diff, 0, colwidth, "\n" + " "*indent)
+        new_intra_diff = intra_region_diff.Break(
+          new_intra_diff, 0, colwidth, "\n" + " "*indent)
         old_buff_out = [[old_valid, old_lineno,
                          (old_intra_diff, True, None)]]
         new_buff_out = [[new_valid, new_lineno,
@@ -530,11 +530,11 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
 
       old_diff_out = intra_region_diff.RenderIntraRegionDiff(
         old_lines, old_chunks, old_tag, ratio,
-        limit=colwidth, indent=indent,
+        limit=colwidth, indent=indent, mark_tabs=True,
         dbg=debug)
       new_diff_out = intra_region_diff.RenderIntraRegionDiff(
         new_lines, new_chunks, new_tag, ratio,
-        limit=colwidth, indent=indent,
+        limit=colwidth, indent=indent, mark_tabs=True,
         dbg=debug)
       for (i, b) in enumerate(old_buff):
         b[2] = old_diff_out[i]
