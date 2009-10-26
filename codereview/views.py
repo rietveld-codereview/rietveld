@@ -1659,7 +1659,7 @@ def delete_patchset(request):
 
 
 def _patchset_delete(ps_delete, patches):
-  """Transational helper for delete_patchset.
+  """Transactional helper for delete_patchset.
 
   Args:
     ps_delete: The patchset to be deleted.
