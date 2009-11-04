@@ -1382,6 +1382,24 @@ def GuessVCS(options):
              "Are you in a working copy directory?"))
 
 
+def CheckReviewer(reviewer):
+  """Validate a reviewer -- either a nickname or an email addres.
+
+  Args:
+    reviewer: A nickname or an email address.
+
+  Calls ErrorExit() if it is an invalid email address.
+  """
+  if "@" not in reviewer:
+    return  # Assume nickname
+  parts = reviewer.split("@")
+  if len(parts) > 2:
+    ErrorExit("Invalid email address: %r" % reviewer)
+  assert len(parts) == 2
+  if "." not in parts[1]:
+    ErrorExit("Invalid email address: %r" % reviewer)
+
+
 def RealMain(argv, data=None):
   """The real main function.
 
@@ -1439,13 +1457,11 @@ def RealMain(argv, data=None):
     form_fields.append(("user", options.email))
   if options.reviewers:
     for reviewer in options.reviewers.split(','):
-      if "@" in reviewer and not reviewer.split("@")[1].count(".") == 1:
-        ErrorExit("Invalid email address: %s" % reviewer)
+      CheckReviewer(reviewer)
     form_fields.append(("reviewers", options.reviewers))
   if options.cc:
     for cc in options.cc.split(','):
-      if "@" in cc and not cc.split("@")[1].count(".") == 1:
-        ErrorExit("Invalid email address: %s" % cc)
+      CheckReviewer(cc)
     form_fields.append(("cc", options.cc))
   description = options.description
   if options.description_file:
