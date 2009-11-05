@@ -2410,8 +2410,8 @@ def _get_draft_details(request, comments):
                                       c.patch.key().id(),
                                       c.left and "old" or "new",
                                       c.lineno))
-    output.append('\n%s\nLine %d: %s\n%s' % (url, c.lineno, context,
-                                             c.text.rstrip()))
+    output.append('\n%s\n%s:%d: %s\n%s' % (url, c.patch.filename, c.lineno,
+                                           context, c.text.rstrip()))
   if modified_patches:
     db.put(modified_patches)
   return '\n'.join(output)
