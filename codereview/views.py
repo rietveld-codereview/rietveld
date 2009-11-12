@@ -38,7 +38,6 @@ from google.appengine.api import users
 from google.appengine.api import urlfetch
 from google.appengine.api import xmpp
 from google.appengine.ext import db
-from google.appengine.ext import deferred
 from google.appengine.ext.db import djangoforms
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.runtime.apiproxy_errors import CapabilityDisabledError
@@ -2476,8 +2475,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     kwds = {}
     if cc:
       kwds['cc'] = [_encode_safely(address) for address in cc]
-    deferred.defer(mail.send_mail,
-                   sender=my_email,
+    mail.send_mail(sender=my_email,
                    to=[_encode_safely(address) for address in to],
                    subject=_encode_safely(subject),
                    body=_encode_safely(body),

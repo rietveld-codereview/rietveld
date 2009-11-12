@@ -15,10 +15,6 @@ handlers:
   static_files: static/robots.txt
   upload: static/robots.txt
 
-- url: /_ah/queue/deferred
-  script: $PYTHON_LIB/google/appengine/ext/deferred/deferred.py
-  login: admin
-
 - url: /static/(script.js|styles.css|upload.py)
   static_files: static/\1
   upload: static/(script.js|styles.css|upload.py)
