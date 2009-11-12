@@ -5,6 +5,9 @@ api_version: 1
 
 default_expiration: 7d  # This is good for images, which never change
 
+inbound_services:
+- mail
+
 handlers:
 
 - url: /remote_api
@@ -30,6 +33,10 @@ handlers:
 # Note that admin doesn't work with dasher accounts (http://b/1407477)
 - url: /shell.*
   script: shell.py
+  login: admin
+
+- url: /_ah/mail/.+ 
+  script: codereview/handle_incoming_email.py 
   login: admin
 
 - url: .*
