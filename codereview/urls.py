@@ -72,7 +72,6 @@ urlpatterns = patterns(
     (r'^update_accounts$', 'update_accounts'),
     (r'^lint/issue(\d+)_(\d+)', 'lint'),
     (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
-    (r'^updatefromemail', 'updatefromemail'),
     )
 
 feed_dict = {
