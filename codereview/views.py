@@ -21,7 +21,6 @@
 # Python imports
 import os
 import cgi
-import email
 import random
 import re
 import logging
@@ -2695,48 +2694,6 @@ def lint_patch(request):
 
   return HttpResponse(''.join(result))
 
-
-def updatefromemail(message):
-  parsed_email = email.message_from_string(str(message.original))
-  
-  # big hack until Groups lets X-Appengine-App-Id through.  Once that happens, we should use that
-  # header instead.  See http://b/issue?id=2257571.
-  receivedspf = parsed_email.get_all('Received-SPF')
-  if receivedspf:  # Groups and AE both add this header, need to look for the AE one if it exists.
-    for header in receivedspf:
-      if header.find('@apphosting.bounces.google.com') != -1:
-        return  # message was sent by us, so don't add it again to the issue
-
-  body = ''
-  sender = message.sender
-  for cur_body in message.bodies(content_type='text/plain'):
-    body = cur_body[1].decode()
-    break  # just use the first one
- 
-  if sender.find('<') != -1 and sender.endswith('>'):
-    sender = sender[sender.find('<') + 1:]
-    sender = sender[0:-1]
-
-  if not body or not message.sender:
-    return
-
-  index = body.rfind('http://codereview.chromium.org/')
-  if index == -1:
-    return
-
-  last_url = body[index:]
-  match = re.search(r"http://codereview.chromium.org/(\d+)", last_url)
-  if not match:
-    return
-
-  issue_id = int(match.group(1))
-  issue = models.Issue.get_by_id(issue_id)
-  if not issue:
-    return
-
-  sender = db.Email(sender)
-  msg = models.Message(issue=issue, sender=sender, text=db.Text(body),  parent=issue)
-  msg.put()
 
 ### Repositories and Branches ###
 
