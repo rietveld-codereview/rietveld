@@ -41,3 +41,6 @@ FILE_UPLOAD_HANDLERS = (
     'django.core.files.uploadhandler.MemoryFileUploadHandler',
 )
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1048576  # 1 MB
+
+RIETVELD_INCOMING_MAIL_ADDRESS = ('reply@%s.appspotmail.com'
+                                  % os.getenv('APPLICATION_ID'))

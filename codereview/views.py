@@ -19,17 +19,18 @@
 
 
 # Python imports
-import os
-import cgi
-import random
-import re
-import logging
 import binascii
 import datetime
-import urllib
+import email  # see incoming_mail()
+import email.utils
+import logging
 import md5
-from xml.etree import ElementTree
+import os
+import random
+import re
+import urllib
 from cStringIO import StringIO
+from xml.etree import ElementTree
 
 # AppEngine imports
 from google.appengine.api import mail
@@ -45,6 +46,8 @@ from google.appengine.runtime.apiproxy_errors import CapabilityDisabledError
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
 from django import forms
+# Import settings as django_settings to avoid name conflict with settings().
+from django.conf import settings as django_settings
 from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
@@ -368,6 +371,13 @@ class SettingsForm(forms.Form):
       raise forms.ValidationError('This nickname is already in use.')
 
     return nickname
+
+
+### Exceptions ###
+
+
+class InvalidIncomingEmailError(Exception):
+  """Exception raised by incoming mail handler when a problem occurs."""
 
 
 ### Helper functions ###
@@ -2425,12 +2435,13 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   my_email = db.Email(request.user.email())
   to = [db.Email(issue.owner.email())] + issue.reviewers
   cc = issue.cc[:]
+  cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
   reply_to = to + cc
   if my_email in to and len(to) > 1:  # send_mail() wants a non-empty to list
     to.remove(my_email)
   if my_email in cc:
     cc.remove(my_email)
-  subject = issue.subject
+  subject = '%s (issue%d)' % (issue.subject, issue.key().id())
   if issue.message_set.count(1) > 0:
     subject = 'Re: ' + subject
   if comments:
@@ -2853,3 +2864,66 @@ def incoming_chat(request):
   sts = message.reply('Sorry, Rietveld does not support chat input')
   logging.debug('XMPP status %r', sts)
   return HttpResponse('')
+
+
+@post_required
+def incoming_mail(request, recipients):
+  """/_ah/mail/(.*)
+
+  Handle incoming mail messages.
+
+  The issue is not modified. No reviewers or CC's will be added or removed.
+  """
+  try:
+    _process_incoming_mail(request.raw_post_data, recipients)
+  except InvalidIncomingEmailError, err:
+    logging.debug(str(err))
+  return HttpResponse('')
+
+
+def _process_incoming_mail(raw_message, recipients):
+  """Process an incoming email message."""
+  recipients = [x[1] for x in email.utils.getaddresses([recipients])]
+
+  # We can't use mail.InboundEmailMessage(raw_message) here.
+  # See: http://code.google.com/p/googleappengine/issues/detail?id=2287
+  # msg = mail.InboundEmailMessage(raw_message)
+  # The code below needs to be adjusted when issue2287 is fixed.
+  incoming_msg = email.message_from_string(raw_message)
+
+  if 'X-Google-Appengine-App-Id' in incoming_msg:
+    raise InvalidIncomingEmailError('Mail sent by App Engine')
+
+  match = re.search(r'\(issue *(?P<id>\d+)\)$',
+                    incoming_msg.get('Subject', ''))
+  if match is None:
+    raise InvalidIncomingEmailError('No issue id found: %s',
+                                    incoming_msg.get('Subject', None))
+  issue_id = int(match.groupdict()['id'])
+  issue = models.Issue.get_by_id(issue_id)
+  if issue is None:
+    raise InvalidIncomingEmailError('Unknown issue ID: %d' % issue_id)
+  sender = email.utils.parseaddr(incoming_msg.get('From', None))[1]
+
+  body = None
+  charset = None
+  if incoming_msg.is_multipart():
+    for payload in incoming_msg.get_payload():
+      if payload.get_content_type() == 'text/plain':
+        body = payload.get_payload(decode=True)
+        charset = payload.get_content_charset()
+        break
+  else:
+    body = incoming_msg.get_payload(decode=True)
+    charset = incoming_msg.get_content_charset()
+  if body is None or not body.strip():
+    raise InvalidIncomingEmailError('Ignoring empty message.')
+
+  msg = models.Message(issue=issue, parent=issue,
+                       subject=incoming_msg.get('Subject', ''),
+                       sender=db.Email(sender),
+                       recipients=[db.Email(x) for x in recipients],
+                       date=datetime.datetime.now(),
+                       text=db.Text(body, encoding=charset),
+                       draft=False)
+  msg.put()

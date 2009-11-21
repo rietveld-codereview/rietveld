@@ -67,6 +67,7 @@ urlpatterns = patterns(
     (r'^account$', 'account'),
     (r'^use_uploadpy$', 'use_uploadpy'),
     (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
+    (r'^_ah/mail/(.*)', 'incoming_mail'),
     )
 
 feed_dict = {
