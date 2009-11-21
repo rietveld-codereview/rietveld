@@ -166,34 +166,21 @@ class PatchSet(db.Model):
   owner = db.UserProperty(auto_current_user_add=True, required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
-  n_comments = db.IntegerProperty()
+  n_comments = db.IntegerProperty(default=0)
 
   def update_comment_count(self, n):
-    """Increment the n_comments property by n.
-
-    If n_comments in None, compute the count through a query.  (This
-    is a transitional strategy while the database contains Issues
-    created using a previous version of the schema.)
-    """
-    self.n_comments = self._get_num_comments() + n
+    """Increment the n_comments property by n."""
+    self.n_comments = self.num_comments + n
 
   @property
   def num_comments(self):
     """The number of non-draft comments for this issue.
 
     This is almost an alias for self.n_comments, except that if
-    n_comments is None, it is computed through a query, and stored,
-    using n_comments as a cache.
+    n_comments is None, 0 is returned.
     """
-    if self.n_comments is None:
-      self.n_comments = self._get_num_comments()
-    return self.n_comments
-
-  def _get_num_comments(self):
-    """Helper to compute the number of comments through a query."""
-    return gql(Comment,
-               'WHERE ANCESTOR IS :1 AND draft = FALSE',
-               self).count()
+    # For older patchsets n_comments is None.
+    return self.n_comments or 0
 
 
 class Message(db.Model):
