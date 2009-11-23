@@ -24,6 +24,7 @@ urlpatterns = patterns(
     (r'^$', 'index'),
     (r'^all$', 'all'),
     (r'^mine$', 'mine'),
+    (r'^overview', 'overview'),
     (r'^starred$', 'starred'),
     (r'^new$', 'new'),
     (r'^upload$', 'upload'),
@@ -47,6 +48,8 @@ urlpatterns = patterns(
      'diff2_skipped_lines'),
     (r'^(\d+)/upload_content/(\d+)/(\d+)$', 'upload_content'),
     (r'^(\d+)/upload_patch/(\d+)$', 'upload_patch'),
+    (r'^(\d+)/upload_build_result/(\d+)$', 'upload_build_result'),
+    (r'^(\d+)/get_build_results/(\d+)$', 'get_build_results'),
     (r'^(\d+)/description$', 'description'),
     (r'^(\d+)/star$', 'star'),
     (r'^(\d+)/unstar$', 'unstar'),
@@ -68,6 +71,8 @@ urlpatterns = patterns(
     (r'^use_uploadpy$', 'use_uploadpy'),
     (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
     (r'^_ah/mail/(.*)', 'incoming_mail'),
+    (r'^lint/issue(\d+)_(\d+)', 'lint'),
+    (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
     )
 
 feed_dict = {
