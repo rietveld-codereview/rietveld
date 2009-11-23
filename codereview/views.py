@@ -1845,7 +1845,8 @@ def _patchset_delete(ps_delete, patches):
 
 @post_required
 @issue_editor_required
-@xsrf_required
+# Don't want xsrf_required for Chromium because we use it from gcl and git-cl.
+#@xsrf_required
 def close(request):
   """/<issue>/close - Close an issue."""
   issue = request.issue
