@@ -129,7 +129,7 @@ def urlappend_view_settings(parser, token):
   return UrlAppendViewSettingsNode()
 
 
-def get_nickname(email, never_me, request=None):
+def get_nickname(email, never_me=False, request=None):
   """Return a nickname for an email address.
 
   If 'never_me' is True, 'me' is not returned if 'email' belongs to the
