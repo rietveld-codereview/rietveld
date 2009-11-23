@@ -2903,11 +2903,10 @@ def _process_incoming_mail(raw_message, recipients):
   if 'X-Google-Appengine-App-Id' in incoming_msg:
     raise InvalidIncomingEmailError('Mail sent by App Engine')
 
-  match = re.search(r'\(issue *(?P<id>\d+)\)$',
-                    incoming_msg.get('Subject', ''))
+  subject = incoming_msg.get('Subject', '')
+  match = re.search(r'\(issue *(?P<id>\d+)\)$', subject)
   if match is None:
-    raise InvalidIncomingEmailError('No issue id found: %s',
-                                    incoming_msg.get('Subject', None))
+    raise InvalidIncomingEmailError('No issue id found: %s', subject)
   issue_id = int(match.groupdict()['id'])
   issue = models.Issue.get_by_id(issue_id)
   if issue is None:
@@ -2928,8 +2927,10 @@ def _process_incoming_mail(raw_message, recipients):
   if body is None or not body.strip():
     raise InvalidIncomingEmailError('Ignoring empty message.')
 
+  # If the subject is long, this might come wrapped into more than one line.
+  subject = ' '.join([x.strip() for x in subject.splitlines()])
   msg = models.Message(issue=issue, parent=issue,
-                       subject=incoming_msg.get('Subject', ''),
+                       subject=subject,
                        sender=db.Email(sender),
                        recipients=[db.Email(x) for x in recipients],
                        date=datetime.datetime.now(),
