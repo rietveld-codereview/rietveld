@@ -92,7 +92,7 @@
             {{issue.reviewers|show_users}}
           </div>
           <div><b>CC:</b><br/>
-            {{issue.cc|nicknames}}
+            {%nicknames issue.cc%}
           </div>
           <div><b>SVN Base:</b><br/>
             {%firstof issue.base%}
@@ -120,9 +120,9 @@
     <div class="popup" id="popup-issue">
       <b>Issue {{issue.key.id}}: {{issue.subject}}
 	{%if issue.closed %} (Closed) {%endif%}</b><br/>
-      Created {{issue.created|timesince}} ago by {{issue.owner|nickname}}<br/>
+      Created {{issue.created|timesince}} ago by {%nickname issue.owner%}<br/>
       Modified {{issue.modified|timesince}} ago<br/>
-      Reviewers: {{issue.reviewers|nicknames}}<br/>
+      Reviewers: {%nicknames issue.reviewers%}<br/>
       SVN Base: {{issue.base}}<br/>
       Comments: {{issue.num_comments}}
       {%if issue.num_drafts%} <span style="color: red;">+

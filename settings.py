@@ -34,7 +34,9 @@ MIDDLEWARE_CLASSES = (
     'codereview.middleware.AddUserToRequestMiddleware',
 )
 ROOT_URLCONF = 'urls'
-TEMPLATE_CONTEXT_PROCESSORS = ()
+TEMPLATE_CONTEXT_PROCESSORS = (
+    'django.core.context_processors.request',
+)
 TEMPLATE_DEBUG = DEBUG
 TEMPLATE_DIRS = (
     os.path.join(os.path.dirname(__file__), 'templates'),

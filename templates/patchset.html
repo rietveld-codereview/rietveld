@@ -9,7 +9,7 @@
     <div style="float: left;">
       <i>Created:</i> {{patchset.created|timesince}} ago
       {%ifnotequal patchset.owner issue.owner%}
-      by <b>{{patchset.owner|nickname}}</b>{%endifnotequal%}
+      by <b>{%nickname patchset.owner%}</b>{%endifnotequal%}
     </div>
     <div style="float: right;">
       {%if patchset.data%}
