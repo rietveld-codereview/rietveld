@@ -2851,6 +2851,7 @@ def _user_popup(request):
   return popup_html
 
 
+@post_required
 def incoming_chat(request):
   """/_ah/xmpp/message/chat/
 
@@ -2858,11 +2859,13 @@ def incoming_chat(request):
 
   Just reply saying we ignored the chat.
   """
-  if request.method != 'POST':
-    return HttpResponse('XMPP requires POST', status=405)
-  message = xmpp.Message(request.POST)
-  sts = message.reply('Sorry, Rietveld does not support chat input')
-  logging.debug('XMPP status %r', sts)
+  sender = request.POST.get('from')
+  if not sender:
+    logging.warn('Incoming chat without "from" key ignored')
+  else:
+    sts = xmpp.send_message([sender],
+                            'Sorry, Rietveld does not support chat input')
+    logging.debug('XMPP status %r', sts)
   return HttpResponse('')
 
 
