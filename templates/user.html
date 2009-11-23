@@ -39,7 +39,7 @@ document.onkeypress = keyPressIntermediary;
   {%if cc_issues%}
   <tr>
     <td colspan="9" class="header">
-      <h3>Issues CCd to {{email|nickname}} ({{cc_issues|length}})</h3>
+      <h3>Issues CCd to {%nickname email%} ({{cc_issues|length}})</h3>
     </td>
   </tr>
     {%include "issue_heading.html"%}
