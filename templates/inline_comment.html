@@ -1,7 +1,7 @@
 {%for c in comments%}
 <div class="comment-border{%if c.confidence%} conf{{c.confidence}}{%endif%} {{c.backend}}" name="comment-border">
 <div class="inline-comment-title" onclick="M_switchInlineComment({{forloop.counter0}}, {{lineno}}, '{{side}}')">
-{%if c.draft%}<b>(Draft)</b>{%else%}<b>{{c.author|nickname}}</b>{%endif%}
+{%if c.draft%}<b>(Draft)</b>{%else%}<b>{%nickname c.author%}</b>{%endif%}
 {%if c.confidence_text%} <b>(confidence {{c.confidence_text}})</b>{%endif%}
 {{c.date|date:"Y/m/d H:i:s"}}
 <span id="inline-preview-{{forloop.counter0}}-{{lineno}}-{{side}}" 
@@ -53,10 +53,10 @@ class="{%if bucket.quoted%}comment-text-quoted{%else%}comment-text{%endif%}"
 {%else%}
 {%if user%}
 <a name="comment-reply"
-   href="javascript:M_replyToInlineComment('{{c.author|nickname:"x"}}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}')"
+   href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}')"
 ><b>Reply</b></a>
-{%if c.backend%}<a href="javascript:M_replyToInlineComment('{{c.author|nickname:"x"}}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Please fix.', true)"><b>Please fix</b></a>
-{%else%}<a href="javascript:M_replyToInlineComment('{{c.author|nickname:"x"}}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Done.', true)"><b>Done</b></a>{%endif%}
+{%if c.backend%}<a href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Please fix.', true)"><b>Please fix</b></a>
+{%else%}<a href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Done.', true)"><b>Done</b></a>{%endif%}
 {%ifequal c.backend "bugbot"%} &nbsp; <a target="_blank" href="http://bugbotexp{{file.depot_path|escape}}"><b>&raquo; Suppress</b></a>{%endifequal%}
 {%endif%}
 {%endif%}

@@ -52,6 +52,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
 import django.template
+from django.template import RequestContext
 from django.utils import simplejson
 from django.utils.safestring import mark_safe
 
@@ -429,7 +430,8 @@ def respond(request, template, params=None):
   params['must_choose_nickname'] = must_choose_nickname
   params['uploadpy_hint'] = uploadpy_hint
   try:
-    return render_to_response(template, params)
+    return render_to_response(template, params,
+                              context_instance=RequestContext(request))
   except DeadlineExceededError:
     logging.exception('DeadlineExceededError')
     return HttpResponse('DeadlineExceededError', status=503)
@@ -2180,7 +2182,8 @@ def _inline_draft(request):
                              'lineno': lineno,
                              'snapshot': snapshot,
                              'side': side,
-                             })
+                             },
+                            context_instance=RequestContext(request))
 
 
 def _get_affected_files(issue):
@@ -2467,11 +2470,12 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
 
   if send_mail:
     url = request.build_absolute_uri('/%s' % issue.key().id())
-    reviewer_nicknames = ', '.join(library.nickname(rev_temp, True)
+    reviewer_nicknames = ', '.join(library.get_nickname(rev_temp, True,
+                                                        request)
                                    for rev_temp in issue.reviewers)
-    cc_nicknames = ', '.join(library.nickname(cc_temp, True)
+    cc_nicknames = ', '.join(library.get_nickname(cc_temp, True, request)
                              for cc_temp in cc)
-    my_nickname = library.nickname(request.user, True)
+    my_nickname = library.get_nickname(request.user, True, request)
     reply_to = ', '.join(reply_to)
     description = (issue.description or '').replace('\r\n', '\n')
     home = request.build_absolute_uri('/')
@@ -2481,7 +2485,8 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
                     'message': message, 'details': details,
                     'description': description, 'home': home,
                     })
-    body = django.template.loader.render_to_string(template, context)
+    body = django.template.loader.render_to_string(
+      template, context, context_instance=RequestContext(request))
     logging.warn('Mail: to=%s; cc=%s', ', '.join(to), ', '.join(cc))
     kwds = {}
     if cc:
@@ -2845,7 +2850,8 @@ def _user_popup(request):
                             {'user': user,
                              'num_issues_created': num_issues_created,
                              'num_issues_reviewed': num_issues_reviewed,
-                             })
+                             },
+                             context_instance=RequestContext(request))
     # Use time expired cache because the number of issues will change over time
     memcache.add('user_popup:' + user.email(), popup_html, 60)
   return popup_html

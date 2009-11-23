@@ -116,7 +116,7 @@
             <tr class="comment_title"
                 onclick="M_switchChangelistComment({{forloop.counter0}})">
               <td style="padding-left: 5px; white-space: nowrap;">
-                <b>{{message.sender|nickname}}</b>
+                <b>{%nickname message.sender%}</b>
               </td>
               <td width="100%">
                 <table style="table-layout:fixed; white-space: nowrap;"
@@ -148,7 +148,7 @@
           </div>
           <div class="message-actions">
             {%if user%}
-              <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{{message.sender|nickname:"x"}}')"
+              <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{%nickname message.sender True%}')"
                  id="message-reply-href-{{forloop.counter0}}">Reply</a>
               <div id="message-reply-{{forloop.counter0}}"
                    style="display:none;"></div>

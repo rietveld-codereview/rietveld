@@ -23,13 +23,13 @@
    {%if user%}
      <link rel="alternate" type="application/atom+xml"
    	  title="Issues created by me"
-   	  href="/rss/mine/{{user|nickname:"x"}}" />
+   	  href="/rss/mine/{%nickname user True%}" />
      <link rel="alternate" type="application/atom+xml"
    	  title="Issues reviewable by me" 
-   	  href="/rss/reviews/{{user|nickname:"x"}}" />
+   	  href="/rss/reviews/{%nickname user True%}" />
      <link rel="alternate" type="application/atom+xml"
    	  title="Issues closed by me"
-   	  href="/rss/closed/{{user|nickname:"x"}}" />
+   	  href="/rss/closed/{%nickname user True%}" />
    {%endif%}
    {%if issue%}
      <link rel="alternate" type="application/atom+xml"
@@ -156,7 +156,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 <div style="float:left; font-weight:bold"><i>Rietveld</i> Code Review Tool</div>
 {%endif%}
 {%if user%}
-<b>{{user.email}} ({{user|nickname:"x"}})</b>
+<b>{{user.email}} ({%nickname user True%})</b>
 |
 {%if must_choose_nickname%}
 <span style="color:red">Please choose your nickname with</span>{%endif%}
@@ -189,7 +189,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 <div class="counter">({{counter}})</div>
 <div class="mainmenu">
   {%block mainmenu%}
-  <a href="{%url codereview.views.index%}">Issues</a>
+  <a href="{%url codereview.views.index %}">Issues</a>
   <a href="{%url codereview.views.repos %}">Repositories</a>
   {%endblock%}
 </div>
@@ -216,11 +216,11 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
   <a href="/rss/all">Recent Issues</a>
   {%if user%}
   |
-  <a href="/rss/mine/{{user|nickname:"x"}}">My Issues</a>
+  <a href="/rss/mine/{%nickname user True%}">My Issues</a>
   |
-  <a href="/rss/reviews/{{user|nickname:"x"}}">My Reviews</a>
+  <a href="/rss/reviews/{%nickname user True%}">My Reviews</a>
   |
-  <a href="/rss/closed/{{user|nickname:"x"}}">My Closed</a>
+  <a href="/rss/closed/{%nickname user True%}">My Closed</a>
   {%endif%}
   {%if issue%}
   |
