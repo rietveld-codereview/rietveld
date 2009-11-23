@@ -178,7 +178,7 @@ class NicknameNode(django.template.Node):
     """Constructor.
 
     'email_address' is the name of the template variable that holds an
-    email address. If 'never' evaluates to True, 'me' won't be returned.
+    email address. If 'never_me' evaluates to True, 'me' won't be returned.
     """
     self.email_address = django.template.Variable(email_address)
     self.never_me = bool(never_me.strip())
