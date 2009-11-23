@@ -69,7 +69,8 @@ urlpatterns = patterns(
     (r'^(\d+)/patchset/(\d+)/delete$', 'delete_patchset'),
     (r'^account$', 'account'),
     (r'^use_uploadpy$', 'use_uploadpy'),
-    (r'^update_accounts$', 'update_accounts'),
+    (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
+    (r'^_ah/mail/(.*)', 'incoming_mail'),
     (r'^lint/issue(\d+)_(\d+)', 'lint'),
     (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
     )

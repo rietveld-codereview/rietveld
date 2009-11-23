@@ -19,24 +19,28 @@
 
 
 # Python imports
-import os
+import binascii
 import cgi
+import datetime
+import email  # see incoming_mail()
+import email.utils
+import logging
+import md5
+import os
 import random
 import re
-import logging
-import binascii
-import datetime
 import urllib
 import md5
 import sha
-from xml.etree import ElementTree
 from cStringIO import StringIO
+from xml.etree import ElementTree
 
 # AppEngine imports
 from google.appengine.api import mail
 from google.appengine.api import memcache
 from google.appengine.api import users
 from google.appengine.api import urlfetch
+from google.appengine.api import xmpp
 from google.appengine.ext import db
 from google.appengine.ext.db import djangoforms
 from google.appengine.runtime import DeadlineExceededError
@@ -45,7 +49,8 @@ from google.appengine.runtime.apiproxy_errors import CapabilityDisabledError
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
 from django import forms
-from django.http import Http404
+# Import settings as django_settings to avoid name conflict with settings().
+from django.conf import settings as django_settings
 from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
@@ -74,6 +79,7 @@ IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
 
 
 ### Form classes ###
+
 
 class AccountInput(forms.TextInput):
   # Associates the necessary css/js files for the control.  See
@@ -363,10 +369,14 @@ class SettingsForm(forms.Form):
     widget=forms.Select(choices=FORM_CONTEXT_VALUES),
     required=False,
     label='Context')
-  column_width = forms.IntegerField(label='Column Width',
-                                    initial=engine.DEFAULT_COLUMN_WIDTH,
+  column_width = forms.IntegerField(initial=engine.DEFAULT_COLUMN_WIDTH,
                                     min_value=engine.MIN_COLUMN_WIDTH,
                                     max_value=engine.MAX_COLUMN_WIDTH)
+  notify_by_email = forms.BooleanField(required=False,
+                                       widget=forms.HiddenInput())
+  notify_by_chat = forms.BooleanField(
+    required=False,
+    help_text='You must accept the invite for this to work.')
 
   def clean_nickname(self):
     nickname = self.cleaned_data.get('nickname')
@@ -394,6 +404,14 @@ class SettingsForm(forms.Form):
       raise forms.ValidationError('This nickname is already in use.')
 
     return nickname
+
+
+### Exceptions ###
+
+
+class InvalidIncomingEmailError(Exception):
+  """Exception raised by incoming mail handler when a problem occurs."""
+
 
 ### Helper functions ###
 
@@ -438,6 +456,9 @@ def respond(request, template, params=None):
     params['sign_in'] = users.create_login_url(full_path)
   else:
     params['sign_out'] = users.create_logout_url(full_path)
+    account = models.Account.current_user_account
+    if account is not None:
+      params['xsrf_token'] = account.get_xsrf_token()
   params['must_choose_nickname'] = must_choose_nickname
   params['uploadpy_hint'] = uploadpy_hint
   try:
@@ -498,6 +519,61 @@ def _can_view_issue(user, issue):
           or user.email().endswith("@chromium.org"))
 
 
+def _notify_issue(request, issue, message):
+  """Try sending an XMPP (chat) message.
+
+  Args:
+    request: The request object.
+    issue: Issue whose owner, reviewers, CC are to be notified.
+    message: Text of message to send, e.g. 'Created'.
+
+  The current user and the issue's subject and URL are appended to the message.
+
+  Returns:
+    True if the message was (apparently) delivered, False if not.
+  """
+  iid = issue.key().id()
+  emails = [issue.owner.email()]
+  if issue.reviewers:
+    emails.extend(issue.reviewers)
+  if issue.cc:
+    emails.extend(issue.cc)
+  accounts = models.Account.get_multiple_accounts_by_email(emails)
+  jids = []
+  for account in accounts.itervalues():
+    logging.debug('email=%r,chat=%r', account.email, account.notify_by_chat)
+    if account.notify_by_chat:
+      jids.append(account.email)
+  if not jids:
+    logging.debug('No XMPP jids to send to for issue %d', iid)
+    return True  # Nothing to do.
+  jids_str = ', '.join(jids)
+  logging.debug('Sending XMPP for issue %d to %s', iid, jids_str)
+  sender = '?'
+  if models.Account.current_user_account:
+    sender = models.Account.current_user_account.nickname
+  elif request.user:
+    sender = request.user.email()
+  message = '%s by %s: %s\n%s' % (message,
+                                  sender,
+                                  issue.subject,
+                                  request.build_absolute_uri('/%s' % iid))
+  try:
+    sts = xmpp.send_message(jids, message)
+  except Exception, err:
+    logging.exception('XMPP exception %s sending for issue %d to %s',
+                      err, iid, jids_str)
+    return False
+  else:
+    if sts == [xmpp.NO_ERROR] * len(jids):
+      logging.info('XMPP message sent for issue %d to %s', iid, jids_str)
+      return True
+    else:
+      logging.error('XMPP error %r sending for issue %d to %s',
+                    sts, iid, jids_str)
+      return False
+
+
 ### Decorators for request handlers ###
 
 
@@ -522,6 +598,45 @@ def login_required(func):
     return func(request, *args, **kwds)
 
   return login_wrapper
+
+
+def xsrf_required(func):
+  """Decorator to check XSRF token.
+
+  This only checks if the method is POST; it lets other method go
+  through unchallenged.  Apply after @login_required and (if
+  applicable) @post_required.  This decorator is mutually exclusive
+  with @upload_required.
+  """
+
+  def xsrf_wrapper(request, *args, **kwds):
+    if request.method == 'POST':
+      post_token = request.POST.get('xsrf_token')
+      if not post_token:
+        return HttpResponse('Missing XSRF token.', status=403)
+      account = models.Account.current_user_account
+      if not account:
+        return HttpResponse('Must be logged in for XSRF check.', status=403)
+      xsrf_token = account.get_xsrf_token()
+      if post_token != xsrf_token:
+        # Try the previous hour's token
+        xsrf_token = account.get_xsrf_token(-1)
+        if post_token != xsrf_token:
+          return HttpResponse('Invalid XSRF token.', status=403)
+    return func(request, *args, **kwds)
+
+  return xsrf_wrapper
+
+
+def upload_required(func):
+  """Decorator for POST requests from the upload.py script.
+
+  Right now this is for documentation only, but eventually we should
+  change this to insist on a special header that JavaScript cannot
+  add, to prevent XSRF attacks on these URLs.  This decorator is
+  mutually exclusive with @xsrf_required.
+  """
+  return func
 
 
 def admin_required(func):
@@ -819,6 +934,7 @@ def _show_user(request):
 
 
 @login_required
+@xsrf_required
 def new(request):
   """/new - Upload a new patch set.
 
@@ -839,6 +955,7 @@ def new(request):
 
 
 @login_required
+@xsrf_required
 def use_uploadpy(request):
   """Show an intermediate page about upload.py."""
   if request.method == 'POST':
@@ -854,6 +971,7 @@ def use_uploadpy(request):
 
 
 @post_required
+@upload_required
 def upload(request):
   """/upload - Like new() or add(), but from the upload.py script.
 
@@ -964,10 +1082,12 @@ def upload(request):
 
 @post_required
 @patch_required
+@upload_required
 def upload_content(request):
   """/<issue>/upload_content/<patchset>/<patch> - Upload base file contents.
 
-  Used by upload.py to upload base files."""
+  Used by upload.py to upload base files.
+  """
   form = UploadContentForm(request.POST, request.FILES)
   if not form.is_valid():
     return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
@@ -1016,6 +1136,7 @@ def upload_content(request):
 
 @post_required
 @patchset_required
+@upload_required
 def upload_patch(request):
   """/<issue>/upload_patch/<patchset> - Upload patch to patchset.
 
@@ -1178,6 +1299,7 @@ def _make_new(request, form):
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, '', '', True)
     msg.put()
+    _notify_issue(request, issue, 'Created')
   return issue
 
 
@@ -1231,6 +1353,7 @@ def _get_data_url(form):
 
 @post_required
 @issue_owner_required
+@xsrf_required
 def add(request):
   """/<issue>/add - Add a new PatchSet to an existing Issue."""
   issue = request.issue
@@ -1281,6 +1404,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, message, '', True)
     msg.put()
+    _notify_issue(request, issue, 'Updated')
   return patchset
 
 
@@ -1498,6 +1622,7 @@ def show(request, form=None):
     elif msg.draft and request.user and msg.sender == request.user.email():
       has_draft_message = True
   num_patchsets = len(patchsets)
+
   issue.description = cgi.escape(issue.description)
   issue.description = urlize(issue.description)
   expression = re.compile(r"(?<=BUG=)(\s*\d+\s*(?:,\s*\d+\s*)*)", re.IGNORECASE)
@@ -1557,29 +1682,8 @@ def account(request):
   return HttpResponse(response)
 
 
-@admin_required
-def update_accounts(request):
-  """/update_accounts/?q=nick."""
-  starting_nick = request.GET.get('q', '')
-  try:
-    while True:
-      accounts = db.GqlQuery(
-        'SELECT * FROM Account '
-        'WHERE nickname > :1 LIMIT 50',
-        starting_nick)
-      # Don't use multi-entity puts as they don't call our overridden put().
-      empty = True
-      for account in accounts:
-        empty = False
-        account.put()
-        starting_nick = account.nickname
-      if empty:
-        return HttpResponse('Done', content_type='text/plain')
-  except DeadlineExceededError:
-    return HttpResponseRedirect('/update_accounts?q=' + starting_nick)
-
-
 @issue_editor_required
+@xsrf_required
 def edit(request):
   """/<issue>/edit - Edit an issue."""
   issue = request.issue
@@ -1625,6 +1729,7 @@ def edit(request):
     return respond(request, 'edit.html', {'issue': issue, 'form': form})
   cleaned_data = form.cleaned_data
 
+  was_closed = issue.closed
   issue.subject = cleaned_data['subject']
   issue.description = cleaned_data['description']
   issue.closed = cleaned_data['closed']
@@ -1637,6 +1742,13 @@ def edit(request):
     for patchset in issue.patchset_set:
       db.run_in_transaction(_delete_cached_contents, list(patchset.patch_set))
   issue.put()
+  if issue.closed == was_closed:
+    message = 'Edited'
+  elif issue.closed:
+    message = 'Closed'
+  else:
+    message = 'Reopened'
+  _notify_issue(request, issue, message)
 
   return HttpResponseRedirect('/%s' % issue.key().id())
 
@@ -1672,6 +1784,7 @@ def _delete_cached_contents(patch_set):
 
 @post_required
 @issue_owner_required
+@xsrf_required
 def delete(request):
   """/<issue>/delete - Delete an issue.  There is no way back."""
   issue = request.issue
@@ -1680,11 +1793,13 @@ def delete(request):
               models.Message, models.Content]:
     tbd += cls.gql('WHERE ANCESTOR IS :1', issue)
   db.delete(tbd)
+  _notify_issue(request, issue, 'Deleted')
   return HttpResponseRedirect('/mine')
 
 
 @post_required
 @patchset_owner_required
+@xsrf_required
 def delete_patchset(request):
   """/<issue>/patch/<patchset>/delete - Delete a patchset.
 
@@ -1701,11 +1816,12 @@ def delete_patchset(request):
         if ps_id in patch.delta:
           patches.append(patch)
   db.run_in_transaction(_patchset_delete, ps_delete, patches)
+  _notify_issue(request, issue, 'Patchset deleted')
   return HttpResponseRedirect('/' + str(issue.key().id()))
 
 
 def _patchset_delete(ps_delete, patches):
-  """Transational helper for delete_patchset.
+  """Transactional helper for delete_patchset.
 
   Args:
     ps_delete: The patchset to be deleted.
@@ -1727,6 +1843,7 @@ def _patchset_delete(ps_delete, patches):
 
 @post_required
 @issue_editor_required
+@xsrf_required
 def close(request):
   """/<issue>/close - Close an issue."""
   issue = request.issue
@@ -1736,19 +1853,26 @@ def close(request):
     if new_description:
       issue.description = new_description
   issue.put()
+  _notify_issue(request, issue, 'Closed')
   return HttpResponse('Closed', content_type='text/plain')
 
 
 @post_required
 @issue_required
+@upload_required
 def mailissue(request):
-  """/<issue>/mail - Send mail for an issue."""
+  """/<issue>/mail - Send mail for an issue.
+
+  Used by upload.py.
+  """
   if request.issue.owner != request.user:
     if not IS_DEV:
       return HttpResponse('Login required', status=401)
   issue = request.issue
   msg = _make_message(request, issue, '', '', True)
   msg.put()
+  _notify_issue(request, issue, 'Mailed')
+
   return HttpResponse('OK', content_type='text/plain')
 
 
@@ -1768,8 +1892,12 @@ def download(request):
 
 
 @issue_required
+@upload_required
 def description(request):
-  """/<issue>/description - Gets/Sets an issue's description."""
+  """/<issue>/description - Gets/Sets an issue's description.
+
+  Used by upload.py or similar scripts.
+  """
   if request.method != 'POST':
     description = request.issue.description or ""
     return HttpResponse(description, content_type='text/plain')
@@ -1779,6 +1907,7 @@ def description(request):
   issue = request.issue
   issue.description = request.POST.get('description')
   issue.put()
+  _notify_issue(request, issue, 'Changed')
   return HttpResponse('')
 
 
@@ -2113,6 +2242,11 @@ def inline_draft(request):
 
   This wraps _inline_draft(); all exceptions are logged and cause an
   abbreviated response indicating something went wrong.
+
+  Note: creating or editing draft comments is *not* XSRF-protected,
+  because it is not unusual to come back after hours; the XSRF tokens
+  time out after 1 or 2 hours.  The final submit of the drafts for
+  others to view *is* XSRF-protected.
   """
   try:
     return _inline_draft(request)
@@ -2257,6 +2391,7 @@ def _get_mail_template(request, issue):
 
 @login_required
 @issue_required
+@xsrf_required
 def publish(request):
   """ /<issue>/publish - Publish draft comments and send mail."""
   issue = request.issue
@@ -2341,6 +2476,8 @@ def publish(request):
 
   for obj in tbd:
     db.put(obj)
+
+  _notify_issue(request, issue, 'Comments published')
 
   # There are now no comments here (modulo race conditions)
   models.Account.current_user_account.update_drafts(issue, 0)
@@ -2440,8 +2577,8 @@ def _get_draft_details(request, comments):
                                       c.patch.key().id(),
                                       c.left and "old" or "new",
                                       c.lineno))
-    output.append('\n%s\nLine %d: %s\n%s' % (url, c.lineno, context,
-                                             c.text.rstrip()))
+    output.append('\n%s\n%s:%d: %s\n%s' % (url, c.patch.filename, c.lineno,
+                                           context, c.text.rstrip()))
   if modified_patches:
     db.put(modified_patches)
   return '\n'.join(output)
@@ -2455,12 +2592,15 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   my_email = db.Email(request.user.email())
   to = [db.Email(issue.owner.email())] + issue.reviewers
   cc = issue.cc[:]
+  # Chromium's instance adds reply@chromiumcodereview.appspotmail.com to the
+  # Google Group which is CCd on all reviews.
+  #cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
   reply_to = to + cc
   if my_email in to and len(to) > 1:  # send_mail() wants a non-empty to list
     to.remove(my_email)
   if my_email in cc:
     cc.remove(my_email)
-  subject = issue.subject
+  subject = '%s (issue%d)' % (issue.subject, issue.key().id())
   if issue.message_set.count(1) > 0:
     subject = 'Re: ' + subject
   if comments:
@@ -2517,8 +2657,10 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
 
 @post_required
 @login_required
+@xsrf_required
 @issue_required
 def star(request):
+  """Add a star to an Issue."""
   account = models.Account.current_user_account
   account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
@@ -2533,7 +2675,9 @@ def star(request):
 @post_required
 @login_required
 @issue_required
+@xsrf_required
 def unstar(request):
+  """Remove the star from an Issue."""
   account = models.Account.current_user_account
   account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
@@ -2548,7 +2692,13 @@ def unstar(request):
 @login_required
 @issue_required
 def draft_message(request):
-  """/<issue>/draft_message - Retrieve, modify and delete draft messages."""
+  """/<issue>/draft_message - Retrieve, modify and delete draft messages.
+
+  Note: creating or editing draft messages is *not* XSRF-protected,
+  because it is not unusual to come back after hours; the XSRF tokens
+  time out after 1 or 2 hours.  The final submit of the drafts for
+  others to view *is* XSRF-protected.
+  """
   query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
                               'AND draft = TRUE'),
                              request.issue, request.user.email())
@@ -2715,6 +2865,7 @@ def repos(request):
 
 
 @login_required
+@xsrf_required
 def repo_new(request):
   """/repo_new - Create a new Subversion repository record."""
   if request.method != 'POST':
@@ -2750,6 +2901,7 @@ BRANCHES = [
     ]
 
 
+# TODO: Make this a POST request to avoid XSRF attacks.
 @admin_required
 def repo_init(request):
   """/repo_init - Initialze the list of known Subversion repositories."""
@@ -2773,6 +2925,7 @@ def repo_init(request):
 
 
 @login_required
+@xsrf_required
 def branch_new(request, repo_id):
   """/branch_new/<repo> - Add a new Branch to a Repository record."""
   repo = models.Repository.get_by_id(int(repo_id))
@@ -2798,6 +2951,7 @@ def branch_new(request, repo_id):
 
 
 @login_required
+@xsrf_required
 def branch_edit(request, branch_id):
   """/branch_edit/<branch> - Edit a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))
@@ -2825,6 +2979,7 @@ def branch_edit(request, branch_id):
 
 @post_required
 @login_required
+@xsrf_required
 def branch_delete(request, branch_id):
   """/branch_delete/<branch> - Delete a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))
@@ -2844,6 +2999,7 @@ def branch_delete(request, branch_id):
 
 
 @login_required
+@xsrf_required
 def settings(request):
   account = models.Account.current_user_account
   if request.method != 'POST':
@@ -2853,15 +3009,41 @@ def settings(request):
     form = SettingsForm(initial={'nickname': nickname,
                                  'context': default_context,
                                  'column_width': default_column_width,
+                                 'notify_by_email': account.notify_by_email,
+                                 'notify_by_chat': account.notify_by_chat,
                                  })
-    return respond(request, 'settings.html', {'form': form})
+    chat_status = None
+    if account.notify_by_chat:
+      try:
+        presence = xmpp.get_presence(account.email)
+      except Exception, err:
+        logging.error('Exception getting XMPP presence: %s', err)
+        chat_status = 'Error (%s)' % err
+      else:
+        if presence:
+          chat_status = 'online'
+        else:
+          chat_status = 'offline'
+    return respond(request, 'settings.html', {'form': form,
+                                              'chat_status': chat_status})
   form = SettingsForm(request.POST)
   if form.is_valid():
     account.nickname = form.cleaned_data.get('nickname')
     account.default_context = form.cleaned_data.get('context')
     account.default_column_width = form.cleaned_data.get('column_width')
+    account.notify_by_email = form.cleaned_data.get('notify_by_email')
+    notify_by_chat = form.cleaned_data.get('notify_by_chat')
+    must_invite = notify_by_chat and not account.notify_by_chat
+    account.notify_by_chat = notify_by_chat
     account.fresh = False
     account.put()
+    if must_invite:
+      logging.info('Sending XMPP invite to %s', account.email)
+      try:
+        xmpp.send_invite(account.email)
+      except Exception, err:
+        # XXX How to tell user it failed?
+        logging.error('XMPP invite to %s failed', account.email)
   else:
     return respond(request, 'settings.html', {'form': form})
   return HttpResponseRedirect('/mine')
@@ -2869,6 +3051,7 @@ def settings(request):
 
 @post_required
 @login_required
+@xsrf_required
 def account_delete(request):
   account = models.Account.current_user_account
   account.delete()
@@ -2909,3 +3092,91 @@ def _user_popup(request):
     # Use time expired cache because the number of issues will change over time
     memcache.add('user_popup:' + user.email(), popup_html, 60)
   return popup_html
+
+
+def incoming_chat(request):
+  """/_ah/xmpp/message/chat/
+
+  This handles incoming XMPP (chat) messages.
+
+  Just reply saying we ignored the chat.
+  """
+  if request.method != 'POST':
+    return HttpResponse('XMPP requires POST', status=405)
+  message = xmpp.Message(request.POST)
+  sts = message.reply('Sorry, Rietveld does not support chat input')
+  logging.debug('XMPP status %r', sts)
+  return HttpResponse('')
+
+
+@post_required
+def incoming_mail(request, recipients):
+  """/_ah/mail/(.*)
+
+  Handle incoming mail messages.
+
+  The issue is not modified. No reviewers or CC's will be added or removed.
+  """
+  try:
+    _process_incoming_mail(request.raw_post_data, recipients)
+  except InvalidIncomingEmailError, err:
+    logging.debug(str(err))
+  return HttpResponse('')
+
+
+def _process_incoming_mail(raw_message, recipients):
+  """Process an incoming email message."""
+  recipients = [x[1] for x in email.utils.getaddresses([recipients])]
+
+  # We can't use mail.InboundEmailMessage(raw_message) here.
+  # See: http://code.google.com/p/googleappengine/issues/detail?id=2287
+  # msg = mail.InboundEmailMessage(raw_message)
+  # The code below needs to be adjusted when issue2287 is fixed.
+  incoming_msg = email.message_from_string(raw_message)
+
+  if 'X-Google-Appengine-App-Id' in incoming_msg:
+    raise InvalidIncomingEmailError('Mail sent by App Engine')
+
+  # big hack until Groups lets X-Appengine-App-Id through.  Once that happens,
+  # we should use that header instead.  See http://b/issue?id=2257571.
+  receivedspf = incoming_msg.get_all('Received-SPF')
+  # Groups and AE both add this header, need to look for the AE one if it exists.
+  if receivedspf:
+    for header in receivedspf:
+      if header.find('@apphosting.bounces.google.com') != -1:
+        return  # message was sent by us, so don't add it again to the issue
+
+  match = re.search(r'\(issue *(?P<id>\d+)\)$',
+                    incoming_msg.get('Subject', ''))
+  if match is None:
+    raise InvalidIncomingEmailError('No issue id found: %s',
+                                    incoming_msg.get('Subject', None))
+  issue_id = int(match.groupdict()['id'])
+  issue = models.Issue.get_by_id(issue_id)
+  if issue is None:
+    raise InvalidIncomingEmailError('Unknown issue ID: %d' % issue_id)
+  sender = email.utils.parseaddr(incoming_msg.get('From', None))[1]
+
+  body = None
+  charset = None
+  if incoming_msg.is_multipart():
+    for payload in incoming_msg.get_payload():
+      if payload.get_content_type() == 'text/plain':
+        body = payload.get_payload(decode=True)
+        charset = payload.get_content_charset()
+        break
+  else:
+    body = incoming_msg.get_payload(decode=True)
+    charset = incoming_msg.get_content_charset()
+  if body is None or not body.strip():
+    raise InvalidIncomingEmailError('Ignoring empty message.')
+
+  subject = incoming_msg.get('Subject', '').replace('\n', '')
+  msg = models.Message(issue=issue, parent=issue,
+                       subject=subject,
+                       sender=db.Email(sender),
+                       recipients=[db.Email(x) for x in recipients],
+                       date=datetime.datetime.now(),
+                       text=db.Text(body, encoding=charset),
+                       draft=False)
+  msg.put()

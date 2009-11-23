@@ -52,7 +52,7 @@ class BaseFeed(Feed):
 
   def item_author_name(self, item):
     if isinstance(item, models.Issue) or isinstance(item, models.PatchSet):
-      return item.owner
+      return library.nickname(item.owner)
     if isinstance(item, models.Message):
       return library.nickname(item.sender)
     return 'Rietveld'
@@ -114,7 +114,8 @@ class AllFeed(BaseFeed):
   title = 'Code Review - All issues'
 
   def items(self):
-    query = models.Issue.gql('WHERE closed = FALSE ORDER BY modified DESC')
+    query = models.Issue.gql('WHERE closed = FALSE AND private = FALSE '
+                             'ORDER BY modified DESC')
     return query.fetch(RSS_LIMIT)
 
 
@@ -149,7 +150,8 @@ def _rss_helper(email, query_string, use_email=False):
   if account is None:
     issues = []
   else:
-    query = models.Issue.gql('WHERE %s ORDER BY modified DESC' % query_string,
+    query = models.Issue.gql('WHERE %s AND private = FALSE '
+                             'ORDER BY modified DESC' % query_string,
                              use_email and account.email or account.user)
     issues = query.fetch(RSS_LIMIT)
   return issues

@@ -16,7 +16,10 @@
 
 # Python imports
 import logging
+import md5
+import os
 import re
+import time
 
 # AppEngine imports
 from google.appengine.ext import db
@@ -163,35 +166,22 @@ class PatchSet(db.Model):
   owner = db.UserProperty(auto_current_user_add=True, required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
-  n_comments = db.IntegerProperty()
+  n_comments = db.IntegerProperty(default=0)
   build_results = db.StringListProperty()
 
   def update_comment_count(self, n):
-    """Increment the n_comments property by n.
-
-    If n_comments in None, compute the count through a query.  (This
-    is a transitional strategy while the database contains Issues
-    created using a previous version of the schema.)
-    """
-    self.n_comments = self._get_num_comments() + n
+    """Increment the n_comments property by n."""
+    self.n_comments = self.num_comments + n
 
   @property
   def num_comments(self):
     """The number of non-draft comments for this issue.
 
     This is almost an alias for self.n_comments, except that if
-    n_comments is None, it is computed through a query, and stored,
-    using n_comments as a cache.
+    n_comments is None, 0 is returned.
     """
-    if self.n_comments is None:
-      self.n_comments = self._get_num_comments()
-    return self.n_comments
-
-  def _get_num_comments(self):
-    """Helper to compute the number of comments through a query."""
-    return gql(Comment,
-               'WHERE ANCESTOR IS :1 AND draft = FALSE',
-               self).count()
+    # For older patchsets n_comments is None.
+    return self.n_comments or 0
 
 
 class Message(db.Model):
@@ -513,12 +503,15 @@ class Account(db.Model):
   stars = db.ListProperty(int)  # Issue ids of all starred issues
   fresh = db.BooleanProperty()
   uploadpy_hint = db.BooleanProperty(default=True)
+  notify_by_email = db.BooleanProperty(default=True)
+  notify_by_chat = db.BooleanProperty(default=False)
 
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
 
   lower_email = db.StringProperty()
   lower_nickname = db.StringProperty()
+  xsrf_secret = db.BlobProperty()
 
   # Note that this doesn't get called when doing multi-entity puts.
   def put(self):
@@ -575,6 +568,23 @@ class Account(db.Model):
       if key == cls.current_user_account.key().name():
         return cls.current_user_account
     return super(Account, cls).get_by_key_name(key, **kwds)
+
+  @classmethod
+  def get_multiple_accounts_by_email(cls, emails):
+    """Get multiple accounts.  Returns a dict by email."""
+    results = {}
+    keys = []
+    for email in emails:
+      if cls.current_user_account and email == cls.current_user_account.email:
+        results[email] = cls.current_user_account
+      else:
+        keys.append('<%s>' % email)
+    if keys:
+      accounts = cls.get_by_key_name(keys)
+      for account in accounts:
+        if account is not None:
+          results[account.email] = account
+    return results
 
   @classmethod
   def get_nickname_for_email(cls, email, default=None):
@@ -698,3 +708,17 @@ class Account(db.Model):
     """Save self._drafts to memcache."""
     ##logging.info('SAVING: %s -> %s', self.email, self._drafts)
     memcache.set('user_drafts:' + self.email, self._drafts, 3600)
+
+  def get_xsrf_token(self, offset=0):
+    """Return an XSRF token for the current user."""
+    if not self.xsrf_secret:
+      self.xsrf_secret = os.urandom(8)
+      self.put()
+    m = md5.new(self.xsrf_secret)
+    email_str = self.lower_email
+    if isinstance(email_str, unicode):
+      email_str = email_str.encode('utf-8')
+    m.update(self.lower_email)
+    when = int(time.time()) // 3600 + offset
+    m.update(str(when))
+    return m.hexdigest()

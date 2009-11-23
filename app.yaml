@@ -27,10 +27,16 @@ handlers:
 - url: /static
   static_dir: static
 
-# Note that admin doesn't work with dasher accounts (http://b/1407477)
-- url: /shell.*
-  script: shell.py
+- url: /remote_api
+  script: $PYTHON_LIB/google/appengine/ext/remote_api/handler.py
   login: admin
+
+- url: /stats.*
+  script: appstats/ui.py
 
 - url: .*
   script: main.py
+
+inbound_services:
+- xmpp_message
+- mail

@@ -50,9 +50,8 @@ import re
 BEGIN_TAG = "<span class=\"%s\">"
 # Tag to end a diff block.
 END_TAG = "</span>"
-# Tag used for visual tab indication
-TAB_TAG = ("<span class=\"visualtab\" title=\"Visual tab indicator. "
-           "Change settings above to hide.\">&raquo;</span>")
+# Tag used for visual tab indication.
+TAB_TAG = "<span class=\"visualtab\">&raquo;</span>"
 # Color scheme to govern the display properties of diff blocks and matching
 # blocks. Each value e.g. 'oldlight' corresponds to a CSS style.
 COLOR_SCHEME = {
@@ -77,11 +76,12 @@ COLOR_SCHEME = {
           'bckgrnd':    'newlight'
   },
 }
-# Regular expressions to tokenize lines. Default is 'b'.
+# Regular expressions to tokenize lines. Default is 'd'.
 EXPRS = {
          'a': r'(\w+|[^\w\s]+|\s+)',
          'b': r'([A-Za-z0-9]+|[^A-Za-z0-9])',
          'c': r'([A-Za-z0-9_]+|[^A-Za-z0-9_])',
+         'd': r'([^\W_]+|[\W_])',
         }
 # Maximum total characters in old and new lines for doing intra-region diffs.
 # Intra-region diff for larger regions is hard to comprehend and wastes CPU
@@ -89,43 +89,50 @@ EXPRS = {
 MAX_TOTAL_LEN = 10000
 
 
-def ExpandTabs(text, tabsize=8, tab_marker=None):
-  """Expand tab characters in a string into spaces with an optional marker.
+def _ExpandTabs(text, column, tabsize, mark_tabs=False):
+  """Expand tab characters in a string into spaces.
 
   Args:
     text: a string containing tab characters.
-    tabsize: the number of spaces that a tab represents
-    tab_marker: a character; if not None, we replace the first character
-                of each tab expansion with this.
+    column: the initial column for the first character in text
+    tabsize: tab stops occur at columns that are multiples of tabsize
+    mark_tabs: if true, leave a tab character as the first character
+               of the expansion, so that the caller can find where
+               the tabs were.
+
+  Note that calling _ExpandTabs with mark_tabs=True is not idempotent.
   """
-  tabpos = text.find("\t")
-  while tabpos >= 0:
-    fillwidth = tabsize - (tabpos % tabsize)
-    if fillwidth == 0:
-      fillwidth = tabsize
-    if tab_marker:
-      fill = tab_marker + " " * (fillwidth - 1)
+  expanded = ""
+  while True:
+    tabpos = text.find("\t")
+    if tabpos < 0:
+      break
+    fillwidth = tabsize - (tabpos + column) % tabsize
+    column += tabpos + fillwidth
+    if mark_tabs:
+      fill = "\t" + " " * (fillwidth - 1)
     else:
       fill = " " * fillwidth
-    # We avoid str.replace in case tab_marker is \t
-    text = text[:tabpos] + fill + text[tabpos+1:]
-    tabpos = text.find("\t", tabpos + 1)
-  return text
+    expanded += text[0:tabpos] + fill
+    text = text[tabpos+1:]
+  return expanded + text
 
 
-def Fold(text, limit=85, indent=5, offset=0, tabsize=8, mark_tabs=False):
-  """Break a long string into multiple lines.
+def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
+  """Break text into lines.
 
-  Lines longer than 'limit' are broken up into pieces of at most
-  'limit' characters; continuation lines start with 'indent' spaces.
+  Break text, which begins at column offset, each time it reaches
+  column limit.
 
-  'offset' is used to indicate if 'text' itself doesn't align with
-  the beginning of line e.g. we are trying to Fold a line when we have
-  already printed 'offset' number of characters to the output.
-
-  This also translates tabs into 'tabsize' spaces. If 'mark_tabs' is true,
-  then we indicate the first character of each expanded tab visually.
-
+  To break the text, insert brk, which does not count toward
+  the column count of the next line and is assumed to be valid HTML.
+  
+  During the text breaking process, replaces tabs with spaces up
+  to the next column that is a multiple of tabsize.
+  
+  If mark_tabs is true, replace the first space of each expanded
+  tab with TAB_TAG.
+  
   Input and output are assumed to be in UTF-8; the computation is done
   in Unicode.  (Still not good enough if zero-width characters are
   present.) If the input is not valid UTF-8, then the encoding is
@@ -141,26 +148,21 @@ def Fold(text, limit=85, indent=5, offset=0, tabsize=8, mark_tabs=False):
     text = unicode(text, "utf-8")
   except:
     pass
-  if "\t" in text:
-    # If mark_tabs is true, we retain one \t character as a marker during
-    # expansion so that we later replace it with an HTML snippet.
-    tab_marker = mark_tabs and "\t" or None
-    rest = text[indent-offset:]
-    text = text[:indent-offset] + ExpandTabs(rest, tabsize, tab_marker)
+  # Expand all tabs.
+  # If mark_tabs is true, we retain one \t character as a marker during
+  # expansion so that we later replace it with an HTML snippet.
+  text = _ExpandTabs(text, offset, tabsize, mark_tabs)
   # Perform wrapping.
   if len(text) > limit - offset:
-    parts = []
-    prefix = ""
-    i = 0
-    j = limit - offset
-    while i < len(text):
-      parts.append(prefix + text[i:j])
-      i = j
-      j += limit - indent
-      prefix = " " * indent
-    text = "\n".join(parts)
-  # Colorize tab markers (after calling escape)
-  text = cgi.escape(text)
+    parts, text = [text[0:limit-offset]], text[limit-offset:]
+    while len(text) > limit:
+      parts.append(text[0:limit])
+      text = text[limit:]
+    parts.append(text);
+    text = brk.join([cgi.escape(p) for p in parts])
+  else:
+    text = cgi.escape(text)
+  # Colorize tab markers
   text = text.replace("\t", TAB_TAG)
   if isinstance(text, unicode):
     return text.encode("utf-8", "replace")
@@ -215,7 +217,7 @@ def FilterBlocks(blocks, filter_func):
   return res
 
 
-def GetDiffParams(expr='b', min_match_ratio=0.6, min_match_size=2, dbg=False):
+def GetDiffParams(expr='d', min_match_ratio=0.6, min_match_size=2, dbg=False):
   """Returns a tuple of various parameters which affect intra region diffs.
 
   Args:
@@ -277,22 +279,18 @@ def WordDiff(line1, line2, diff_params):
   """
   match_expr, min_match_ratio, min_match_size, dbg = diff_params
   exp = EXPRS[match_expr]
-  # We want to split at proper character boundaries in UTF8 text.
+  # Strings may have been left undecoded up to now. Assume UTF-8.
   try:
-    line1_u = unicode(line1, "utf8")
+    line1 = unicode(line1, "utf8")
   except:
-    line1_u = line1
+    pass
   try:
-    line2_u = unicode(line2, "utf8")
+    line2 = unicode(line2, "utf8")
   except:
-    line2_u = line2
+    pass
 
-  def _ToUTF8(s):
-    if isinstance(s, unicode):
-      return s.encode("utf8")
-    return s
-  a = map(_ToUTF8, re.findall(exp, line1_u, re.U))
-  b = map(_ToUTF8, re.findall(exp, line2_u, re.U))
+  a = re.findall(exp, line1, re.U)
+  b = re.findall(exp, line2, re.U)
   s = difflib.SequenceMatcher(None, a, b)
   matching_blocks = s.get_matching_blocks()
   ratio = s.ratio()
@@ -386,7 +384,7 @@ def RenderIntraLineDiff(blocks, line, tag, dbg_info=None, limit=80, indent=5,
               information is rendered only if dbg_info is not None.
     limit: folding limit to be passed to the Fold function.
     indent: indentation size to be passed to the Fold function.
-    tabsize: the number of spaces that a tab represents
+    tabsize: tab stops occur at columns that are multiples of tabsize
     mark_tabs: if True, mark the first character of each expanded tab visually
 
   Returns:
@@ -431,11 +429,11 @@ def FoldBlock(src, start, end, limit, indent, tag, btype, tabsize=8,
     indent: indentation to use for folding.
     tag: 'new' or 'old' to control the color scheme.
     btype: block type i.e. 'match' or 'diff' to control the color schme.
-    tabsize: the number of spaces that a tab represents
+    tabsize: tab stops occur at columns that are multiples of tabsize
     mark_tabs: if True, mark the first character of each expanded tab visually
 
   Returns:
-    A string represeting the rendered block.
+    A string representing the rendered block.
   """
   text = src[start:end]
   # We ignore newlines because we do newline management ourselves.
@@ -444,23 +442,20 @@ def FoldBlock(src, start, end, limit, indent, tag, btype, tabsize=8,
   if start >= end or text == '\n':
     return ""
   fbegin, lend, nl_plus_indent = GetTags(tag, btype, indent)
-  # 'bol' is beginning of line
-  offset_from_bol = start % limit
-  res = ""
+  # 'bol' is beginning of line.
+  # The text we care about begins at byte offset start
+  # but if there are tabs it will have a larger column
+  # offset.  Use len(_ExpandTabs()) to find out how many
+  # columns the starting prefix occupies.
+  offset_from_bol = len(_ExpandTabs(src[0:start], 0, tabsize)) % limit
+  text = Break(text, offset_from_bol, limit, lend + nl_plus_indent + fbegin, tabsize, mark_tabs)
+  if text:
+    text = fbegin + text + lend
   # If this is the first block of the line and this is not the first line then
-  # insert newline + indent. This special case is not dealt with in the for
-  # loop below.
+  # insert newline + indent.
   if offset_from_bol == 0 and not start == 0:
-    res = nl_plus_indent
-  text = Fold(text, limit, 0, offset_from_bol, tabsize, mark_tabs)
-  folded_lines = text.split("\n")
-  for (j, l) in enumerate(folded_lines):
-    if l:
-      res += (fbegin + l + lend)
-    # Add new line plus indent except for the last line.
-    if j < len(folded_lines) - 1:
-      res += nl_plus_indent
-  return res
+    text = nl_plus_indent + text
+  return text
 
 
 def GetTags(tag, btype, indent):
@@ -672,7 +667,7 @@ def RenderIntraRegionDiff(lines, diff_blocks, tag, ratio, limit=80, indent=5,
     ratio: similarity ratio returned by the diff computing function
     limit: folding limit
     indent: indentation size
-    tabsize: the number of spaces that a tab represents
+    tabsize: tab stops occur at columns that are multiples of tabsize
     mark_tabs: if True, mark the first character of each expanded tab visually
     dbg: indicates if debug information should be rendered
 

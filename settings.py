@@ -27,6 +27,8 @@ INSTALLED_APPS = (
     'codereview',
 )
 MIDDLEWARE_CLASSES = (
+    #'firepython.middleware.FirePythonDjango',
+    #'appstats.recording.AppStatsDjangoMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.http.ConditionalGetMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',
@@ -44,3 +46,6 @@ FILE_UPLOAD_HANDLERS = (
     'django.core.files.uploadhandler.MemoryFileUploadHandler',
 )
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1048576  # 1 MB
+
+RIETVELD_INCOMING_MAIL_ADDRESS = ('reply@%s.appspotmail.com'
+                                  % os.getenv('APPLICATION_ID'))
