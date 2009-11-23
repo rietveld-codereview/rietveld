@@ -55,6 +55,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import render_to_response
 import django.template
+from django.template import RequestContext
 from django.utils import simplejson
 from django.utils.html import strip_tags
 from django.utils.html import urlize
@@ -462,7 +463,8 @@ def respond(request, template, params=None):
   params['must_choose_nickname'] = must_choose_nickname
   params['uploadpy_hint'] = uploadpy_hint
   try:
-    return render_to_response(template, params)
+    return render_to_response(template, params,
+                              context_instance=RequestContext(request))
   except DeadlineExceededError:
     logging.exception('DeadlineExceededError')
     return HttpResponse('DeadlineExceededError', status=503)
@@ -2335,7 +2337,8 @@ def _inline_draft(request):
                              'lineno': lineno,
                              'snapshot': snapshot,
                              'side': side,
-                             })
+                             },
+                            context_instance=RequestContext(request))
 
 
 def _get_affected_files(issue):
@@ -2626,11 +2629,12 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
 
   if send_mail:
     url = request.build_absolute_uri('/%s' % issue.key().id())
-    reviewer_nicknames = ', '.join(library.nickname(rev_temp, True)
+    reviewer_nicknames = ', '.join(library.get_nickname(rev_temp, True,
+                                                        request)
                                    for rev_temp in issue.reviewers)
-    cc_nicknames = ', '.join(library.nickname(cc_temp, True)
+    cc_nicknames = ', '.join(library.get_nickname(cc_temp, True, request)
                              for cc_temp in cc)
-    my_nickname = library.nickname(request.user, True)
+    my_nickname = library.get_nickname(request.user, True, request)
     reply_to = ', '.join(reply_to)
     description = (issue.description or '').replace('\r\n', '\n')
     home = request.build_absolute_uri('/')
@@ -2640,7 +2644,8 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
                     'message': message, 'details': details,
                     'description': description, 'home': home,
                     })
-    body = django.template.loader.render_to_string(template, context)
+    body = django.template.loader.render_to_string(
+      template, context, context_instance=RequestContext(request))
     logging.warn('Mail: to=%s; cc=%s', ', '.join(to), ', '.join(cc))
     kwds = {}
     if cc:
@@ -3088,12 +3093,14 @@ def _user_popup(request):
                             {'user': user,
                              'num_issues_created': num_issues_created,
                              'num_issues_reviewed': num_issues_reviewed,
-                             })
+                             },
+                             context_instance=RequestContext(request))
     # Use time expired cache because the number of issues will change over time
     memcache.add('user_popup:' + user.email(), popup_html, 60)
   return popup_html
 
 
+@post_required
 def incoming_chat(request):
   """/_ah/xmpp/message/chat/
 
@@ -3101,11 +3108,13 @@ def incoming_chat(request):
 
   Just reply saying we ignored the chat.
   """
-  if request.method != 'POST':
-    return HttpResponse('XMPP requires POST', status=405)
-  message = xmpp.Message(request.POST)
-  sts = message.reply('Sorry, Rietveld does not support chat input')
-  logging.debug('XMPP status %r', sts)
+  sender = request.POST.get('from')
+  if not sender:
+    logging.warn('Incoming chat without "from" key ignored')
+  else:
+    sts = xmpp.send_message([sender],
+                            'Sorry, Rietveld does not support chat input')
+    logging.debug('XMPP status %r', sts)
   return HttpResponse('')
 
 
@@ -3146,11 +3155,10 @@ def _process_incoming_mail(raw_message, recipients):
       if header.find('@apphosting.bounces.google.com') != -1:
         return  # message was sent by us, so don't add it again to the issue
 
-  match = re.search(r'\(issue *(?P<id>\d+)\)$',
-                    incoming_msg.get('Subject', ''))
+  subject = incoming_msg.get('Subject', '')
+  match = re.search(r'\(issue *(?P<id>\d+)\)$', subject)
   if match is None:
-    raise InvalidIncomingEmailError('No issue id found: %s',
-                                    incoming_msg.get('Subject', None))
+    raise InvalidIncomingEmailError('No issue id found: %s', subject)
   issue_id = int(match.groupdict()['id'])
   issue = models.Issue.get_by_id(issue_id)
   if issue is None:
@@ -3171,7 +3179,8 @@ def _process_incoming_mail(raw_message, recipients):
   if body is None or not body.strip():
     raise InvalidIncomingEmailError('Ignoring empty message.')
 
-  subject = incoming_msg.get('Subject', '').replace('\n', '')
+  # If the subject is long, this might come wrapped into more than one line.
+  subject = ' '.join([x.strip() for x in subject.splitlines()])
   msg = models.Message(issue=issue, parent=issue,
                        subject=subject,
                        sender=db.Email(sender),

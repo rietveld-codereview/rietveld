@@ -52,9 +52,9 @@ class BaseFeed(Feed):
 
   def item_author_name(self, item):
     if isinstance(item, models.Issue) or isinstance(item, models.PatchSet):
-      return library.nickname(item.owner)
+      return library.get_nickname(item.owner, True)
     if isinstance(item, models.Message):
-      return library.nickname(item.sender)
+      return library.get_nickname(item.sender, True)
     return 'Rietveld'
 
   def item_pubdate(self, item):

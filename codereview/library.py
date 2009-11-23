@@ -29,36 +29,6 @@ register = django.template.Library()
 
 
 @register.filter
-def nickname(email, arg=None):
-  """Render an email address or a User object as a nickname.
-
-  If the input is a user object that equals the current user,
-  'me' is returned, unless the filter argument is non-empty.
-  Example:
-    {{foo|nickname}} may render 'me';
-    {{foo|nickname:"x"}} will never render 'me'.
-  """
-  if isinstance(email, users.User):
-    email = email.email()
-  if not arg:
-    user = users.get_current_user()
-    if user is not None and email == user.email():
-      return 'me'
-  return models.Account.get_nickname_for_email(email)
-
-
-@register.filter
-def nicknames(email_list, arg=None):
-  """Render a list of email addresses or User objects as nicknames.
-
-  Each list item is first formatter via the nickname() filter above,
-  and then the resulting strings are separated by commas.
-  The filter argument is the same as for nickname() above.
-  """
-  return ', '.join(nickname(email, arg) for email in email_list)
-
-
-@register.filter
 def show_user(email, arg=None, autoescape=None, memcache_results=None):
   """Render a link to the user's dashboard, with text being the nickname."""
   if isinstance(email, users.User):
@@ -157,3 +127,92 @@ class UrlAppendViewSettingsNode(django.template.Node):
 def urlappend_view_settings(parser, token):
   """The actual template tag."""
   return UrlAppendViewSettingsNode()
+
+
+def get_nickname(email, never_me=False, request=None):
+  """Return a nickname for an email address.
+
+  If 'never_me' is True, 'me' is not returned if 'email' belongs to the
+  current logged in user. If 'request' is a HttpRequest, it is used to
+  cache the nickname returned by models.Account.get_nickname_for_email().
+  """
+  if isinstance(email, users.User):
+    email = email.email()
+  if not never_me:
+    if request is not None:
+      user = request.user
+    else:
+      user = users.get_current_user()
+    if user is not None and email == user.email():
+      return 'me'
+
+  if request is None:
+    logging.warn("request not found in template context.")
+    return models.Account.get_nickname_for_email(email)
+  else:
+    if getattr(request, '_nicknames', None) is None:
+      request._nicknames = {}
+    if email in request._nicknames:
+      return request._nicknames[email]
+    result = models.Account.get_nickname_for_email(email)
+    request._nicknames[email] = result
+  return result
+
+
+class NicknameNode(django.template.Node):
+  """Renders a nickname for a given email address.
+
+  The return value is cached if a HttpRequest is available in a
+  'request' template variable.
+
+  The template tag accepts one or two arguments. The first argument is
+  the template variable for the email address. If the optional second
+  argument evaluates to True, 'me' as nickname is never rendered.
+
+  Example usage:
+    {% cached_nickname msg.sender %}
+    {% cached_nickname msg.sender True %}
+  """
+
+  def __init__(self, email_address, never_me=''):
+    """Constructor.
+
+    'email_address' is the name of the template variable that holds an
+    email address. If 'never_me' evaluates to True, 'me' won't be returned.
+    """
+    self.email_address = django.template.Variable(email_address)
+    self.never_me = bool(never_me.strip())
+    self.is_multi = False
+
+  def render(self, context):
+    try:
+      email = self.email_address.resolve(context)
+    except django.template.VariableDoesNotExist:
+      return ''
+    request = context.get('request')
+    if self.is_multi:
+      return ', '.join(get_nickname(e, self.never_me, request) for e in email)
+    return get_nickname(email, self.never_me, request)
+
+
+@register.tag
+def nickname(parser, token):
+  """Almost the same as nickname filter but the result is cached."""
+  try:
+    tag_name, email_address, never_me = token.split_contents()
+  except ValueError:
+    try:
+      tag_name, email_address = token.split_contents()
+      never_me = ''
+    except ValueError:
+      raise django.template.TemplateSyntaxError(
+        "%r requires exactly one or two arguments" % token.contents.split()[0])
+  return NicknameNode(email_address, never_me)
+
+
+@register.tag
+def nicknames(parser, token):
+  """Wrapper for nickname tag with is_multi flag enabled."""
+  node = nickname(parser, token)
+  node.is_multi = True
+  return node

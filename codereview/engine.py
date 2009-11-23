@@ -27,7 +27,7 @@ from google.appengine.api import users
 from google.appengine.ext import db
 
 # Django imports
-from django.template import loader
+from django.template import loader, RequestContext
 
 # Local imports
 import models
@@ -341,7 +341,7 @@ def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
   return _TableRowGenerator(old_patch, old_dict, len(old_lines)+1, 'new',
                             new_patch, new_dict, len(new_lines)+1, 'new',
                             _GenerateTriples(old_lines, new_lines),
-                            colwidth, debug)
+                            colwidth, debug, request)
 
 
 def _GenerateTriples(old_lines, new_lines):
@@ -407,13 +407,13 @@ def _RenderDiffTableRows(request, old_lines, chunks, patch,
   return _TableRowGenerator(patch, old_dict, old_max, 'old',
                             patch, new_dict, new_max, 'new',
                             patching.PatchChunks(old_lines, chunks),
-                            colwidth, debug)
+                            colwidth, debug, request)
 
 
 def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                        new_patch, new_dict, new_max, new_snapshot,
                        triple_iterator, colwidth=DEFAULT_COLUMN_WIDTH,
-                       debug=False):
+                       debug=False, request=None):
   """Helper function to render side-by-side table rows.
 
   Args:
@@ -513,7 +513,7 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                                             old_dict, new_dict,
                                             old_patch, new_patch,
                                             old_snapshot, new_snapshot,
-                                            colwidth, debug):
+                                            colwidth, debug, request):
           yield tg, frag
         frag_list = []
 
@@ -547,7 +547,7 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                                           old_dict, new_dict,
                                           old_patch, new_patch,
                                           old_snapshot, new_snapshot,
-                                          colwidth, debug):
+                                          colwidth, debug, request):
         yield tg, frag
       old_buff = []
       new_buff = []
@@ -585,7 +585,7 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
                         do_ir_diff, old_dict, new_dict,
                         old_patch, new_patch,
                         old_snapshot, new_snapshot,
-                        colwidth, debug):
+                        colwidth, debug, request):
   """Helper for _TableRowGenerator()."""
   obegin = (intra_region_diff.BEGIN_TAG %
             intra_region_diff.COLOR_SCHEME['old']['match'])
@@ -641,11 +641,13 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
 
       # Render left inline comments
       frags.append(_RenderInlineComments(old_valid, old_lineno, old_dict,
-                                         user, old_patch, old_snapshot, 'old'))
+                                         user, old_patch, old_snapshot, 'old',
+                                         request))
 
       # Render right inline comments
       frags.append(_RenderInlineComments(new_valid, new_lineno, new_dict,
-                                         user, new_patch, new_snapshot, 'new'))
+                                         user, new_patch, new_snapshot, 'new',
+                                         request))
 
       # End rendering the second row
       frags.append('</tr>\n')
@@ -682,7 +684,7 @@ def _RenderDiffColumn(patch, line_valid, tag, ndigits, lineno, begin, end,
 
 
 def _RenderInlineComments(line_valid, lineno, data, user,
-                          patch, snapshot, prefix):
+                          patch, snapshot, prefix, request):
   """Helper function for _RenderDiffInternal().
 
   Returns:
@@ -694,6 +696,7 @@ def _RenderInlineComments(line_valid, lineno, data, user,
     if lineno in data:
       comments.append(
         _ExpandTemplate('inline_comment.html',
+                        request,
                         user=user,
                         patch=patch,
                         patchset=patch.patchset,
@@ -756,7 +759,7 @@ def RenderUnifiedTableRows(request, parsed_lines):
         line_no = new_line_no
         snapshot = 'new'
       frags.append(_RenderInlineComments(True, line_no, dct, request.user,
-                   request.patch, snapshot, snapshot))
+                   request.patch, snapshot, snapshot, request))
     else:
       frags.append('<tr class="inline-comments">')
       frags.append('<td ' + row2_id +'></td>')
@@ -804,12 +807,13 @@ def _MarkupNumber(ndigits, number, tag):
   return '%s<%s>%s</%s>' % (space_prefix, tag, formatted_number, tag)
 
 
-def _ExpandTemplate(name, **params):
+def _ExpandTemplate(name, request, **params):
   """Wrapper around django.template.loader.render_to_string().
 
   For convenience, this takes keyword arguments instead of a dict.
   """
-  return loader.render_to_string(name, params)
+  return loader.render_to_string(name, params,
+                                 context_instance=RequestContext(request))
 
 
 def ToText(text):
