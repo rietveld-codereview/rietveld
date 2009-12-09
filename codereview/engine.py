@@ -812,8 +812,9 @@ def _ExpandTemplate(name, request, **params):
 
   For convenience, this takes keyword arguments instead of a dict.
   """
-  return loader.render_to_string(name, params,
+  rslt = loader.render_to_string(name, params,
                                  context_instance=RequestContext(request))
+  return rslt.encode('utf-8')
 
 
 def ToText(text):
