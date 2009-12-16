@@ -51,6 +51,7 @@ urlpatterns = patterns(
     (r'^(\d+)/star$', 'star'),
     (r'^(\d+)/unstar$', 'unstar'),
     (r'^(\d+)/draft_message$', 'draft_message'),
+    (r'^api/(\d+)', 'api_issue'),
     (r'^user/(.+)$', 'show_user'),
     (r'^inline_draft$', 'inline_draft'),
     (r'^repos$', 'repos'),
