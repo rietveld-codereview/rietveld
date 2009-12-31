@@ -1963,6 +1963,25 @@ def download_patch(request):
   return HttpResponse(request.patch.text, content_type='text/plain')
 
 
+@issue_required
+def api_issue(request):
+  """/api/<issue> - Gets an issues's data as a JSON object."""
+  issue, patchsets, response = _get_patchset_info(request, None)
+  json_text = simplejson.dumps({
+    'owner': library.get_nickname(issue.owner, True, request),
+    'modified': str(issue.modified),
+    'created': str(issue.created),
+    'closed': issue.closed,
+    'cc': issue.cc,
+    'reviewers': issue.reviewers,
+    'patchsets': [p.key().id() for p in patchsets],
+    'description': issue.description,
+    'subject': issue.subject,
+    'issue': issue.key().id(),
+  })
+  return HttpResponse(json_text, content_type='application/json')
+
+
 def _get_context_for_user(request):
   """Returns the context setting for a user.
 
