@@ -480,7 +480,8 @@ group.add_option("--download_base", action="store_true",
                  "(side-by-side diffs may not work on files with CRs).")
 group.add_option("--rev", action="store", dest="revision",
                  metavar="REV", default=None,
-                 help="Branch/tree/revision to diff against (used by DVCS).")
+                 help="Base revision/branch/tree to diff against. Use "
+                      "rev1:rev2 range to review already committed changeset.")
 group.add_option("--send_mail", action="store_true",
                  dest="send_mail", default=False,
                  help="Send notification email to reviewers.")
