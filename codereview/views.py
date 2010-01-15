@@ -1790,6 +1790,7 @@ def patch_helper(request, nav_type='patch'):
   return respond(request, 'patch.html',
                  {'patch': request.patch,
                   'patchset': request.patchset,
+                  'view_style': 'patch',
                   'rows': rows,
                   'issue': request.issue,
                   'context': _clean_int(request.GET.get('context'), -1),
@@ -1889,6 +1890,7 @@ def diff(request):
                  {'issue': request.issue,
                   'patchset': patchset,
                   'patch': patch,
+                  'view_style': 'diff',
                   'rows': rows,
                   'context': context,
                   'context_values': models.CONTEXT_CHOICES,
@@ -2091,15 +2093,34 @@ def _add_next_prev(patchset, patch):
   patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
                                   patchset))
   patchset.patches = patches  # Required to render the jump to select.
-  last = None
+
+  last_patch = None
+  next_patch = None
+  last_patch_with_comment = None
+  next_patch_with_comment = None
+
+  found_patch = False
   for p in patches:
-    if last is not None:
       if p.filename == patch.filename:
-        patch.prev = last
-      elif last.filename == patch.filename:
-        patch.next = p
-        break
-    last = p
+        found_patch = True
+        continue
+      if not found_patch:
+          last_patch = p
+          if p.num_comments > 0 or p.num_drafts > 0:
+            last_patch_with_comment = p
+      else:
+          if next_patch is None:
+            next_patch = p
+          if p.num_comments > 0 or p.num_drafts > 0:
+            next_patch_with_comment = p
+            # safe to stop scanning now because the next with out a comment
+            # will already have been filled in by some earlier patch
+            break
+
+  patch.prev = last_patch
+  patch.next = next_patch
+  patch.prev_with_comment = last_patch_with_comment
+  patch.next_with_comment = next_patch_with_comment
 
 
 @post_required

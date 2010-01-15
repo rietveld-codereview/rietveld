@@ -2048,6 +2048,20 @@ function M_commentTextKeyPress_(evt, src, code, key) {
 }
 
 /**
+ * Helper to find an item by its elementId and jump to it.  If the item 
+ * cannot be found this will jump to the changelist instead.
+ * @param {elementId} the id of an element an href
+ */
+function M_jumpToHrefOrChangelist(elementId) {
+  var hrefElement = document.getElementById(elementId);
+  if (hrefElement) {
+    document.location.href = hrefElement.href;
+  } else {
+    M_upToChangelist();
+  }
+}
+
+/**
  * Event handler for the keypress event in the file view.
  * @param {Event} evt The event object that triggered this callback
  * @return false if the key press was handled
@@ -2068,20 +2082,16 @@ function M_keyPress(evt) {
       if (hookState) hookState.gotoPrevHook(true);
     } else if (key == 'j') {
       // next file
-      var nextFile = document.getElementById('nextFile');
-      if (nextFile) {
-        document.location.href = nextFile.href;
-      } else {
-        M_upToChangelist();
-      }
+      M_jumpToHrefOrChangelist('nextFile')
     } else if (key == 'k') {
       // prev file
-      var prevFile = document.getElementById('prevFile');
-      if (prevFile) {
-        document.location.href = prevFile.href;
-      } else {
-        M_upToChangelist();
-      }
+      M_jumpToHrefOrChangelist('prevFile')
+    } else if (key == 'J') {
+      // next file with comment
+      M_jumpToHrefOrChangelist('nextFileWithComment')
+    } else if (key == 'K') {
+      // prev file with comment
+      M_jumpToHrefOrChangelist('prevFileWithComment')
     } else if (key == 'm') {
       document.location.href = publish_link;
     } else if (key == 'M') {
