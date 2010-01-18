@@ -2,7 +2,7 @@
 
 {%block body%}
 <h1>Tired of uploading files through the form?</h1>
-<p>Download <a href="/static/upload.py">upload.py</a>, a simple tool for
+<p>Download <a href="{{media_url}}upload.py">upload.py</a>, a simple tool for
 uploading diffs from a version control system to the codereview app.</p>
 
 <p><strong>Usage summary:</strong>
@@ -21,7 +21,7 @@ uploading diffs from a version control system to the codereview app.</p>
       target="_blank">Read more</a> about this script.</p>
 
 <div style="margin-top: 1.5em;">
-<form method="POST" action="/use_uploadpy">
+<form method="POST" action="{%url codereview.views.use_uploadpy%}">
   <p>
   <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
   <input name="disable_msg" value="1" id="disable_msg" type="checkbox" />

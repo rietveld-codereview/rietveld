@@ -378,7 +378,7 @@ span.moved_body {
 
 .toggled-section {
   padding-left: 15px;
-  background-image: url('/static/closedtriangle.gif');
+  background-image: url('closedtriangle.gif');
   background-position: center left;
   background-repeat: no-repeat;
   background-align: left;
@@ -386,7 +386,7 @@ span.moved_body {
   color: black;
 }
 .opentriangle {
-  background-image: url('/static/opentriangle.gif');
+  background-image: url('opentriangle.gif');
 }
 
 .fat-button {
@@ -465,14 +465,14 @@ table.history div.triangle-open {
   padding-left: 15px;
   width: 11px;
   height: 11px;
-/*background: url('/static/softopentriangle.gif') no-repeat scroll center;*/
+/*background: url('softopentriangle.gif') no-repeat scroll center;*/
 }
 
 table.history div.triangle-closed {
   padding-left: 15px;
   width: 11px;
   height: 11px;
-/*background: url('/static/softclosedtriangle.gif') no-repeat scroll center;*/
+/*background: url('softclosedtriangle.gif') no-repeat scroll center;*/
 }
 
 /* Make the diff background colors slightly lighter for the table.*/

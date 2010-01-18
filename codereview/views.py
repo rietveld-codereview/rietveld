@@ -55,6 +55,7 @@ import django.template
 from django.template import RequestContext
 from django.utils import simplejson
 from django.utils.safestring import mark_safe
+from django.core.urlresolvers import reverse
 
 # Local imports
 import models
@@ -82,13 +83,13 @@ class AccountInput(forms.TextInput):
   # http://docs.djangoproject.com/en/dev/topics/forms/media/.
   class Media:
     css = {
-      'all': ('/static/autocomplete/jquery.autocomplete.css',)
+      'all': ('autocomplete/jquery.autocomplete.css',)
     }
     js = (
-      '/static/autocomplete/lib/jquery.js',
-      '/static/autocomplete/lib/jquery.bgiframe.min.js',
-      '/static/autocomplete/lib/jquery.ajaxQueue.js',
-      '/static/autocomplete/jquery.autocomplete.js'
+      'autocomplete/lib/jquery.js',
+      'autocomplete/lib/jquery.bgiframe.min.js',
+      'autocomplete/lib/jquery.ajaxQueue.js',
+      'autocomplete/jquery.autocomplete.js'
     )
 
   def render(self, name, value, attrs=None):
@@ -96,7 +97,7 @@ class AccountInput(forms.TextInput):
     # TODO(John): Why is the line below needed, it should be automatic.
     output += mark_safe(AccountInput().media)
     return output + mark_safe(u'''<script type="text/javascript">
-                              jQuery("#id_%s").autocomplete("/account", {
+                              jQuery("#id_%s").autocomplete("%s", {
                               max: 10,
                               highlight: false,
                               multiple: true,
@@ -108,7 +109,7 @@ class AccountInput(forms.TextInput):
                                 return row[0].replace(/ .+/gi, '');
                               }
                               });
-                              </script>''' % name)
+                              </script>''' % (name, reverse(account)))
 
 
 class IssueBaseForm(forms.Form):
@@ -419,6 +420,7 @@ def respond(request, template, params=None):
   params['user'] = request.user
   params['is_admin'] = request.user_is_admin
   params['is_dev'] = IS_DEV
+  params['media_url'] = django_settings.MEDIA_URL
   full_path = request.get_full_path().encode('utf-8')
   if request.user is None:
     params['sign_in'] = users.create_login_url(full_path)
@@ -525,7 +527,8 @@ def _notify_issue(request, issue, message):
   message = '%s by %s: %s\n%s' % (message,
                                   sender,
                                   issue.subject,
-                                  request.build_absolute_uri('/%s' % iid))
+                                  request.build_absolute_uri(
+                                    reverse(show, args=[iid])))
   try:
     sts = xmpp.send_message(jids, message)
   except Exception, err:
@@ -748,7 +751,7 @@ def image_required(func):
       content = request.patch.patched_content
     # Other values are erroneous so request.content won't be set.
     if not content or not content.data:
-      return HttpResponseRedirect("/static/blank.jpg")
+      return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
     request.content = content
     return func(request, *args, **kwds)
 
@@ -783,16 +786,16 @@ def all(request):
   if more:
     del issues[limit:]
   if more:
-    next = '/all?offset=%d&limit=%d' % (offset+limit, limit)
+    next = '%s?offset=%d&limit=%d' % (reverse(all), offset+limit, limit)
   else:
     next = ''
   if offset > 0:
-    prev = '/all?offset=%d&limit=%d' % (max(0, offset-limit), limit)
+    prev = '%s?offset=%d&limit=%d' % (reverse(all), max(0, offset-limit), limit)
   else:
     prev = ''
   newest = ''
   if offset > limit:
-    newest = '/all?limit=%d' % limit
+    newest = '%s?limit=%d' % (reverse(all), limit)
 
   _optimize_draft_counts(issues)
   return respond(request, 'all.html',
@@ -896,7 +899,7 @@ def new(request):
   if issue is None:
     return respond(request, 'new.html', {'form': form})
   else:
-    return HttpResponseRedirect('/%s' % issue.key().id())
+    return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
 @login_required
@@ -908,9 +911,9 @@ def use_uploadpy(request):
       models.Account.current_user_account.uploadpy_hint = False
       models.Account.current_user_account.put()
     if 'download' in request.POST:
-      url = '/static/upload.py'
+      url = django_settings.MEDIA_URL + 'upload.py'
     else:
-      url = '/new'
+      url = reverse(new)
     return HttpResponseRedirect(url)
   return respond(request, 'use_uploadpy.html')
 
@@ -965,7 +968,8 @@ def upload(request):
   else:
     msg = ('Issue %s. URL: %s' %
            (action,
-            request.build_absolute_uri('/%s' % issue.key().id())))
+            request.build_absolute_uri(
+              reverse('show_bare_issue_number', args=[issue.key().id()]))))
     if (form.cleaned_data.get('content_upload') or
         form.cleaned_data.get('separate_patches')):
       # Extend the response message: 2nd line is patchset id.
@@ -1240,7 +1244,7 @@ def add(request):
   form = AddForm(request.POST, request.FILES)
   if not _add_patchset_from_form(request, issue, form):
     return show(request, issue.key().id(), form)
-  return HttpResponseRedirect('/%s' % issue.key().id())
+  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
 def _add_patchset_from_form(request, issue, form, message_key='message',
@@ -1600,7 +1604,7 @@ def edit(request):
     message = 'Reopened'
   _notify_issue(request, issue, message)
 
-  return HttpResponseRedirect('/%s' % issue.key().id())
+  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
 def _delete_cached_contents(patch_set):
@@ -1644,7 +1648,7 @@ def delete(request):
     tbd += cls.gql('WHERE ANCESTOR IS :1', issue)
   db.delete(tbd)
   _notify_issue(request, issue, 'Deleted')
-  return HttpResponseRedirect('/mine')
+  return HttpResponseRedirect(reverse(mine))
 
 
 @post_required
@@ -1667,7 +1671,7 @@ def delete_patchset(request):
           patches.append(patch)
   db.run_in_transaction(_patchset_delete, ps_delete, patches)
   _notify_issue(request, issue, 'Patchset deleted')
-  return HttpResponseRedirect('/' + str(issue.key().id()))
+  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
 def _patchset_delete(ps_delete, patches):
@@ -2367,7 +2371,7 @@ def publish(request):
 
   # There are now no comments here (modulo race conditions)
   models.Account.current_user_account.update_drafts(issue, 0)
-  return HttpResponseRedirect('/%s' % issue.key().id())
+  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
 def _encode_safely(s):
@@ -2429,10 +2433,10 @@ def _get_draft_details(request, comments):
   modified_patches = []
   for c in comments:
     if (c.patch.filename, c.left) != last_key:
-      url = request.build_absolute_uri('/%d/diff/%d/%d' %
-                                       (request.issue.key().id(),
-                                        c.patch.patchset.key().id(),
-                                        c.patch.key().id()))
+      url = request.build_absolute_uri(
+        reverse(diff, args=[request.issue.key().id(),
+                            c.patch.patchset.key().id(),
+                            c.patch.key().id()]))
       output.append('\n%s\nFile %s (%s):' % (url, c.patch.filename,
                                              c.left and "left" or "right"))
       last_key = (c.patch.filename, c.left)
@@ -2457,12 +2461,12 @@ def _get_draft_details(request, comments):
     else:
       if 1 <= c.lineno <= len(file_lines):
         context = file_lines[c.lineno - 1].strip()
-    url = request.build_absolute_uri('/%d/diff/%d/%d#%scode%d' %
-                                     (request.issue.key().id(),
-                                      c.patch.patchset.key().id(),
-                                      c.patch.key().id(),
-                                      c.left and "old" or "new",
-                                      c.lineno))
+    url = request.build_absolute_uri(
+      '%s#%scode%d' % (reverse(diff, args=[request.issue.key().id(),
+                                           c.patch.patchset.key().id(),
+                                           c.patch.key().id()]),
+                       c.left and "old" or "new",
+                       c.lineno))
     output.append('\n%s\n%s:%d: %s\n%s' % (url, c.patch.filename, c.lineno,
                                            context, c.text.rstrip()))
   if modified_patches:
@@ -2509,7 +2513,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     msg.date = datetime.datetime.now()
 
   if send_mail:
-    url = request.build_absolute_uri('/%s' % issue.key().id())
+    url = request.build_absolute_uri(reverse(show, args=[issue.key().id()]))
     reviewer_nicknames = ', '.join(library.get_nickname(rev_temp, True,
                                                         request)
                                    for rev_temp in issue.reviewers)
@@ -2518,7 +2522,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     my_nickname = library.get_nickname(request.user, True, request)
     reply_to = ', '.join(reply_to)
     description = (issue.description or '').replace('\r\n', '\n')
-    home = request.build_absolute_uri('/')
+    home = request.build_absolute_uri(reverse(index))
     context.update({'reviewer_nicknames': reviewer_nicknames,
                     'cc_nicknames': cc_nicknames,
                     'my_nickname': my_nickname, 'url': url,
@@ -2691,7 +2695,7 @@ def repo_new(request):
                          category='*trunk*', name='Trunk',
                          url=branch_url)
   branch.put()
-  return HttpResponseRedirect('/repos')
+  return HttpResponseRedirect(reverse(repos))
 
 
 SVN_ROOT = 'http://svn.python.org/view/*checkout*/python/'
@@ -2723,7 +2727,7 @@ def repo_init(request):
       br = models.Branch(repo=python, repo_name='Python',
                          category=category, name=name, url=url)
       br.put()
-  return HttpResponseRedirect('/repos')
+  return HttpResponseRedirect(reverse(repos))
 
 
 @login_required
@@ -2749,7 +2753,7 @@ def branch_new(request, repo_id):
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
   branch.repo_name = repo.name
   branch.put()
-  return HttpResponseRedirect('/repos')
+  return HttpResponseRedirect(reverse(repos))
 
 
 @login_required
@@ -2776,7 +2780,7 @@ def branch_edit(request, branch_id):
                    {'branch': branch, 'form': form})
   branch.repo_name = branch.repo.name
   branch.put()
-  return HttpResponseRedirect('/repos')
+  return HttpResponseRedirect(reverse(repos))
 
 
 @post_required
@@ -2794,7 +2798,7 @@ def branch_delete(request, branch_id):
     # Even if we don't own the repository?  Yes, I think so!  Empty
     # repositories have no representation on screen.
     repo.delete()
-  return HttpResponseRedirect('/repos')
+  return HttpResponseRedirect(reverse(repos))
 
 
 ### User Profiles ###
@@ -2848,7 +2852,7 @@ def settings(request):
         logging.error('XMPP invite to %s failed', account.email)
   else:
     return respond(request, 'settings.html', {'form': form})
-  return HttpResponseRedirect('/mine')
+  return HttpResponseRedirect(reverse(mine))
 
 
 @post_required
@@ -2857,7 +2861,7 @@ def settings(request):
 def account_delete(request):
   account = models.Account.current_user_account
   account.delete()
-  return HttpResponseRedirect(users.create_logout_url('/'))
+  return HttpResponseRedirect(users.create_logout_url(reverse(index)))
 
 
 @user_key_required

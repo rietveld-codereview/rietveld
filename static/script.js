@@ -404,10 +404,10 @@ function M_toggleSection(id) {
 
   if (sectionStyle.display == "none") {
     sectionStyle.display = "";
-    pointerStyle.backgroundImage = "url('/static/opentriangle.gif')";
+    pointerStyle.backgroundImage = "url('" + media_url + "opentriangle.gif')";
   } else {
     sectionStyle.display = "none";
-    pointerStyle.backgroundImage = "url('/static/closedtriangle.gif')";
+    pointerStyle.backgroundImage = "url('" + media_url + "closedtriangle.gif')";
   }
 }
 
@@ -448,7 +448,7 @@ function M_toggleSectionForPS(issue, patchset) {
   if (!http_request)
     return;
 
-  http_request.open('GET', "/" + issue + "/patchset/" + patchset, true);
+  http_request.open('GET', base_url + issue + "/patchset/" + patchset, true);
   http_request.onreadystatechange = M_PatchSetFetched;
   http_request.div_id = id;
   http_request.send(null);
@@ -1232,7 +1232,7 @@ function M_submitInlineComment(form, cid, lineno, side) {
       }
     }
   }
-  httpreq.open("POST", "/inline_draft", true);
+  httpreq.open("POST", base_url + "inline_draft", true);
   httpreq.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
   var req = [];
   var len = form.elements.length;
@@ -2155,7 +2155,7 @@ function M_changelistKeyPress(evt) {
       document.location.href = publish_link;
     } else if (key == 'u') {
       // back to dashboard
-      document.location.href = '/';
+      document.location.href = base_url;
     } else {
       return true;
     }
@@ -2202,7 +2202,7 @@ function M_getBugbotComments(cl, depot_path, a, b) {
       }
     }
   }
-  httpreq.open("GET", "/warnings/" + cl + "/" + depot_path +
+  httpreq.open("GET", base_url + "warnings/" + cl + "/" + depot_path +
                "?a=" + a + "&b=" + b, true);
   httpreq.send(null);
 }
@@ -2743,7 +2743,7 @@ function M_showUserInfoPopup(obj) {
       }
     }
   }
-  httpreq.open("GET", "/user_popup/" + user_key, true);
+  httpreq.open("GET", base_url + "user_popup/" + user_key, true);
   httpreq.send(null);
   obj.onmouseout = function() {
     aborted = true;
@@ -2780,7 +2780,7 @@ function M_jumpToPatch(select, issue, patchset, unified) {
   } else {
     part = 'diff';
   }
-  var url = '/'+issue+'/'+part+'/'+patchset+'/'+select.value;
+  var url = base_url+issue+'/'+part+'/'+patchset+'/'+select.value;
   var context = document.getElementById('id_context');
   var colwidth = document.getElementById('id_column_width');
   if (context && colwidth) {
@@ -2807,7 +2807,7 @@ function M_setIssueStar_(id, url) {
       }
     }
   }
-  httpreq.open("POST", "/" + id + url, true);
+  httpreq.open("POST", base_url + id + url, true);
   httpreq.send("xsrf_token=" + xsrfToken);
 }
 
@@ -2846,7 +2846,7 @@ function M_closeIssue(id) {
       }
     }
   }
-  httpreq.open("POST", "/" + id + "/close", true);
+  httpreq.open("POST", base_url + id + "/close", true);
   httpreq.send("xsrf_token=" + xsrfToken);
 }
 
@@ -2977,7 +2977,7 @@ M_draftMessage.prototype.save = function(cb) {
       cb(httpreq);
     }
   }
-  httpreq.open("POST", "/" + this.issue_id + "/draft_message", true);
+  httpreq.open("POST", base_url + this.issue_id + "/draft_message", true);
   httpreq.send("reviewmsg="+encodeURIComponent(text));
 }
 
@@ -3009,7 +3009,7 @@ M_draftMessage.prototype.load = function() {
 	elem.focus();
       }
     }
-    httpreq.open("GET", "/" + this.issue_id + "/draft_message", true);
+    httpreq.open("GET", base_url + this.issue_id + "/draft_message", true);
     httpreq.send("");
   }
 }
@@ -3034,7 +3034,7 @@ M_draftMessage.prototype.discard = function(cb) {
       cb(httpreq);
     }
   }
-  httpreq.open("DELETE", "/" + this.issue_id + "/draft_message", true);
+  httpreq.open("DELETE", base_url + this.issue_id + "/draft_message", true);
   httpreq.send("");
 }
 

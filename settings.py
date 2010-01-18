@@ -44,5 +44,7 @@ FILE_UPLOAD_HANDLERS = (
 )
 FILE_UPLOAD_MAX_MEMORY_SIZE = 1048576  # 1 MB
 
+MEDIA_URL = '/static/'
+
 RIETVELD_INCOMING_MAIL_ADDRESS = ('reply@%s.appspotmail.com'
                                   % os.getenv('APPLICATION_ID'))

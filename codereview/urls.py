@@ -16,6 +16,7 @@
 
 # NOTE: Must import *, since Django looks for things here, e.g. handler500.
 from django.conf.urls.defaults import *
+import django.views.defaults
 
 from codereview import feeds
 
@@ -27,7 +28,7 @@ urlpatterns = patterns(
     (r'^starred$', 'starred'),
     (r'^new$', 'new'),
     (r'^upload$', 'upload'),
-    (r'^(\d+)$', 'show'),
+    (r'^(\d+)$', 'show', {}, 'show_bare_issue_number'),
     (r'^(\d+)/show$', 'show'),
     (r'^(\d+)/add$', 'add'),
     (r'^(\d+)/edit$', 'edit'),
@@ -43,8 +44,12 @@ urlpatterns = patterns(
     (r'^(\d+)/diff2/(\d+):(\d+)/(\d+)$', 'diff2'),
     (r'^(\d+)/diff_skipped_lines/(\d+)/(\d+)/(\d+)/(\d+)/([tba])/(\d+)$',
      'diff_skipped_lines'),
+    (r'^(\d+)/diff_skipped_lines/(\d+)/(\d+)/$',
+     django.views.defaults.page_not_found, {}, 'diff_skipped_lines_prefix'),
     (r'^(\d+)/diff2_skipped_lines/(\d+):(\d+)/(\d+)/(\d+)/(\d+)/([tba])/(\d+)$',
      'diff2_skipped_lines'),
+    (r'^(\d+)/diff2_skipped_lines/(\d+):(\d+)/(\d+)/$',
+     django.views.defaults.page_not_found, {}, 'diff2_skipped_lines_prefix'),
     (r'^(\d+)/upload_content/(\d+)/(\d+)$', 'upload_content'),
     (r'^(\d+)/upload_patch/(\d+)$', 'upload_patch'),
     (r'^(\d+)/description$', 'description'),

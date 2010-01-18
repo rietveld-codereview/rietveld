@@ -22,6 +22,7 @@ from google.appengine.api import users
 
 import django.template
 import django.utils.safestring
+from django.core.urlresolvers import reverse
 
 import models
 
@@ -47,8 +48,9 @@ def show_user(email, arg=None, autoescape=None, memcache_results=None):
     logging.debug('memcache miss for %r', email)
     account = models.Account.get_account_for_email(email)
     if account is not None and account.user_has_selected_nickname:
-      ret = ('<a href="/user/%(key)s" onMouseOver="M_showUserInfoPopup(this)">'
-             '%(key)s</a>' % {'key': cgi.escape(account.nickname)})
+      ret = ('<a href="%s" onMouseOver="M_showUserInfoPopup(this)">%s</a>' %
+             (reverse('codereview.views.show_user', args=[account.nickname]),
+              cgi.escape(account.nickname)))
     else:
       # No account.  Let's not create a hyperlink.
       nick = email
