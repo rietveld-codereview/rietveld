@@ -149,7 +149,6 @@ def get_nickname(email, never_me=False, request=None):
       return 'me'
 
   if request is None:
-    logging.warn("request not found in template context.")
     return models.Account.get_nickname_for_email(email)
   else:
     if getattr(request, '_nicknames', None) is None:
