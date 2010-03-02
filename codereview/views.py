@@ -21,6 +21,7 @@
 # Python imports
 import binascii
 import datetime
+import email  # see incoming_mail()
 import email.utils
 import logging
 import md5
@@ -2937,32 +2938,41 @@ def _process_incoming_mail(raw_message, recipients):
   """Process an incoming email message."""
   recipients = [x[1] for x in email.utils.getaddresses([recipients])]
 
-  msg = mail.InboundEmailMessage(raw_message)
+  # We can't use mail.InboundEmailMessage(raw_message) here.
+  # See: http://code.google.com/p/googleappengine/issues/detail?id=2326
+  # msg = mail.InboundEmailMessage(raw_message)
+  # The code below needs to be adjusted when issue2326 is fixed.
+  incoming_msg = email.message_from_string(raw_message)
 
-  if 'X-Google-Appengine-App-Id' in msg.original:
+  if 'X-Google-Appengine-App-Id' in incoming_msg:
     raise InvalidIncomingEmailError('Mail sent by App Engine')
 
-  match = re.search(r'\(issue *(?P<id>\d+)\)$', msg.subject)
+  subject = incoming_msg.get('Subject', '')
+  match = re.search(r'\(issue *(?P<id>\d+)\)$', subject)
   if match is None:
-    raise InvalidIncomingEmailError('No issue id found: %s' % msg.subject)
+    raise InvalidIncomingEmailError('No issue id found: %s', subject)
   issue_id = int(match.groupdict()['id'])
   issue = models.Issue.get_by_id(issue_id)
   if issue is None:
     raise InvalidIncomingEmailError('Unknown issue ID: %d' % issue_id)
-
-  sender = email.utils.parseaddr(msg.sender)[1]
+  sender = email.utils.parseaddr(incoming_msg.get('From', None))[1]
 
   body = None
   charset = None
-  for content_type, encoded_payload in msg.bodies('text/plain'):
-    body = encoded_payload.decode()
-    charset = encoded_payload.charset
-    break
+  if incoming_msg.is_multipart():
+    for payload in incoming_msg.get_payload():
+      if payload.get_content_type() == 'text/plain':
+        body = payload.get_payload(decode=True)
+        charset = payload.get_content_charset()
+        break
+  else:
+    body = incoming_msg.get_payload(decode=True)
+    charset = incoming_msg.get_content_charset()
   if body is None or not body.strip():
     raise InvalidIncomingEmailError('Ignoring empty message.')
 
   # If the subject is long, this might come wrapped into more than one line.
-  subject = ' '.join([x.strip() for x in msg.subject.splitlines()])
+  subject = ' '.join([x.strip() for x in subject.splitlines()])
   msg = models.Message(issue=issue, parent=issue,
                        subject=subject,
                        sender=db.Email(sender),

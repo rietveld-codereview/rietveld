@@ -1,5 +1,5 @@
 application: codereview
-version: 22
+version: 23
 runtime: python
 api_version: 1
 
@@ -28,7 +28,7 @@ handlers:
   login: admin
 
 - url: /stats.*
-  script: appstats/ui.py
+  script: $PYTHON_LIB/google/appengine/ext/appstats/ui.py
 
 - url: .*
   script: main.py
