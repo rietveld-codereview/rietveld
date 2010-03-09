@@ -474,6 +474,10 @@ group.add_option("-m", "--message", action="store", dest="message",
 group.add_option("-i", "--issue", type="int", action="store",
                  metavar="ISSUE", default=None,
                  help="Issue number to which to add. Defaults to new issue.")
+group.add_option("--base_url", action="store", dest="base_url", default=None,
+                 help="Base repository URL (listed as \"SVN Base\" when "
+                 "viewing issue).  If omitted, will be guessed automatically "
+                 "for SVN repos and left blank for others.")
 group.add_option("--download_base", action="store_true",
                  dest="download_base", default=False,
                  help="Base files will be downloaded by the server "
@@ -1561,13 +1565,21 @@ def RealMain(argv, data=None):
     logging.getLogger().setLevel(logging.DEBUG)
   elif verbosity >= 2:
     logging.getLogger().setLevel(logging.INFO)
+
   vcs = GuessVCS(options)
+
+  base = options.base_url
   if isinstance(vcs, SubversionVCS):
-    # base field is only allowed for Subversion.
+    # Guessing the base field is only supported for Subversion.
     # Note: Fetching base files may become deprecated in future releases.
-    base = vcs.GuessBase(options.download_base)
-  else:
-    base = None
+    guessed_base = vcs.GuessBase(options.download_base)
+    if base:
+      if guessed_base and base != guessed_base:
+        print "Using base URL \"%s\" from --base_url instead of \"%s\"" % \
+            (base, guessed_base)
+    else:
+      base = guessed_base
+
   if not base and options.download_base:
     options.download_base = True
     logging.info("Enabled upload of base file")
