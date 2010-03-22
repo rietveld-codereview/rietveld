@@ -475,7 +475,7 @@ group.add_option("-i", "--issue", type="int", action="store",
                  metavar="ISSUE", default=None,
                  help="Issue number to which to add. Defaults to new issue.")
 group.add_option("--base_url", action="store", dest="base_url", default=None,
-                 help="Base repository URL (listed as \"SVN Base\" when "
+                 help="Base repository URL (listed as \"Base URL\" when "
                  "viewing issue).  If omitted, will be guessed automatically "
                  "for SVN repos and left blank for others.")
 group.add_option("--download_base", action="store_true",
@@ -789,7 +789,7 @@ class SubversionVCS(VersionControlSystem):
     # Cache output from "svn list -r REVNO dirname".
     # Keys: dirname, Values: 2-tuple (ouput for start rev and end rev).
     self.svnls_cache = {}
-    # SVN base URL is required to fetch files deleted in an older revision.
+    # Base URL is required to fetch files deleted in an older revision.
     # Result is cached to not guess it over and over again in GetBaseFile().
     required = self.options.download_base or self.options.revision is not None
     self.svn_base = self._GuessBase(required)

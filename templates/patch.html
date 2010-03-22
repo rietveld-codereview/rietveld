@@ -45,7 +45,7 @@ login_warned = false;
   <div style="margin-top: .2em;">{%include "issue_star.html"%}
     <b>Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');" id="upCL">{{issue.key.id}}</a>:</b>
   {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}
-  {%if issue.base%}<span class="extra">SVN Base: {{issue.base}}</span>{%endif%}</div>
+  {%if issue.base%}<span class="extra">Base URL: {{issue.base}}</span>{%endif%}</div>
   <div style="margin-top: .4em;">
     <b>Patch Set: {%if patchset.message%}{{patchset.message}}{%endif%}</b>
     <span class="extra">

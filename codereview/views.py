@@ -119,7 +119,7 @@ class IssueBaseForm(forms.Form):
   description = forms.CharField(required=False,
                                 max_length=10000,
                                 widget=forms.Textarea(attrs={'cols': 60}))
-  branch = forms.ChoiceField(required=False, label='SVN base')
+  branch = forms.ChoiceField(required=False, label='Base URL')
   base = forms.CharField(required=False,
                          max_length=1000,
                          widget=forms.TextInput(attrs={'size': 60}))
@@ -212,7 +212,7 @@ class UploadForm(forms.Form):
   def clean_base(self):
     base = self.cleaned_data.get('base')
     if not base and not self.cleaned_data.get('content_upload', False):
-      raise forms.ValidationError, 'SVN base is required.'
+      raise forms.ValidationError, 'Base URL is required.'
     elif base:
       try:
         db.Link(base)

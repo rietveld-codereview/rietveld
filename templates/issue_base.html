@@ -90,7 +90,7 @@
           <div><b>CC:</b><br/>
             {%nicknames issue.cc%}
           </div>
-          <div><b>SVN Base:</b><br/>
+          <div><b>Base URL:</b><br/>
             {%firstof issue.base%}
           </div>
           <div><b>Visibility:</b><br/>
@@ -119,7 +119,7 @@
       Created {{issue.created|timesince}} ago by {%nickname issue.owner%}<br/>
       Modified {{issue.modified|timesince}} ago<br/>
       Reviewers: {%nicknames issue.reviewers%}<br/>
-      SVN Base: {{issue.base}}<br/>
+      Base URL: {{issue.base}}<br/>
       Comments: {{issue.num_comments}}
       {%if issue.num_drafts%} <span style="color: red;">+
 	{{issue.num_drafts}} drafts</span>{%endif%}
