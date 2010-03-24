@@ -159,13 +159,6 @@ class IssueBaseForm(forms.Form):
         branch = models.Branch.get(key)
         if branch is not None:
           base = branch.url
-    else:
-      try:
-        db.Link(base)
-      except db.Error:
-        self.errors['base'] = ['Invalid base: %s (must be a URL or empty)' %
-                               base]
-        return None
     if not base:
       self.errors['base'] = ['You must specify a base']
     return base or None
@@ -213,11 +206,6 @@ class UploadForm(forms.Form):
     base = self.cleaned_data.get('base')
     if not base and not self.cleaned_data.get('content_upload', False):
       raise forms.ValidationError, 'Base URL is required.'
-    elif base:
-      try:
-        db.Link(base)
-      except db.BadValueError:
-        raise forms.ValidationError, 'Invalid URL'
     return self.cleaned_data.get('base')
 
   def get_base(self):
