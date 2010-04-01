@@ -77,7 +77,7 @@ VCS_UNKNOWN = "Unknown"
 # whitelist for non-binary filetypes which do not start with "text/"
 # .mm (Objective-C) shows up as application/x-freemind on my Linux box.
 TEXT_MIMETYPES = ['application/javascript', 'application/x-javascript',
-                  'application/x-freemind']
+                  'application/xml', 'application/x-freemind']
 
 VCS_ABBREVIATIONS = {
   VCS_MERCURIAL.lower(): VCS_MERCURIAL,
