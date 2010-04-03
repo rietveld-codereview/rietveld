@@ -115,12 +115,16 @@ def FetchBase(base, patch):
     if rev == 0:
       # rev=0 means it's a new file.
       return models.Content(text=db.Text(u''), parent=patch)
+
+  # AppEngine can only fetch URLs that db.Link() thinks are OK,
+  # so try converting to a db.Link() here.
   try:
     base = db.Link(base)
   except db.BadValueError:
-    msg = 'Invalid base URL: %s' % base
+    msg = 'Invalid base URL for fetching: %s' % base
     logging.warn(msg)
     raise FetchError(msg)
+
   url = _MakeUrl(base, filename, rev)
   logging.info('Fetching %s', url)
   try:

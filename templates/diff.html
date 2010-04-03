@@ -34,7 +34,7 @@ login_warned = false;
   </div>
   <div class="comment-border" style="padding: 0pt;"></div>
 </form>
-<a id="resizer" style="display:none;cursor:pointer"><img src="/static/zippyplus.gif"></a>
+<a id="resizer" style="display:none;cursor:pointer"><img src="{{media_url}}zippyplus.gif"></a>
 {%endif%}
 
 <div style="float: left;">
@@ -42,7 +42,7 @@ login_warned = false;
   <div style="margin-top: .2em;">{%include "issue_star.html"%}
     <b>Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');" id="upCL">{{issue.key.id}}</a>:</b>
   {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}
-  {%if issue.base%}<span class="extra">SVN Base: {{issue.base}}</span>{%endif%}</div>
+  {%if issue.base%}<span class="extra">Base URL: {{issue.base}}</span>{%endif%}</div>
   <div style="margin-top: .4em;">
     <b>Patch Set: {%if patchset.message%}{{patchset.message}}{%endif%}</b>
     <span class="extra">
@@ -135,7 +135,7 @@ login_warned = false;
 </table>
 
 </div>
-{%include "diff_navigation.html"%}
+<div class="codenav">{%include "file_navigation.html"%}</div>
 </div>
 
 </script>
@@ -146,8 +146,7 @@ var intraLineDiff = new M_IntraLineDiff();
 var hookState = new M_HookState(window);
 hookState.updateHooks();
 
-var skipped_lines_url = ('/' + {{issue.key.id}} + '/diff_skipped_lines/' +
-                         {{patchset.key.id}} + '/' + {{patch.key.id}} + '/')
+var skipped_lines_url = ('{%url diff_skipped_lines_prefix issue.key.id,patchset.key.id,patch.key.id%}');
 ;
 
 // -->

@@ -45,7 +45,7 @@
 
     {%for patch in patchset.patches%}
       <tr name="patch">
-        <td class="first" width="14"><img src="/static/closedtriangle.gif" 
+        <td class="first" width="14"><img src="{{media_url}}closedtriangle.gif" 
     style="visibility: hidden;" width="12" height="9" /></td>
         <td>{%if patch.status%}{{patch.status}}{%endif%}</td>
         <td>
@@ -62,7 +62,7 @@
         </td>
         <td style="white-space: nowrap">
         {%for delta in patch.parsed_deltas%}
-          <a href="/{{issue.key.id}}/diff2/{{delta.1}}:{{patchset.key.id}}/{{patch.key.id}}"
+          <a href="{%url codereview.views.diff2 issue.key.id,delta.1,patchset.key.id,patch.key.id%}"
              title="Delta from patch set {{delta.0}}">{{delta.0}}</a>
         {%endfor%}
         </td>

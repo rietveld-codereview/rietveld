@@ -17,6 +17,7 @@ import md5
 
 from django.contrib.syndication.feeds import Feed
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.urlresolvers import reverse
 from django.utils.feedgenerator import Atom1Feed
 
 import library
@@ -25,9 +26,11 @@ import models
 
 class BaseFeed(Feed):
   title = 'Code Review'
-  link = '/'
   description = 'Rietveld: Code Review Tool hosted on Google App Engine'
   feed_type = Atom1Feed
+
+  def link(self):
+    return reverse('codereview.views.index')
 
   def author_name(self):
     return 'rietveld'
@@ -38,14 +41,16 @@ class BaseFeed(Feed):
   def item_link(self, item):
     if isinstance(item, models.PatchSet):
       if item.data is not None:
-        return ('/download/issue%d_%d.diff' %
-                (item.issue.key().id(), item.key().id()))
+        return reverse('codereview.views.download',
+                       args=[item.issue.key().id(),item.key().id()])
       else:
         # Patch set is too large, only the splitted diffs are available.
-        return '/%s' % (item.parent_key().id())
+        return reverse('codereview.views.show', args=[item.parent_key().id()])
     if isinstance(item, models.Message):
-      return '/%s#msg-%s' % (item.issue.key().id(), item.key())
-    return '/%s' % (item.key().id())
+      return '%s#msg-%s' % (reverse('codereview.views.show',
+                                    args=[item.issue.key().id()]),
+                            item.key())
+    return reverse('codereview.views.show', args=[item.key().id()])
 
   def item_title(self, item):
     return 'the title'
@@ -121,7 +126,9 @@ class AllFeed(BaseFeed):
 
 class OneIssueFeed(BaseFeed):
   title = 'Code Review'
-  link = '/'
+
+  def link(self):
+    return reverse('codereview.views.index')
 
   def get_object(self, bits):
     if len(bits) != 1:
