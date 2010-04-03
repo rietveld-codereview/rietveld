@@ -8,7 +8,7 @@
 <h2>Create New Issue</h2>
 {%endif%}
 
-<p>Download <a href="/static/upload.py">upload.py</a>, a simple tool for
+<p>Download <a href="{{media_url}}upload.py">upload.py</a>, a simple tool for
 uploading diffs from a version control system to the codereview app.</p>
 
 <form action="{%url codereview.views.new%}"
@@ -21,7 +21,7 @@ uploading diffs from a version control system to the codereview app.</p>
 </form>
 
 <a id="resizer" style="display:none;cursor:pointer">
-<img src="/static/zippyplus.gif"></a>
+<img src="{{media_url}}zippyplus.gif"></a>
 <script language="JavaScript" type="text/javascript"><!--
 M_addTextResizer_(document.getElementById("create-form"));
 --></script>
