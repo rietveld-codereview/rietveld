@@ -498,8 +498,15 @@ group.add_option("--emulate_svn_auto_props", action="store_true",
                  help=("Emulate Subversion's auto properties feature."))
 
 
-def GetRpcServer(options):
+def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
   """Returns an instance of an AbstractRpcServer.
+
+  Args:
+    server: String containing the review server URL.
+    email: String containing user's email address.
+    host_override: If not None, string containing an alternate hostname to use
+      in the host header.
+    save_cookies: Whether authentication cookies should be saved to disk.
 
   Returns:
     A new AbstractRpcServer, on which RPC calls can be made.
@@ -509,33 +516,32 @@ def GetRpcServer(options):
 
   def GetUserCredentials():
     """Prompts the user for a username and password."""
-    email = options.email
     if email is None:
-      email = GetEmail("Email (login for uploading to %s)" % options.server)
+      email = GetEmail("Email (login for uploading to %s)" % server)
     password = getpass.getpass("Password for %s: " % email)
     return (email, password)
 
   # If this is the dev_appserver, use fake authentication.
-  host = (options.host or options.server).lower()
+  host = (host_override or server).lower()
   if host == "localhost" or host.startswith("localhost:"):
-    email = options.email
     if email is None:
       email = "test@example.com"
       logging.info("Using debug user %s.  Override with --email" % email)
     server = rpc_server_class(
-        options.server,
+        server,
         lambda: (email, "password"),
-        host_override=options.host,
+        host_override=host_override,
         extra_headers={"Cookie":
                        'dev_appserver_login="%s:False"' % email},
-        save_cookies=options.save_cookies)
+        save_cookies=save_cookies)
     # Don't try to talk to ClientLogin.
     server.authenticated = True
     return server
 
-  return rpc_server_class(options.server, GetUserCredentials,
-                          host_override=options.host,
-                          save_cookies=options.save_cookies)
+  return rpc_server_class(server,
+                          GetUserCredentials,
+                          host_override=host_override,
+                          save_cookies=save_cookies)
 
 
 def EncodeMultipartFormData(fields, files):
@@ -1597,7 +1603,10 @@ def RealMain(argv, data=None):
   message = options.message or raw_input(prompt).strip()
   if not message:
     ErrorExit("A non-empty message is required")
-  rpc_server = GetRpcServer(options)
+  rpc_server = GetRpcServer(options.server,
+                            options.email,
+                            options.host,
+                            options.save_cookies)
   form_fields = [("subject", message)]
   if base:
     form_fields.append(("base", base))
