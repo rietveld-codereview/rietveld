@@ -514,13 +514,6 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
 
   rpc_server_class = HttpRpcServer
 
-  def GetUserCredentials():
-    """Prompts the user for a username and password."""
-    if email is None:
-      email = GetEmail("Email (login for uploading to %s)" % server)
-    password = getpass.getpass("Password for %s: " % email)
-    return (email, password)
-
   # If this is the dev_appserver, use fake authentication.
   host = (host_override or server).lower()
   if host == "localhost" or host.startswith("localhost:"):
@@ -537,6 +530,16 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
     # Don't try to talk to ClientLogin.
     server.authenticated = True
     return server
+
+  def GetUserCredentials():
+    """Prompts the user for a username and password."""
+    # Create a local alias to the email variable to avoid Python's crazy
+    # scoping rules.
+    local_email = email
+    if local_email is None:
+      local_email = GetEmail("Email (login for uploading to %s)" % server)
+    password = getpass.getpass("Password for %s: " % local_email)
+    return (local_email, password)
 
   return rpc_server_class(server,
                           GetUserCredentials,
@@ -646,6 +649,11 @@ class VersionControlSystem(object):
       options: Command line options.
     """
     self.options = options
+
+  def PostProcessDiff(self, diff):
+    """Return the diff with any special post processing this VCS needs, e.g.
+    to include an svn-style "Index:"."""
+    return diff
 
   def GenerateDiff(self, args):
     """Return the current diff as a string.
@@ -1054,25 +1062,12 @@ class GitVCS(VersionControlSystem):
     # Map of new filename -> old filename for renames.
     self.renames = {}
 
-  def GenerateDiff(self, extra_args):
-    # This is more complicated than svn's GenerateDiff because we must convert
-    # the diff output to include an svn-style "Index:" line as well as record
-    # the hashes of the files, so we can upload them along with our diff.
-
+  def PostProcessDiff(self, gitdiff):
+    """Converts the diff output to include an svn-style "Index:" line as well
+    as record the hashes of the files, so we can upload them along with our
+    diff."""
     # Special used by git to indicate "no such content".
     NULL_HASH = "0"*40
-
-    extra_args = extra_args[:]
-    if self.options.revision:
-      extra_args = [self.options.revision] + extra_args
-
-    # --no-ext-diff is broken in some versions of Git, so try to work around
-    # this by overriding the environment (but there is still a problem if the
-    # git config key "diff.external" is used).
-    env = os.environ.copy()
-    if 'GIT_EXTERNAL_DIFF' in env: del env['GIT_EXTERNAL_DIFF']
-    gitdiff = RunShell(["git", "diff", "--no-ext-diff", "--full-index", "-M"]
-                       + extra_args, env=env)
 
     def IsFileNew(filename):
       return filename in self.hashes and self.hashes[filename][0] is None
@@ -1124,6 +1119,19 @@ class GitVCS(VersionControlSystem):
     assert filename is not None
     AddSubversionPropertyChange(filename)
     return "".join(svndiff)
+
+  def GenerateDiff(self, extra_args):
+    extra_args = extra_args[:]
+    if self.options.revision:
+      extra_args = [self.options.revision] + extra_args
+
+    # --no-ext-diff is broken in some versions of Git, so try to work around
+    # this by overriding the environment (but there is still a problem if the
+    # git config key "diff.external" is used).
+    env = os.environ.copy()
+    if 'GIT_EXTERNAL_DIFF' in env: del env['GIT_EXTERNAL_DIFF']
+    return RunShell(["git", "diff", "--no-ext-diff", "--full-index", "-M"]
+                    + extra_args, env=env)
 
   def GetUnknownFiles(self):
     status = RunShell(["git", "ls-files", "--exclude-standard", "--others"],
@@ -1593,6 +1601,7 @@ def RealMain(argv, data=None):
     vcs.CheckForUnknownFiles()
   if data is None:
     data = vcs.GenerateDiff(args)
+  data = vcs.PostProcessDiff(data)
   files = vcs.GetBaseFiles(data)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
