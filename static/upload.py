@@ -319,6 +319,7 @@ class AbstractRpcServer(object):
   def Send(self, request_path, payload=None,
            content_type="application/octet-stream",
            timeout=None,
+           extra_headers=None,
            **kwargs):
     """Sends an RPC and returns the response.
 
@@ -328,6 +329,9 @@ class AbstractRpcServer(object):
       content_type: The Content-Type header to use.
       timeout: timeout in seconds; default None i.e. no timeout.
         (Note: for large requests on OS X, the timeout doesn't work right.)
+      extra_headers: Dict containing additional HTTP headers that should be
+        included in the request (string header names mapped to their values),
+        or None to not include any additional headers.
       kwargs: Any keyword arguments are converted into query string parameters.
 
     Returns:
@@ -350,6 +354,9 @@ class AbstractRpcServer(object):
           url += "?" + urllib.urlencode(args)
         req = self._CreateRequest(url=url, data=payload)
         req.add_header("Content-Type", content_type)
+        if extra_headers:
+          for header, value in extra_headers.items():
+            req.add_header(header, value)
         try:
           f = self.opener.open(req)
           response = f.read()
