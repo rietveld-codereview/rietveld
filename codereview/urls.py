@@ -74,6 +74,7 @@ urlpatterns = patterns(
     (r'^use_uploadpy$', 'use_uploadpy'),
     (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
     (r'^_ah/mail/(.*)', 'incoming_mail'),
+    (r'^xsrf_token$', 'xsrf_token'),
     )
 
 feed_dict = {

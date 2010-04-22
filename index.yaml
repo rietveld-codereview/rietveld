@@ -10,14 +10,12 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
-# Unused in query history -- copied from input.
 - kind: Branch
   properties:
   - name: repo
   - name: category
   - name: name
 
-# Unused in query history -- copied from input.
 - kind: Comment
   properties:
   - name: left
@@ -25,35 +23,29 @@ indexes:
   - name: patch
   - name: date
 
-# Unused in query history -- copied from input.
 - kind: Comment
   properties:
   - name: left
   - name: patch
   - name: date
 
-# Used 2 times in query history.
 - kind: Comment
   properties:
   - name: patch
   - name: date
 
-# Unused in query history -- copied from input.
 - kind: Comment
   ancestor: yes
 
-# Unused in query history -- copied from input.
 - kind: Comment
   ancestor: yes
   properties:
   - name: author
   - name: draft
 
-# Unused in query history -- copied from input.
 - kind: Content
   ancestor: yes
 
-# Used 4 times in query history.
 - kind: Issue
   properties:
   - name: closed
@@ -61,7 +53,6 @@ indexes:
   - name: modified
     direction: desc
 
-# Unused in query history -- copied from input.
 - kind: Issue
   properties:
   - name: closed
@@ -70,7 +61,6 @@ indexes:
   - name: modified
     direction: desc
 
-# Used 2 times in query history.
 - kind: Issue
   properties:
   - name: closed
@@ -78,7 +68,6 @@ indexes:
   - name: modified
     direction: desc
 
-# Used once in query history.
 - kind: Issue
   properties:
   - name: closed
@@ -87,7 +76,6 @@ indexes:
   - name: modified
     direction: desc
 
-# Used once in query history.
 - kind: Issue
   properties:
   - name: closed
@@ -95,46 +83,38 @@ indexes:
   - name: modified
     direction: desc
 
-# Unused in query history -- copied from input.
 - kind: Issue
   properties:
   - name: owner
   - name: modified
     direction: desc
 
-# Unused in query history -- copied from input.
 - kind: Issue
   properties:
   - name: reviewers
   - name: modified
     direction: desc
 
-# Used 2 times in query history.
 - kind: Message
   properties:
   - name: issue
   - name: date
 
-# Unused in query history -- copied from input.
 - kind: Message
   ancestor: yes
 
-# Used 4 times in query history.
 - kind: Patch
   properties:
   - name: patchset
   - name: filename
 
-# Unused in query history -- copied from input.
 - kind: Patch
   ancestor: yes
 
-# Used 2 times in query history.
 - kind: PatchSet
   properties:
   - name: issue
   - name: created
 
-# Unused in query history -- copied from input.
 - kind: PatchSet
   ancestor: yes
