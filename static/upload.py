@@ -77,7 +77,7 @@ VCS_UNKNOWN = "Unknown"
 # whitelist for non-binary filetypes which do not start with "text/"
 # .mm (Objective-C) shows up as application/x-freemind on my Linux box.
 TEXT_MIMETYPES = ['application/javascript', 'application/x-javascript',
-                  'application/x-freemind']
+                  'application/xml', 'application/x-freemind']
 
 VCS_ABBREVIATIONS = {
   VCS_MERCURIAL.lower(): VCS_MERCURIAL,
@@ -319,6 +319,7 @@ class AbstractRpcServer(object):
   def Send(self, request_path, payload=None,
            content_type="application/octet-stream",
            timeout=None,
+           extra_headers=None,
            **kwargs):
     """Sends an RPC and returns the response.
 
@@ -328,6 +329,9 @@ class AbstractRpcServer(object):
       content_type: The Content-Type header to use.
       timeout: timeout in seconds; default None i.e. no timeout.
         (Note: for large requests on OS X, the timeout doesn't work right.)
+      extra_headers: Dict containing additional HTTP headers that should be
+        included in the request (string header names mapped to their values),
+        or None to not include any additional headers.
       kwargs: Any keyword arguments are converted into query string parameters.
 
     Returns:
@@ -350,6 +354,9 @@ class AbstractRpcServer(object):
           url += "?" + urllib.urlencode(args)
         req = self._CreateRequest(url=url, data=payload)
         req.add_header("Content-Type", content_type)
+        if extra_headers:
+          for header, value in extra_headers.items():
+            req.add_header(header, value)
         try:
           f = self.opener.open(req)
           response = f.read()
@@ -498,8 +505,15 @@ group.add_option("--emulate_svn_auto_props", action="store_true",
                  help=("Emulate Subversion's auto properties feature."))
 
 
-def GetRpcServer(options):
+def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
   """Returns an instance of an AbstractRpcServer.
+
+  Args:
+    server: String containing the review server URL.
+    email: String containing user's email address.
+    host_override: If not None, string containing an alternate hostname to use
+      in the host header.
+    save_cookies: Whether authentication cookies should be saved to disk.
 
   Returns:
     A new AbstractRpcServer, on which RPC calls can be made.
@@ -507,35 +521,37 @@ def GetRpcServer(options):
 
   rpc_server_class = HttpRpcServer
 
-  def GetUserCredentials():
-    """Prompts the user for a username and password."""
-    email = options.email
-    if email is None:
-      email = GetEmail("Email (login for uploading to %s)" % options.server)
-    password = getpass.getpass("Password for %s: " % email)
-    return (email, password)
-
   # If this is the dev_appserver, use fake authentication.
-  host = (options.host or options.server).lower()
+  host = (host_override or server).lower()
   if host == "localhost" or host.startswith("localhost:"):
-    email = options.email
     if email is None:
       email = "test@example.com"
       logging.info("Using debug user %s.  Override with --email" % email)
     server = rpc_server_class(
-        options.server,
+        server,
         lambda: (email, "password"),
-        host_override=options.host,
+        host_override=host_override,
         extra_headers={"Cookie":
                        'dev_appserver_login="%s:False"' % email},
-        save_cookies=options.save_cookies)
+        save_cookies=save_cookies)
     # Don't try to talk to ClientLogin.
     server.authenticated = True
     return server
 
-  return rpc_server_class(options.server, GetUserCredentials,
-                          host_override=options.host,
-                          save_cookies=options.save_cookies)
+  def GetUserCredentials():
+    """Prompts the user for a username and password."""
+    # Create a local alias to the email variable to avoid Python's crazy
+    # scoping rules.
+    local_email = email
+    if local_email is None:
+      local_email = GetEmail("Email (login for uploading to %s)" % server)
+    password = getpass.getpass("Password for %s: " % local_email)
+    return (local_email, password)
+
+  return rpc_server_class(server,
+                          GetUserCredentials,
+                          host_override=host_override,
+                          save_cookies=save_cookies)
 
 
 def EncodeMultipartFormData(fields, files):
@@ -640,6 +656,11 @@ class VersionControlSystem(object):
       options: Command line options.
     """
     self.options = options
+
+  def PostProcessDiff(self, diff):
+    """Return the diff with any special post processing this VCS needs, e.g.
+    to include an svn-style "Index:"."""
+    return diff
 
   def GenerateDiff(self, args):
     """Return the current diff as a string.
@@ -1048,25 +1069,12 @@ class GitVCS(VersionControlSystem):
     # Map of new filename -> old filename for renames.
     self.renames = {}
 
-  def GenerateDiff(self, extra_args):
-    # This is more complicated than svn's GenerateDiff because we must convert
-    # the diff output to include an svn-style "Index:" line as well as record
-    # the hashes of the files, so we can upload them along with our diff.
-
+  def PostProcessDiff(self, gitdiff):
+    """Converts the diff output to include an svn-style "Index:" line as well
+    as record the hashes of the files, so we can upload them along with our
+    diff."""
     # Special used by git to indicate "no such content".
     NULL_HASH = "0"*40
-
-    extra_args = extra_args[:]
-    if self.options.revision:
-      extra_args = [self.options.revision] + extra_args
-
-    # --no-ext-diff is broken in some versions of Git, so try to work around
-    # this by overriding the environment (but there is still a problem if the
-    # git config key "diff.external" is used).
-    env = os.environ.copy()
-    if 'GIT_EXTERNAL_DIFF' in env: del env['GIT_EXTERNAL_DIFF']
-    gitdiff = RunShell(["git", "diff", "--no-ext-diff", "--full-index", "-M"]
-                       + extra_args, env=env)
 
     def IsFileNew(filename):
       return filename in self.hashes and self.hashes[filename][0] is None
@@ -1118,6 +1126,19 @@ class GitVCS(VersionControlSystem):
     assert filename is not None
     AddSubversionPropertyChange(filename)
     return "".join(svndiff)
+
+  def GenerateDiff(self, extra_args):
+    extra_args = extra_args[:]
+    if self.options.revision:
+      extra_args = [self.options.revision] + extra_args
+
+    # --no-ext-diff is broken in some versions of Git, so try to work around
+    # this by overriding the environment (but there is still a problem if the
+    # git config key "diff.external" is used).
+    env = os.environ.copy()
+    if 'GIT_EXTERNAL_DIFF' in env: del env['GIT_EXTERNAL_DIFF']
+    return RunShell(["git", "diff", "--no-ext-diff", "--full-index", "-M"]
+                    + extra_args, env=env)
 
   def GetUnknownFiles(self):
     status = RunShell(["git", "ls-files", "--exclude-standard", "--others"],
@@ -1587,6 +1608,7 @@ def RealMain(argv, data=None):
     vcs.CheckForUnknownFiles()
   if data is None:
     data = vcs.GenerateDiff(args)
+  data = vcs.PostProcessDiff(data)
   files = vcs.GetBaseFiles(data)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
@@ -1597,7 +1619,10 @@ def RealMain(argv, data=None):
   message = options.message or raw_input(prompt).strip()
   if not message:
     ErrorExit("A non-empty message is required")
-  rpc_server = GetRpcServer(options)
+  rpc_server = GetRpcServer(options.server,
+                            options.email,
+                            options.host,
+                            options.save_cookies)
   form_fields = [("subject", message)]
   if base:
     form_fields.append(("base", base))

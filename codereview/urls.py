@@ -77,6 +77,7 @@ urlpatterns = patterns(
     (r'^use_uploadpy$', 'use_uploadpy'),
     (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
     (r'^_ah/mail/(.*)', 'incoming_mail'),
+    (r'^xsrf_token$', 'xsrf_token'),
     (r'^lint/issue(\d+)_(\d+)', 'lint'),
     (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
     )

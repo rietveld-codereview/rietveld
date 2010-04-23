@@ -3222,3 +3222,18 @@ def _process_incoming_mail(raw_message, recipients):
                        text=db.Text(body, encoding=charset),
                        draft=False)
   msg.put()
+
+
+@login_required
+def xsrf_token(request):
+  """/xsrf_token - Return the user's XSRF token.
+
+  This is used by tools like git-cl that need to be able to interact with the
+  site on the user's behalf.  A custom header named X-Requesting-XSRF-Token must
+  be included in the HTTP request; an error is returned otherwise.
+  """
+  if not request.META.has_key('HTTP_X_REQUESTING_XSRF_TOKEN'):
+    return HttpResponse('Please include a header named X-Requesting-XSRF-Token '
+                        '(its content doesn\'t matter).', status=400)
+  return HttpResponse(models.Account.current_user_account.get_xsrf_token(),
+                      mimetype='text/plain')
