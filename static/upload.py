@@ -252,7 +252,7 @@ class AbstractRpcServer(object):
     # This is a dummy value to allow us to identify when we're successful.
     continue_location = "http://localhost/"
     args = {"continue": continue_location, "auth": auth_token}
-    req = self._CreateRequest("http://%s/_ah/login?%s" %
+    req = self._CreateRequest("https://%s/_ah/login?%s" %
                               (self.host, urllib.urlencode(args)))
     try:
       response = self.opener.open(req)
@@ -349,7 +349,7 @@ class AbstractRpcServer(object):
       while True:
         tries += 1
         args = dict(kwargs)
-        url = "http://%s%s" % (self.host, request_path)
+        url = "https://%s%s" % (self.host, request_path)
         if args:
           url += "?" + urllib.urlencode(args)
         req = self._CreateRequest(url=url, data=payload)
