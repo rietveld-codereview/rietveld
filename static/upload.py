@@ -168,6 +168,9 @@ class AbstractRpcServer(object):
         implement this functionality.  Defaults to False.
     """
     self.host = host
+    if (not self.host.startswith("http://") and
+        not self.host.startswith("https://")):
+      self.host = "http://" + self.host;
     self.host_override = host_override
     self.auth_function = auth_function
     self.authenticated = False
@@ -252,7 +255,7 @@ class AbstractRpcServer(object):
     # This is a dummy value to allow us to identify when we're successful.
     continue_location = "http://localhost/"
     args = {"continue": continue_location, "auth": auth_token}
-    req = self._CreateRequest("http://%s/_ah/login?%s" %
+    req = self._CreateRequest("%s/_ah/login?%s" %
                               (self.host, urllib.urlencode(args)))
     try:
       response = self.opener.open(req)
@@ -349,7 +352,7 @@ class AbstractRpcServer(object):
       while True:
         tries += 1
         args = dict(kwargs)
-        url = "http://%s%s" % (self.host, request_path)
+        url = "%s%s" % (self.host, request_path)
         if args:
           url += "?" + urllib.urlencode(args)
         req = self._CreateRequest(url=url, data=payload)
