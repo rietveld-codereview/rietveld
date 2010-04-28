@@ -170,7 +170,7 @@ class AbstractRpcServer(object):
     self.host = host
     if (not self.host.startswith("http://") and
         not self.host.startswith("https://")):
-      self.host = "http://" + self.host;
+      self.host = "http://" + self.host
     self.host_override = host_override
     self.auth_function = auth_function
     self.authenticated = False
