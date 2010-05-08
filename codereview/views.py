@@ -1967,7 +1967,7 @@ def _get_skipped_lines_response(rows, id_before, id_after, where, context):
       curr_id = int(m.groupdict().get("rowcount"))
       # expand below marker line
       if (where == 'b'
-          and curr_id > id_after_start and curr_id <= id_after_end+1):
+          and curr_id > id_after_start and curr_id <= id_after_end):
         response_rows.append(row)
       # expand above marker line
       elif (where == 't'

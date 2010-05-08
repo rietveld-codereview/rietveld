@@ -2628,7 +2628,7 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
 	  html += '<a href="javascript:M_expandSkipped('+new_before;
 	  html += ','+new_after+',\'a\','+id_skip+');">Expand all</a>';
           if ( new_count > 3*context ) {
-	    var val = parseInt(new_after)+1;
+	    var val = parseInt(new_after);
             html += ' | <a href="javascript:M_expandSkipped('+new_before;
             html += ','+val+',\'b\','+id_skip+');">';
 	    html += 'Expand '+context+' after';
