@@ -65,6 +65,11 @@ except ImportError:
 #  3: Debug logs.
 verbosity = 1
 
+# The account type used for authentication.
+# This line could be changed by the review server (see handler for
+# upload.py).
+AUTH_ACCOUNT_TYPE = "GOOGLE"
+
 # Max size of patch or base file.
 MAX_UPLOAD_SIZE = 900 * 1024
 
@@ -153,7 +158,7 @@ class AbstractRpcServer(object):
   """Provides a common interface for a simple RPC server."""
 
   def __init__(self, host, auth_function, host_override=None, extra_headers={},
-               save_cookies=False):
+               save_cookies=False, account_type=AUTH_ACCOUNT_TYPE):
     """Creates a new HttpRpcServer.
 
     Args:
@@ -166,6 +171,8 @@ class AbstractRpcServer(object):
       save_cookies: If True, save the authentication cookies to local disk.
         If False, use an in-memory cookiejar instead.  Subclasses must
         implement this functionality.  Defaults to False.
+      account_type: Account type used for authentication. Defaults to
+        AUTH_ACCOUNT_TYPE.
     """
     self.host = host
     if (not self.host.startswith("http://") and
@@ -176,6 +183,7 @@ class AbstractRpcServer(object):
     self.authenticated = False
     self.extra_headers = extra_headers
     self.save_cookies = save_cookies
+    self.account_type = account_type
     self.opener = self._GetOpener()
     if self.host_override:
       logging.info("Server: %s; Host: %s", self.host, self.host_override)
@@ -214,7 +222,7 @@ class AbstractRpcServer(object):
     Returns:
       The authentication token returned by ClientLogin.
     """
-    account_type = "GOOGLE"
+    account_type = self.account_type
     if self.host.endswith(".google.com"):
       # Needed for use inside Google.
       account_type = "HOSTED"
@@ -456,6 +464,12 @@ group.add_option("-H", "--host", action="store", dest="host",
 group.add_option("--no_cookies", action="store_false",
                  dest="save_cookies", default=True,
                  help="Do not save authentication cookies to local disk.")
+group.add_option("--account_type", action="store", dest="account_type",
+                 metavar="TYPE", default=AUTH_ACCOUNT_TYPE,
+                 choices=["GOOGLE", "HOSTED"],
+                 help=("Override the default account type "
+                       "(defaults to '%default', "
+                       "valid choices are 'GOOGLE' and 'HOSTED')."))
 # Issue
 group = parser.add_option_group("Issue options")
 group.add_option("-d", "--description", action="store", dest="description",
@@ -508,7 +522,8 @@ group.add_option("--emulate_svn_auto_props", action="store_true",
                  help=("Emulate Subversion's auto properties feature."))
 
 
-def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
+def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
+                 account_type=AUTH_ACCOUNT_TYPE):
   """Returns an instance of an AbstractRpcServer.
 
   Args:
@@ -517,6 +532,8 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
     host_override: If not None, string containing an alternate hostname to use
       in the host header.
     save_cookies: Whether authentication cookies should be saved to disk.
+    account_type: Account type for authentication, either 'GOOGLE'
+      or 'HOSTED'. Defaults to AUTH_ACCOUNT_TYPE.
 
   Returns:
     A new AbstractRpcServer, on which RPC calls can be made.
@@ -536,7 +553,8 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
         host_override=host_override,
         extra_headers={"Cookie":
                        'dev_appserver_login="%s:False"' % email},
-        save_cookies=save_cookies)
+        save_cookies=save_cookies,
+        account_type=account_type)
     # Don't try to talk to ClientLogin.
     server.authenticated = True
     return server
@@ -1625,7 +1643,8 @@ def RealMain(argv, data=None):
   rpc_server = GetRpcServer(options.server,
                             options.email,
                             options.host,
-                            options.save_cookies)
+                            options.save_cookies,
+                            options.account_type)
   form_fields = [("subject", message)]
   if base:
     form_fields.append(("base", base))
