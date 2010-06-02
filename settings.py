@@ -48,3 +48,5 @@ MEDIA_URL = '/static/'
 
 RIETVELD_INCOMING_MAIL_ADDRESS = ('reply@%s.appspotmail.com'
                                   % os.getenv('APPLICATION_ID'))
+
+UPLOAD_PY_SOURCE = os.path.join(os.path.dirname(__file__), 'upload.py')

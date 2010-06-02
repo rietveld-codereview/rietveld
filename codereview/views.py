@@ -2984,3 +2984,18 @@ def xsrf_token(request):
                         '(its content doesn\'t matter).', status=400)
   return HttpResponse(models.Account.current_user_account.get_xsrf_token(),
                       mimetype='text/plain')
+
+
+def customized_upload_py(request):
+  """/static/upload.py - Return upload.py with appropiate auth type.
+
+  This is used to let the user download a customized upload.py script
+  for hosted Rietveld instances.
+  """
+  f = open(django_settings.UPLOAD_PY_SOURCE)
+  source = f.read()
+  f.close()
+  if os.environ['AUTH_DOMAIN'] != 'gmail.com':
+    source = source.replace('AUTH_ACCOUNT_TYPE = "GOOGLE"',
+                            'AUTH_ACCOUNT_TYPE = "HOSTED"')
+  return HttpResponse(source, content_type='text/x-python')
