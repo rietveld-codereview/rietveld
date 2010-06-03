@@ -70,6 +70,10 @@ verbosity = 1
 # upload.py).
 AUTH_ACCOUNT_TYPE = "GOOGLE"
 
+# URL of the default review server. As for AUTH_ACCOUNT_TYPE, this line could be
+# changed by the review server (see handler for upload.py).
+DEFAULT_REVIEW_SERVER = "codereview.appspot.com"
+
 # Max size of patch or base file.
 MAX_UPLOAD_SIZE = 900 * 1024
 
@@ -451,7 +455,7 @@ group.add_option("--noisy", action="store_const", const=3,
 # Review server
 group = parser.add_option_group("Review server options")
 group.add_option("-s", "--server", action="store", dest="server",
-                 default="codereview.appspot.com",
+                 default=DEFAULT_REVIEW_SERVER,
                  metavar="SERVER",
                  help=("The server to upload to. The format is host[:port]. "
                        "Defaults to '%default'."))
