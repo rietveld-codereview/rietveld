@@ -599,6 +599,8 @@ def EncodeMultipartFormData(fields, files):
     lines.append('--' + BOUNDARY)
     lines.append('Content-Disposition: form-data; name="%s"' % key)
     lines.append('')
+    if isinstance(value, unicode):
+      value = value.encode('utf-8')
     lines.append(value)
   for (key, filename, value) in files:
     lines.append('--' + BOUNDARY)
@@ -606,6 +608,8 @@ def EncodeMultipartFormData(fields, files):
              (key, filename))
     lines.append('Content-Type: %s' % GetContentType(filename))
     lines.append('')
+    if isinstance(value, unicode):
+      value = value.encode('utf-8')
     lines.append(value)
   lines.append('--' + BOUNDARY + '--')
   lines.append('')
