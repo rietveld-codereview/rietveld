@@ -306,7 +306,9 @@ class AbstractRpcServer(object):
           print >>sys.stderr, (
               "Please go to\n"
               "https://www.google.com/accounts/DisplayUnlockCaptcha\n"
-              "and verify you are a human.  Then try again.")
+              "and verify you are a human.  Then try again.\n"
+              "If you are using a Google Apps account the URL is:\n"
+              "https://www.google.com/a/yourdomain.com/UnlockCaptcha")
           break
         if e.reason == "NotVerified":
           print >>sys.stderr, "Account not verified."
