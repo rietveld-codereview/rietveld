@@ -58,6 +58,11 @@ try:
 except ImportError:
   pass
 
+try:
+  import keyring
+except ImportError:
+  keyring = None
+
 # The logging verbosity:
 #  0: Errors only.
 #  1: Status messages.
@@ -572,7 +577,16 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
     local_email = email
     if local_email is None:
       local_email = GetEmail("Email (login for uploading to %s)" % server)
-    password = getpass.getpass("Password for %s: " % local_email)
+    if keyring:
+      password = keyring.get_password(options.server, email)
+    if password is not None:
+      print "Using password from system keyring."
+    else:
+      password = getpass.getpass("Password for %s: " % email)
+      if keyring:
+        answer = raw_input("Store password in system keyring?(y/N) ").strip()
+        if answer == "y":
+          keyring.set_password(options.server, email, password)
     return (local_email, password)
 
   return rpc_server_class(server,
