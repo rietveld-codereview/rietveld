@@ -577,6 +577,7 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
     local_email = email
     if local_email is None:
       local_email = GetEmail("Email (login for uploading to %s)" % server)
+    password = None
     if keyring:
       password = keyring.get_password(options.server, email)
     if password is not None:
