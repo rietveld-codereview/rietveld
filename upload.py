@@ -1084,9 +1084,17 @@ class SubversionVCS(VersionControlSystem):
                                   universal_newlines=universal_newlines,
                                   silent_ok=True)
         else:
-          base_content = RunShell(["svn", "cat", filename],
-                                  universal_newlines=universal_newlines,
-                                  silent_ok=True)
+          base_content, ret_code = RunShellWithReturnCode(
+            ["svn", "cat", filename], universal_newlines=universal_newlines)
+          if ret_code and status[0] == "R":
+            # It's a replaced file without local history (see issue208).
+            # The base file needs to be fetched from the server.
+            url = "%s/%s" % (self.svn_base, filename)
+            base_content = RunShell(["svn", "cat", url],
+                                    universal_newlines=universal_newlines,
+                                    silent_ok=True)
+          elif ret_code:
+            ErrorExit("Got error status from 'svn cat %s'", filename)
         if not is_binary:
           args = []
           if self.rev_start:
