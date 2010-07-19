@@ -2559,12 +2559,36 @@ function M_dashboardKeyPress(evt) {
   });
 }
 
+/**
+ * Helper to fill a table cell element.
+ * @param {Array} attrs An array of attributes to be applied
+ * @param {String} text The content of the table cell
+ * @return {Element}
+ */
+function M_fillTableCell_(attrs, text) {
+  var td = document.createElement("td");
+  for (var j=0; j<attrs.length; j++) {
+    if (attrs[j][0] == "class" && M_isIE()) {
+      td.setAttribute("className", attrs[j][1]);
+    } else {
+      td.setAttribute(attrs[j][0], attrs[j][1]);
+    }
+  }
+  if (!text) text = "";
+  if (M_isIE()) {
+    td.innerText = text;
+  } else {
+    td.textContent = text;
+  }
+  return td;
+}
+
 /*
  * Function to request more context between diff chunks.
  * See _ShortenBuffer() in codereview/engine.py.
  */
 function M_expandSkipped(id_before, id_after, where, id_skip) {
-  links = document.getElementById('skiplinks-'+id_skip).childNodes;
+  links = document.getElementById('skiplinks-'+id_skip).getElementsByTagName('a');
   for (var i=0; i<links.length; i++) {
 	links[i].href = '#skiplinks-'+id_skip;
   }
@@ -2593,7 +2617,11 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
           var data = response[i];
           var row = document.createElement("tr");
           for (var j=0; j<data[0].length; j++) {
-            row.setAttribute(data[0][j][0], data[0][j][1]);
+            if (data[0][j][0] == "class" && M_isIE()) {
+              row.setAttribute("className", data[0][j][1]);
+            } else {
+              row.setAttribute(data[0][j][0], data[0][j][1]);
+            }
           }
           if ( where == 't' || where == 'a') {
             tr.parentNode.insertBefore(row, tr);
@@ -2604,7 +2632,10 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
 	      tr.parentNode.insertBefore(row, tr.nextSibling);
 	    }
           }
-          row.innerHTML = data[1];
+          var left = M_fillTableCell_(data[1][0][0], data[1][0][1]);
+          var right = M_fillTableCell_(data[1][1][0], data[1][1][1]);
+          row.appendChild(left);
+          row.appendChild(right);
 	  last_row = row;
         }
         var curr = document.getElementById('skipcount-'+id_skip);

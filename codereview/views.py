@@ -1984,7 +1984,7 @@ def _get_skipped_lines_response(rows, id_before, id_after, where, context):
   response = []
   dom = ElementTree.parse(StringIO('<div>%s</div>' % "".join(response_rows)))
   for node in dom.getroot().getchildren():
-    content = "\n".join([ElementTree.tostring(x) for x in node.getchildren()])
+    content = [[x.items(), x.text] for x in node.getchildren()]
     response.append([node.items(), content])
   return HttpResponse(simplejson.dumps(response))
 
