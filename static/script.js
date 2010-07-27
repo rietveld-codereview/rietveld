@@ -78,6 +78,14 @@ function M_isIE() {
 }
 
 /**
+ * Function to determine if we are in a WebKit-based browser (Chrome/Safari).
+ * @return Boolean of whether we are in a WebKit browser
+ */
+function M_isWebKit() {
+  return navigator.userAgent.toLowerCase().indexOf("webkit") != -1;
+}
+
+/**
  * Stop the event bubbling in a browser-independent way. Sometimes required
  * when it is not easy to return true when an event is handled.
  * @param {Window} win The window in which this event is happening
@@ -827,6 +835,9 @@ function M_createResizer_(form, suffix) {
  * @param {Element} form The form whose textarea field to update.
  */
 function M_addTextResizer_(form) {
+  if (M_isWebKit()) {
+    return; // WebKit has its own resizer.
+  }
   var elementsLength = form.elements.length;
   for (var i = 0; i < elementsLength; ++i) {
     var node = form.elements[i];
@@ -2048,7 +2059,7 @@ function M_commentTextKeyPress_(evt, src, code, key) {
 }
 
 /**
- * Helper to find an item by its elementId and jump to it.  If the item 
+ * Helper to find an item by its elementId and jump to it.  If the item
  * cannot be found this will jump to the changelist instead.
  * @param {elementId} the id of an element an href
  */
