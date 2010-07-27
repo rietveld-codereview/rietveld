@@ -1,5 +1,5 @@
 application: codereview
-version: 23
+version: 25
 runtime: python
 api_version: 1
 

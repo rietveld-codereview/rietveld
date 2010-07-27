@@ -579,15 +579,15 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
       local_email = GetEmail("Email (login for uploading to %s)" % server)
     password = None
     if keyring:
-      password = keyring.get_password(options.server, email)
+      password = keyring.get_password(host, local_email)
     if password is not None:
       print "Using password from system keyring."
     else:
-      password = getpass.getpass("Password for %s: " % email)
+      password = getpass.getpass("Password for %s: " % local_email)
       if keyring:
         answer = raw_input("Store password in system keyring?(y/N) ").strip()
         if answer == "y":
-          keyring.set_password(options.server, email, password)
+          keyring.set_password(host, local_email, password)
     return (local_email, password)
 
   return rpc_server_class(server,
