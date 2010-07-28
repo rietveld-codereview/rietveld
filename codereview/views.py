@@ -1340,14 +1340,21 @@ def _calculate_delta(patch, patchset_id, patchsets):
             delta.append(other.key().id())
           break
     else:
-      # Note: calling list(other.patch_set) would consume too much memory and
-      # sometimes fail with MemoryError.  So do this even if it's slower.
-      for opatch in other.patch_set:
-        if patch.filename == opatch.filename:
-          if not patch.no_base_file and patch.text != opatch.text:
-            delta.append(other.key().id())
-          opatch.text = None  # Reduce memory usage.
+      # other (patchset) is too big to hold all the patches inside itself, so
+      # we need to go to the datastore.  Use the index to see if there's a
+      # patch against our current file in other.
+      query = models.Patch.all()
+      query.filter("filename =", patch.filename)
+      query.filter("patchset =", other.key())
+      other_patches = query.fetch(100)
+      if other_patches and len(other_patches) > 1:
+        logging.info("Got %s patches with the same filename for a patchset", 
+                     len(other_patches))
+      for op in other_patches:
+        if op.text != patch.text:
+          delta.append(other.key().id())
           break
+
   return delta
 
 
