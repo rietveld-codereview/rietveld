@@ -1472,14 +1472,21 @@ def _calculate_delta(patch, patchset_id, patchsets):
             delta.append(other.key().id())
           break
     else:
-      # Note: calling list(other.patch_set) would consume too much memory and
-      # sometimes fail with MemoryError.  So do this even if it's slower.
-      for opatch in other.patch_set:
-        if patch.filename == opatch.filename:
-          if not patch.no_base_file and patch.text != opatch.text:
-            delta.append(other.key().id())
-          opatch.text = None  # Reduce memory usage.
+      # other (patchset) is too big to hold all the patches inside itself, so
+      # we need to go to the datastore.  Use the index to see if there's a
+      # patch against our current file in other.
+      query = models.Patch.all()
+      query.filter("filename =", patch.filename)
+      query.filter("patchset =", other.key())
+      other_patches = query.fetch(100)
+      if other_patches and len(other_patches) > 1:
+        logging.info("Got %s patches with the same filename for a patchset", 
+                     len(other_patches))
+      for op in other_patches:
+        if op.text != patch.text:
+          delta.append(other.key().id())
           break
+
   return delta
 
 
@@ -2122,7 +2129,7 @@ def _get_skipped_lines_response(rows, id_before, id_after, where, context):
       curr_id = int(m.groupdict().get("rowcount"))
       # expand below marker line
       if (where == 'b'
-          and curr_id > id_after_start and curr_id <= id_after_end+1):
+          and curr_id > id_after_start and curr_id <= id_after_end):
         response_rows.append(row)
       # expand above marker line
       elif (where == 't'
@@ -2139,7 +2146,7 @@ def _get_skipped_lines_response(rows, id_before, id_after, where, context):
   response = []
   dom = ElementTree.parse(StringIO('<div>%s</div>' % "".join(response_rows)))
   for node in dom.getroot().getchildren():
-    content = "\n".join([ElementTree.tostring(x) for x in node.getchildren()])
+    content = [[x.items(), x.text] for x in node.getchildren()]
     response.append([node.items(), content])
   return HttpResponse(simplejson.dumps(response))
 
@@ -3237,3 +3244,33 @@ def xsrf_token(request):
                         '(its content doesn\'t matter).', status=400)
   return HttpResponse(models.Account.current_user_account.get_xsrf_token(),
                       mimetype='text/plain')
+
+
+def customized_upload_py(request):
+  """/static/upload.py - Return upload.py with appropiate auth type.
+
+  This is used to let the user download a customized upload.py script
+  for hosted Rietveld instances.
+  """
+  f = open(django_settings.UPLOAD_PY_SOURCE)
+  source = f.read()
+  f.close()
+
+  # When served from a Google Apps instance, the account namespace needs to be
+  # switched to "Google Apps only".
+  if os.environ['AUTH_DOMAIN'] != 'gmail.com':
+    source = source.replace('AUTH_ACCOUNT_TYPE = "GOOGLE"',
+                            'AUTH_ACCOUNT_TYPE = "HOSTED"')
+
+  # On a non-standard instance, the default review server is changed to the
+  # current hostname. This might give weird results when using versioned appspot
+  # URLs (eg. 1.latest.codereview.appspot.com), but this should only affect
+  # testing.
+  if os.environ['HTTP_HOST'] != 'codereview.appspot.com':
+    review_server = os.environ['HTTP_HOST']
+    if 'HTTPS' in os.environ and os.environ['HTTPS'] == 'on':
+      review_server = 'https://' + review_server
+    source = source.replace('DEFAULT_REVIEW_SERVER = "codereview.appspot.com"',
+                            'DEFAULT_REVIEW_SERVER = "%s"' % review_server)
+
+  return HttpResponse(source, content_type='text/x-python')

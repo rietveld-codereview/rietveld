@@ -58,12 +58,26 @@ try:
 except ImportError:
   pass
 
+try:
+  import keyring
+except ImportError:
+  keyring = None
+
 # The logging verbosity:
 #  0: Errors only.
 #  1: Status messages.
 #  2: Info logs.
 #  3: Debug logs.
 verbosity = 1
+
+# The account type used for authentication.
+# This line could be changed by the review server (see handler for
+# upload.py).
+AUTH_ACCOUNT_TYPE = "GOOGLE"
+
+# URL of the default review server. As for AUTH_ACCOUNT_TYPE, this line could be
+# changed by the review server (see handler for upload.py).
+DEFAULT_REVIEW_SERVER = "codereview.appspot.com"
 
 # Max size of patch or base file.
 MAX_UPLOAD_SIZE = 900 * 1024
@@ -153,7 +167,7 @@ class AbstractRpcServer(object):
   """Provides a common interface for a simple RPC server."""
 
   def __init__(self, host, auth_function, host_override=None, extra_headers={},
-               save_cookies=False):
+               save_cookies=False, account_type=AUTH_ACCOUNT_TYPE):
     """Creates a new HttpRpcServer.
 
     Args:
@@ -166,16 +180,19 @@ class AbstractRpcServer(object):
       save_cookies: If True, save the authentication cookies to local disk.
         If False, use an in-memory cookiejar instead.  Subclasses must
         implement this functionality.  Defaults to False.
+      account_type: Account type used for authentication. Defaults to
+        AUTH_ACCOUNT_TYPE.
     """
     self.host = host
     if (not self.host.startswith("http://") and
         not self.host.startswith("https://")):
-      self.host = "http://" + self.host;
+      self.host = "http://" + self.host
     self.host_override = host_override
     self.auth_function = auth_function
     self.authenticated = False
     self.extra_headers = extra_headers
     self.save_cookies = save_cookies
+    self.account_type = account_type
     self.opener = self._GetOpener()
     if self.host_override:
       logging.info("Server: %s; Host: %s", self.host, self.host_override)
@@ -214,7 +231,7 @@ class AbstractRpcServer(object):
     Returns:
       The authentication token returned by ClientLogin.
     """
-    account_type = "GOOGLE"
+    account_type = self.account_type
     if self.host.endswith(".google.com"):
       # Needed for use inside Google.
       account_type = "HOSTED"
@@ -294,7 +311,9 @@ class AbstractRpcServer(object):
           print >>sys.stderr, (
               "Please go to\n"
               "https://www.google.com/accounts/DisplayUnlockCaptcha\n"
-              "and verify you are a human.  Then try again.")
+              "and verify you are a human.  Then try again.\n"
+              "If you are using a Google Apps account the URL is:\n"
+              "https://www.google.com/a/yourdomain.com/UnlockCaptcha")
           break
         if e.reason == "NotVerified":
           print >>sys.stderr, "Account not verified."
@@ -443,7 +462,7 @@ group.add_option("--noisy", action="store_const", const=3,
 # Review server
 group = parser.add_option_group("Review server options")
 group.add_option("-s", "--server", action="store", dest="server",
-                 default="codereview.appspot.com",
+                 default=DEFAULT_REVIEW_SERVER,
                  metavar="SERVER",
                  help=("The server to upload to. The format is host[:port]. "
                        "Defaults to '%default'."))
@@ -456,6 +475,12 @@ group.add_option("-H", "--host", action="store", dest="host",
 group.add_option("--no_cookies", action="store_false",
                  dest="save_cookies", default=True,
                  help="Do not save authentication cookies to local disk.")
+group.add_option("--account_type", action="store", dest="account_type",
+                 metavar="TYPE", default=AUTH_ACCOUNT_TYPE,
+                 choices=["GOOGLE", "HOSTED"],
+                 help=("Override the default account type "
+                       "(defaults to '%default', "
+                       "valid choices are 'GOOGLE' and 'HOSTED')."))
 # Issue
 group = parser.add_option_group("Issue options")
 group.add_option("-d", "--description", action="store", dest="description",
@@ -508,7 +533,8 @@ group.add_option("--emulate_svn_auto_props", action="store_true",
                  help=("Emulate Subversion's auto properties feature."))
 
 
-def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
+def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
+                 account_type=AUTH_ACCOUNT_TYPE):
   """Returns an instance of an AbstractRpcServer.
 
   Args:
@@ -517,6 +543,8 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
     host_override: If not None, string containing an alternate hostname to use
       in the host header.
     save_cookies: Whether authentication cookies should be saved to disk.
+    account_type: Account type for authentication, either 'GOOGLE'
+      or 'HOSTED'. Defaults to AUTH_ACCOUNT_TYPE.
 
   Returns:
     A new AbstractRpcServer, on which RPC calls can be made.
@@ -536,7 +564,8 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
         host_override=host_override,
         extra_headers={"Cookie":
                        'dev_appserver_login="%s:False"' % email},
-        save_cookies=save_cookies)
+        save_cookies=save_cookies,
+        account_type=account_type)
     # Don't try to talk to ClientLogin.
     server.authenticated = True
     return server
@@ -548,7 +577,17 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True):
     local_email = email
     if local_email is None:
       local_email = GetEmail("Email (login for uploading to %s)" % server)
-    password = getpass.getpass("Password for %s: " % local_email)
+    password = None
+    if keyring:
+      password = keyring.get_password(host, local_email)
+    if password is not None:
+      print "Using password from system keyring."
+    else:
+      password = getpass.getpass("Password for %s: " % local_email)
+      if keyring:
+        answer = raw_input("Store password in system keyring?(y/N) ").strip()
+        if answer == "y":
+          keyring.set_password(host, local_email, password)
     return (local_email, password)
 
   return rpc_server_class(server,
@@ -577,6 +616,8 @@ def EncodeMultipartFormData(fields, files):
     lines.append('--' + BOUNDARY)
     lines.append('Content-Disposition: form-data; name="%s"' % key)
     lines.append('')
+    if isinstance(value, unicode):
+      value = value.encode('utf-8')
     lines.append(value)
   for (key, filename, value) in files:
     lines.append('--' + BOUNDARY)
@@ -584,6 +625,8 @@ def EncodeMultipartFormData(fields, files):
              (key, filename))
     lines.append('Content-Type: %s' % GetContentType(filename))
     lines.append('')
+    if isinstance(value, unicode):
+      value = value.encode('utf-8')
     lines.append(value)
   lines.append('--' + BOUNDARY + '--')
   lines.append('')
@@ -1041,9 +1084,17 @@ class SubversionVCS(VersionControlSystem):
                                   universal_newlines=universal_newlines,
                                   silent_ok=True)
         else:
-          base_content = RunShell(["svn", "cat", filename],
-                                  universal_newlines=universal_newlines,
-                                  silent_ok=True)
+          base_content, ret_code = RunShellWithReturnCode(
+            ["svn", "cat", filename], universal_newlines=universal_newlines)
+          if ret_code and status[0] == "R":
+            # It's a replaced file without local history (see issue208).
+            # The base file needs to be fetched from the server.
+            url = "%s/%s" % (self.svn_base, filename)
+            base_content = RunShell(["svn", "cat", url],
+                                    universal_newlines=universal_newlines,
+                                    silent_ok=True)
+          elif ret_code:
+            ErrorExit("Got error status from 'svn cat %s'", filename)
         if not is_binary:
           args = []
           if self.rev_start:
@@ -1625,7 +1676,8 @@ def RealMain(argv, data=None):
   rpc_server = GetRpcServer(options.server,
                             options.email,
                             options.host,
-                            options.save_cookies)
+                            options.save_cookies,
+                            options.account_type)
   form_fields = [("subject", message)]
   if base:
     form_fields.append(("base", base))
