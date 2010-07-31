@@ -47,6 +47,7 @@ Diffs and Patches
 
 Deprecate the upload form (and repositories) and do it all with upload.py
 Improve UI for selecting patch set deltas; handle missing files better
+Make delta calculation a background task when uploading patch sets.
 Syntax colorization
 Record revision and show in UI; indicate action (add/edit/delete)
 Handle binary files?!  (Progress: fewer crashes related to binary files)

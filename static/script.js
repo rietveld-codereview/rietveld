@@ -78,6 +78,14 @@ function M_isIE() {
 }
 
 /**
+ * Function to determine if we are in a WebKit-based browser (Chrome/Safari).
+ * @return Boolean of whether we are in a WebKit browser
+ */
+function M_isWebKit() {
+  return navigator.userAgent.toLowerCase().indexOf("webkit") != -1;
+}
+
+/**
  * Stop the event bubbling in a browser-independent way. Sometimes required
  * when it is not easy to return true when an event is handled.
  * @param {Window} win The window in which this event is happening
@@ -827,6 +835,9 @@ function M_createResizer_(form, suffix) {
  * @param {Element} form The form whose textarea field to update.
  */
 function M_addTextResizer_(form) {
+  if (M_isWebKit()) {
+    return; // WebKit has its own resizer.
+  }
   var elementsLength = form.elements.length;
   for (var i = 0; i < elementsLength; ++i) {
     var node = form.elements[i];
@@ -2048,7 +2059,7 @@ function M_commentTextKeyPress_(evt, src, code, key) {
 }
 
 /**
- * Helper to find an item by its elementId and jump to it.  If the item 
+ * Helper to find an item by its elementId and jump to it.  If the item
  * cannot be found this will jump to the changelist instead.
  * @param {elementId} the id of an element an href
  */
@@ -2559,12 +2570,36 @@ function M_dashboardKeyPress(evt) {
   });
 }
 
+/**
+ * Helper to fill a table cell element.
+ * @param {Array} attrs An array of attributes to be applied
+ * @param {String} text The content of the table cell
+ * @return {Element}
+ */
+function M_fillTableCell_(attrs, text) {
+  var td = document.createElement("td");
+  for (var j=0; j<attrs.length; j++) {
+    if (attrs[j][0] == "class" && M_isIE()) {
+      td.setAttribute("className", attrs[j][1]);
+    } else {
+      td.setAttribute(attrs[j][0], attrs[j][1]);
+    }
+  }
+  if (!text) text = "";
+  if (M_isIE()) {
+    td.innerText = text;
+  } else {
+    td.textContent = text;
+  }
+  return td;
+}
+
 /*
  * Function to request more context between diff chunks.
  * See _ShortenBuffer() in codereview/engine.py.
  */
 function M_expandSkipped(id_before, id_after, where, id_skip) {
-  links = document.getElementById('skiplinks-'+id_skip).childNodes;
+  links = document.getElementById('skiplinks-'+id_skip).getElementsByTagName('a');
   for (var i=0; i<links.length; i++) {
 	links[i].href = '#skiplinks-'+id_skip;
   }
@@ -2593,7 +2628,11 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
           var data = response[i];
           var row = document.createElement("tr");
           for (var j=0; j<data[0].length; j++) {
-            row.setAttribute(data[0][j][0], data[0][j][1]);
+            if (data[0][j][0] == "class" && M_isIE()) {
+              row.setAttribute("className", data[0][j][1]);
+            } else {
+              row.setAttribute(data[0][j][0], data[0][j][1]);
+            }
           }
           if ( where == 't' || where == 'a') {
             tr.parentNode.insertBefore(row, tr);
@@ -2604,7 +2643,10 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
 	      tr.parentNode.insertBefore(row, tr.nextSibling);
 	    }
           }
-          row.innerHTML = data[1];
+          var left = M_fillTableCell_(data[1][0][0], data[1][0][1]);
+          var right = M_fillTableCell_(data[1][1][0], data[1][1][1]);
+          row.appendChild(left);
+          row.appendChild(right);
 	  last_row = row;
         }
         var curr = document.getElementById('skipcount-'+id_skip);
@@ -2628,7 +2670,7 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
 	  html += '<a href="javascript:M_expandSkipped('+new_before;
 	  html += ','+new_after+',\'a\','+id_skip+');">Expand all</a>';
           if ( new_count > 3*context ) {
-	    var val = parseInt(new_after)+1;
+	    var val = parseInt(new_after);
             html += ' | <a href="javascript:M_expandSkipped('+new_before;
             html += ','+val+',\'b\','+id_skip+');">';
 	    html += 'Expand '+context+' after';
