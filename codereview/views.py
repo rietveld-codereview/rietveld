@@ -436,6 +436,8 @@ def respond(request, template, params=None):
   except AssertionError:
     logging.exception('AssertionError')
     return HttpResponse('AssertionError')
+  finally:
+    library.user_cache.clear() # don't want this sticking around
 
 
 def _random_bytes(n):
@@ -786,6 +788,7 @@ def all(request):
     newest = '%s?limit=%d' % (reverse(all), limit)
 
   _optimize_draft_counts(issues)
+  _load_users_for_issues(issues)
   return respond(request, 'all.html',
                  {'issues': issues, 'limit': limit,
                   'newest': newest, 'prev': prev, 'next': next,
@@ -833,9 +836,19 @@ def starred(request):
     issues = [issue for issue in models.Issue.get_by_id(stars)
                     if issue is not None
                     and _can_view_issue(request.user, issue)]
+    _load_users_for_issues(issues)
     _optimize_draft_counts(issues)
   return respond(request, 'starred.html', {'issues': issues})
 
+def _load_users_for_issues(issues):
+  """Load all user links for a list of issues in one go."""
+  user_dict = {}
+  for i in issues:
+    for e in i.reviewers + i.cc + [i.owner.email()]:
+      # keeping a count lets you track total vs. distinct if you want
+      user_dict[e] = user_dict.setdefault(e, 0) + 1
+
+  library.get_links_for_users(user_dict.keys())
 
 @user_key_required
 def show_user(request):
@@ -860,7 +873,9 @@ def _show_user(request):
       'ORDER BY modified DESC',
       datetime.datetime.now() - datetime.timedelta(days=7), user)
       if _can_view_issue(request.user, issue)]
-  _optimize_draft_counts(my_issues + review_issues + closed_issues)
+  all_issues = my_issues + review_issues + closed_issues
+  _load_users_for_issues(all_issues)
+  _optimize_draft_counts(all_issues)
   return respond(request, 'user.html',
                  {'email': user.email(),
                   'my_issues': my_issues,
