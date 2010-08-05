@@ -41,7 +41,7 @@ from google.appengine.api import xmpp
 from google.appengine.ext import db
 from google.appengine.ext.db import djangoforms
 from google.appengine.runtime import DeadlineExceededError
-from google.appengine.runtime.apiproxy_errors import CapabilityDisabledError
+from google.appengine.runtime import apiproxy_errors
 
 # Django imports
 # TODO(guido): Don't import classes/functions directly.
@@ -425,7 +425,7 @@ def respond(request, template, params=None):
   except DeadlineExceededError:
     logging.exception('DeadlineExceededError')
     return HttpResponse('DeadlineExceededError', status=503)
-  except CapabilityDisabledError, err:
+  except apiproxy_errors.CapabilityDisabledError, err:
     logging.exception('CapabilityDisabledError: %s', err)
     return HttpResponse('Rietveld: App Engine is undergoing maintenance. '
                         'Please try again in a while. ' + str(err),
@@ -2542,15 +2542,29 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     body = django.template.loader.render_to_string(
       template, context, context_instance=RequestContext(request))
     logging.warn('Mail: to=%s; cc=%s', ', '.join(to), ', '.join(cc))
-    kwds = {}
+    send_args = {'sender': my_email,
+                 'to': [_encode_safely(address) for address in to],
+                 'subject': _encode_safely(subject),
+                 'body': _encode_safely(body),
+                 'reply_to': _encode_safely(reply_to)}
     if cc:
-      kwds['cc'] = [_encode_safely(address) for address in cc]
-    mail.send_mail(sender=my_email,
-                   to=[_encode_safely(address) for address in to],
-                   subject=_encode_safely(subject),
-                   body=_encode_safely(body),
-                   reply_to=_encode_safely(reply_to),
-                   **kwds)
+      send_args['cc'] = [_encode_safely(address) for address in cc]
+
+    attempts = 0
+    while True:
+      try:
+        mail.send_mail(**send_args)
+        break
+      except apiproxy_errors.DeadlineExceededError:
+        # apiproxy_errors.DeadlineExceededError is raised when the
+        # deadline of an API call is reached (e.g. for mail it's
+        # something about 5 seconds). It's not the same as the lethal
+        # runtime.DeadlineExeededError.
+        attempts += 1
+        if attempts >= 3:
+          raise
+    if attempts:
+      logging.error("Retried sending email %s times", attempts)
 
   return msg
 
