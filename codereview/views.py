@@ -2108,6 +2108,20 @@ def _add_next_prev(patchset, patch):
                                   patchset))
   patchset.patches = patches  # Required to render the jump to select.
 
+  comment_query = models.Comment.all()
+  comment_query.ancestor(patchset)
+  account = models.Account.current_user_account
+  
+  # Get all comment counts with one query rather than one per patch.
+  comments_by_patch = {}
+  drafts_by_patch = {}
+  for c in comment_query:
+    pkey = models.Comment.patch.get_value_for_datastore(c)
+    if not c.draft:
+      comments_by_patch[pkey] = comments_by_patch.setdefault(pkey, 0) + 1
+    elif account and c.author == account.user:
+      drafts_by_patch[pkey] = drafts_by_patch.setdefault(pkey, 0) + 1
+
   last_patch = None
   next_patch = None
   last_patch_with_comment = None
@@ -2118,6 +2132,10 @@ def _add_next_prev(patchset, patch):
       if p.filename == patch.filename:
         found_patch = True
         continue
+
+      p._num_comments = comments_by_patch.get(p.key(), 0)
+      p._num_drafts = drafts_by_patch.get(p.key(), 0)
+
       if not found_patch:
           last_patch = p
           if p.num_comments > 0 or p.num_drafts > 0:
