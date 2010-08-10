@@ -40,6 +40,14 @@ handlers:
 - url: .*
   script: main.py
 
+admin_console:
+  pages:
+  - name: Appstats
+    url: /stats
+
+derived_file_type:
+- python_precompiled
+
 inbound_services:
 - xmpp_message
 - mail

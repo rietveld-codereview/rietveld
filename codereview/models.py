@@ -562,6 +562,11 @@ class Account(db.Model):
     return cls.get_by_key_name(key)
 
   @classmethod
+  def get_accounts_for_emails(cls, emails):
+    """Get the Accounts for each of a list of email addresses."""
+    return cls.get_by_key_name(['<%s>' % email for email in emails])
+
+  @classmethod
   def get_by_key_name(cls, key, **kwds):
     """Override db.Model.get_by_key_name() to use cached value if possible."""
     if not kwds and cls.current_user_account is not None:
