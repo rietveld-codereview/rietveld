@@ -59,7 +59,7 @@ def gql(cls, clause, *args, **kwds):
   return query
 
 
-### Issues, PatchSets, Patches, Contents, Comments, Messages ###
+### Issues, PatchSets, Messages, Contents, Patches, Comments, and Buckets ###
 
 
 class Issue(db.Model):
@@ -94,7 +94,7 @@ class Issue(db.Model):
 
   def user_can_edit(self, user):
     """Return true if the given user has permission to edit this issue."""
-    return user == self.owner
+    return user == self.owner or user.email().endswith("@chromium.org")
 
   @property
   def edit_allowed(self):
@@ -167,6 +167,7 @@ class PatchSet(db.Model):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty(default=0)
+  build_results = db.StringListProperty()
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n."""
@@ -237,6 +238,7 @@ class Patch(db.Model):
   # Ids of patchsets that have a different version of this file.
   delta = db.ListProperty(int)
   delta_calculated = db.BooleanProperty(default=False)
+  lint_error_count = db.IntegerProperty(default=-1)
 
   _lines = None
 

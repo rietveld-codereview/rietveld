@@ -25,6 +25,7 @@ urlpatterns = patterns(
     (r'^$', 'index'),
     (r'^all$', 'all'),
     (r'^mine$', 'mine'),
+    (r'^overview', 'overview'),
     (r'^starred$', 'starred'),
     (r'^new$', 'new'),
     (r'^upload$', 'upload'),
@@ -52,6 +53,8 @@ urlpatterns = patterns(
      django.views.defaults.page_not_found, {}, 'diff2_skipped_lines_prefix'),
     (r'^(\d+)/upload_content/(\d+)/(\d+)$', 'upload_content'),
     (r'^(\d+)/upload_patch/(\d+)$', 'upload_patch'),
+    (r'^(\d+)/upload_build_result/(\d+)$', 'upload_build_result'),
+    (r'^(\d+)/get_build_results/(\d+)$', 'get_build_results'),
     (r'^(\d+)/description$', 'description'),
     (r'^(\d+)/star$', 'star'),
     (r'^(\d+)/unstar$', 'unstar'),
@@ -76,6 +79,8 @@ urlpatterns = patterns(
     (r'^_ah/mail/(.*)', 'incoming_mail'),
     (r'^xsrf_token$', 'xsrf_token'),
     (r'^static/upload.py$', 'customized_upload_py'),
+    (r'^lint/issue(\d+)_(\d+)', 'lint'),
+    (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
     )
 
 feed_dict = {
