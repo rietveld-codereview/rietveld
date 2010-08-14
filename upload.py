@@ -1095,7 +1095,7 @@ class SubversionVCS(VersionControlSystem):
                                     universal_newlines=universal_newlines,
                                     silent_ok=True)
           elif ret_code:
-            ErrorExit("Got error status from 'svn cat %s'", filename)
+            ErrorExit("Got error status from 'svn cat %s'" % filename)
         if not is_binary:
           args = []
           if self.rev_start:
