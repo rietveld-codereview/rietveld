@@ -29,7 +29,7 @@ urlpatterns = patterns(
     (r'^new$', 'new'),
     (r'^upload$', 'upload'),
     (r'^(\d+)$', 'show', {}, 'show_bare_issue_number'),
-    (r'^(\d+)/show$', 'show'),
+    (r'^(\d+)/(show)?$', 'show'),
     (r'^(\d+)/add$', 'add'),
     (r'^(\d+)/edit$', 'edit'),
     (r'^(\d+)/delete$', 'delete'),
