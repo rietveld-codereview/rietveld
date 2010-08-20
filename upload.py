@@ -1185,7 +1185,10 @@ class GitVCS(VersionControlSystem):
   def GenerateDiff(self, extra_args):
     extra_args = extra_args[:]
     if self.options.revision:
-      extra_args = [self.options.revision] + extra_args
+      if ":" in self.options.revision:
+        extra_args = self.options.revision.split(":", 1) + extra_args
+      else:
+        extra_args = [self.options.revision] + extra_args
 
     # --no-ext-diff is broken in some versions of Git, so try to work around
     # this by overriding the environment (but there is still a problem if the
