@@ -509,8 +509,7 @@ def _can_view_issue(user, issue):
   return (not issue.private
           or issue.owner == user
           or user_email in issue.cc
-          or user_email in issue.reviewers
-          or user.email().endswith("@chromium.org"))
+          or user_email in issue.reviewers)
 
 
 def _notify_issue(request, issue, message):
