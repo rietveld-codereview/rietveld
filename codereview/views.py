@@ -1972,6 +1972,19 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
   return _get_skipped_lines_response(rows, id_before, id_after, where, context)
 
 
+# there's no easy way to put a control character into a regex, so brute-force it
+# this is all control characters except \r, \n, and \t
+_badchars_re = re.compile(r'[\000\001\002\003\004\005\006\007\010\013\014\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037]')
+
+
+def _strip_invalid_xml(s):
+  """Remove control chars other than \r\n\t from a string to be put in XML."""
+  if _badchars_re.search(s):
+    return ''.join(c for c in s if c >= ' ' or c in '\r\n\t')
+  else:
+    return s
+
+
 def _get_skipped_lines_response(rows, id_before, id_after, where, context):
   """Helper function that creates a Response object for skipped lines"""
   response_rows = []
@@ -2004,6 +2017,7 @@ def _get_skipped_lines_response(rows, id_before, id_after, where, context):
 
   # Create a usable structure for the JS part
   response = []
+  response_rows =  [_strip_invalid_xml(r) for r in response_rows]
   dom = ElementTree.parse(StringIO('<div>%s</div>' % "".join(response_rows)))
   for node in dom.getroot().getchildren():
     content = [[x.items(), x.text] for x in node.getchildren()]
