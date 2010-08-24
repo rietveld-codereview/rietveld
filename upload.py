@@ -1525,8 +1525,10 @@ def LoadSubversionAutoProperties():
       - config file doesn't exist, or
       - 'enable-auto-props' is not set to 'true-like-value' in [miscellany].
   """
-  # Todo(hayato): Windows users might use different path for configuration file.
-  subversion_config = os.path.expanduser("~/.subversion/config")
+  if os.name == 'nt':
+    subversion_config = os.environ.get("APPDATA") + "\\Subversion\\config"
+  else:
+    subversion_config = os.path.expanduser("~/.subversion/config")
   if not os.path.exists(subversion_config):
     return {}
   config = ConfigParser.ConfigParser()
