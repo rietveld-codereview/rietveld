@@ -5,7 +5,7 @@ DEV_APPSERVER=	dev_appserver.py
 DEV_APPSERVER_FLAGS=
 
 APPCFG=	appcfg.py
-APPCFG_FLAGS=
+APPCFG_FLAGS=-V 31
 
 default: help
 
@@ -27,7 +27,7 @@ serve_remote_email:
 
 update:
 	@echo "Updating `cat app.yaml | sed -n 's/^application: *//p'`"
-	@echo "This is Rietveld r`svn info | sed -n 's/^Revision: *//p'`" \
+	@echo "r`svn info | sed -n 's/^Revision: *//p'`" \
 		>templates/live_revision.html
 	$(APPCFG) $(APPCFG_FLAGS) update .
 	@svn revert templates/live_revision.html
