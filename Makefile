@@ -5,7 +5,7 @@ DEV_APPSERVER=	dev_appserver.py
 DEV_APPSERVER_FLAGS=
 
 APPCFG=	appcfg.py
-APPCFG_FLAGS=-V 31
+APPCFG_FLAGS=
 
 default: help
 
