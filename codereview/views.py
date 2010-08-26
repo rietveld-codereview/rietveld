@@ -3038,6 +3038,18 @@ def _process_incoming_mail(raw_message, recipients):
                        draft=False)
   msg.put()
 
+  # Add sender to reviewers if needed.
+  all_emails = [str(x).lower()
+                for x in [issue.owner.email()]+issue.reviewers+issue.cc]
+  if sender.lower() not in all_emails:
+    query = models.Account.all().filter('lower_email =', sender.lower())
+    account = query.get()
+    if account is not None:
+      issue.reviewers.append(account.email)  # e.g. account.email is CamelCase
+    else:
+      issue.reviewers.append(db.Email(sender))
+    issue.put()
+
 
 @login_required
 def xsrf_token(request):
