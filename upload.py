@@ -457,7 +457,7 @@ group.add_option("-q", "--quiet", action="store_const", const=0,
                  dest="verbose", help="Print errors only.")
 group.add_option("-v", "--verbose", action="store_const", const=2,
                  dest="verbose", default=1,
-                 help="Print info level logs (default).")
+                 help="Print info level logs.")
 group.add_option("--noisy", action="store_const", const=3,
                  dest="verbose", help="Print all logs.")
 # Review server
