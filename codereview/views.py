@@ -2524,7 +2524,8 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   my_email = db.Email(request.user.email())
   to = [db.Email(issue.owner.email())] + issue.reviewers
   cc = issue.cc[:]
-  cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
+  if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
+    cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
   reply_to = to + cc
   if my_email in to and len(to) > 1:  # send_mail() wants a non-empty to list
     to.remove(my_email)
