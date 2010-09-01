@@ -2987,12 +2987,14 @@ M_draftMessage.prototype.dialog_save = function() {
  * @param {String} msg The message to display.
  */
 M_draftMessage.prototype.set_status = function(msg) {
-  status = document.getElementById(this.id_status);
-  if (status) {
-    status.innerHTML = msg;
-    this.status_timeout = setTimeout(function() {
-      draftMessage.set_status('');
-      }, 3000);
+  var statusSpan = document.getElementById(this.id_status);
+  if (statusSpan) {
+    statusSpan.innerHTML = msg;
+    if (msg) {
+      this.status_timeout = setTimeout(function() {
+        draftMessage.set_status('');
+        }, 3000);
+    }
   }
 }
 
