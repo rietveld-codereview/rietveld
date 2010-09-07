@@ -95,6 +95,12 @@ indexes:
   - name: modified
     direction: desc
 
+- kind: Issue
+  properties:
+  - name: private
+  - name: modified
+    direction: desc
+
 - kind: Message
   properties:
   - name: issue

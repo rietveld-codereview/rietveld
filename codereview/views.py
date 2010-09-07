@@ -766,26 +766,37 @@ def all(request):
   """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
   offset = _clean_int(request.GET.get('offset'), 0, 0)
   limit = _clean_int(request.GET.get('limit'), DEFAULT_LIMIT, 1, 100)
+  closed = request.GET.get('closed') or ''
+  if closed:
+    closed = "&closed=1"
 
-  query = db.GqlQuery('SELECT * FROM Issue '
-                      'WHERE closed = FALSE AND private = FALSE '
-                      'ORDER BY modified DESC')
+  if closed:
+    query = db.GqlQuery('SELECT * FROM Issue '
+                        'WHERE private = FALSE '
+                        'ORDER BY modified DESC')
+  else:
+    query = db.GqlQuery('SELECT * FROM Issue '
+                        'WHERE closed = FALSE AND private = FALSE '
+                        'ORDER BY modified DESC')
+
   # Fetch one more to see if there should be a 'next' link
   issues = query.fetch(limit+1, offset)
   more = bool(issues[limit:])
   if more:
     del issues[limit:]
   if more:
-    next = '%s?offset=%d&limit=%d' % (reverse(all), offset+limit, limit)
+    next = '%s?offset=%d&limit=%d%s' % (reverse(all), offset+limit,
+                                        limit, closed)
   else:
     next = ''
   if offset > 0:
-    prev = '%s?offset=%d&limit=%d' % (reverse(all), max(0, offset-limit), limit)
+    prev = '%s?offset=%d&limit=%d%s' % (reverse(all), max(0, offset-limit),
+                                        limit, closed)
   else:
     prev = ''
   newest = ''
   if offset > limit:
-    newest = '%s?limit=%d' % (reverse(all), limit)
+    newest = '%s?limit=%d%s' % (reverse(all), limit, closed)
 
   _optimize_draft_counts(issues)
   _load_users_for_issues(issues)
