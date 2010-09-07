@@ -84,7 +84,7 @@ login_warned = false;
   </div>
   {%if not patch.no_base_file%}
   <div style="margin-top: 5px;">
-    <a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.key.id%}{%urlappend_view_settings%}">
+    <a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.filename%}{%urlappend_view_settings%}">
     View side-by-side diff with in-line comments</a>
   </div>
   {%endif%}
