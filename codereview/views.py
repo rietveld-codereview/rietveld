@@ -1377,7 +1377,14 @@ def _calculate_delta(patch, patchset_id, patchsets):
       # just parse the patchset's data.  Note we can only do this if the
       # patchset was small enough to fit in the data property.
       if other.parsed_patches is None:
-        other.parsed_patches = engine.SplitPatch(other.data)
+        # PatchSet.data is stored as db.Blob (str). Try to convert it
+        # to unicode so that Python doesn't need to do this conversion
+        # when comparing text and patch.text, which is db.Text
+        # (unicode).
+        try:
+          other.parsed_patches = engine.SplitPatch(other.data.decode('utf-8'))
+        except UnicodeDecodeError:  # Fallback to str - unicode comparison.
+          other.parsed_patches = engine.SplitPatch(other.data)
         other.data = None  # Reduce memory usage.
       for filename, text in other.parsed_patches:
         if filename == patch.filename:
@@ -1393,7 +1400,7 @@ def _calculate_delta(patch, patchset_id, patchsets):
       query.filter("patchset =", other.key())
       other_patches = query.fetch(100)
       if other_patches and len(other_patches) > 1:
-        logging.info("Got %s patches with the same filename for a patchset", 
+        logging.info("Got %s patches with the same filename for a patchset",
                      len(other_patches))
       for op in other_patches:
         if op.text != patch.text:
