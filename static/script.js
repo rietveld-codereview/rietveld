@@ -1970,88 +1970,102 @@ function M_clickCommon(evt) {
 }
 
 /**
- * Common keypress handling code for all pages.
+ * Get a name for key combination of keydown event.
+ *
+ * See also http://unixpapa.com/js/key.html
+ */
+function M_getKeyName(evt) {
+  var name = "";
+  if (evt.ctrlKey)  { name += "Ctrl-" }
+  if (evt.altKey)   { name += "Alt-" }
+  if (evt.shiftKey) { name += "Shift-" }
+  // Character keys have codes of corresponding ASCII symbols
+  if (evt.keyCode >= 65 && evt.keyCode <= 90) {
+    return name + String.fromCharCode(evt.keyCode);
+  }
+  // Numeric keys seems to have codes of corresponding ASCII symbols too
+  if (evt.keyCode >= 48 && evt.keyCode <= 57) {
+    return name + String.fromCharCode(evt.keyCode);
+  }
+  // Handling special keys
+  switch (evt.keyCode) {
+  case 27: return name + "Esc";
+  case 13: return name + "Enter";
+  case 188: return name + ",";  //  [,<]
+  case 190: return name + ".";  //  [.>]
+  case 191: return name + "/";  //  [/?]
+  case 17: // Ctrl
+  case 18: // Alt
+  case 16: // Shift
+           return name.substr(0, name.lenght-1);
+  default:
+    name += "<"+evt.keyCode+">";
+  }
+  return name;
+}
+
+/**
+ * Common keydown handler for all pages.
  * @param {Event} evt The event object that triggered this callback
- * @param {function(string)} handler Handles the specific key pressed;
- *        returns false if the key press was handled.
+ * @param {function(string)} handler Handles the specific key name;
+ *        returns false if the key was handled.
  * @param {function(Event, Node, int, string)} input_handler
  *        Handles the event in case that the event source is an input field.
  *        returns false if the key press was handled.
  * @return false if the event was handled
  */
-function M_keyPressCommon(evt, handler, input_handler) {
-  var evt = (evt) ? evt : ((event) ? event : null);
-  if (evt) {
-    var src = M_getEventTarget(evt);
-    var nodename = src.nodeName;
-    var key, code;
-    if (evt.keyCode) {
-      code = evt.keyCode;
-    } else if (evt.which) {
-      code = evt.which;
+function M_keyDownCommon(evt, handler, input_handler) {
+  if (!evt) var evt = window.event; // for IE
+  var target = M_getEventTarget(evt);
+  var keyName = M_getKeyName(evt);
+  if (target.nodeName == "TEXTAREA" || target.nodeName == "INPUT") {
+    if (input_handler) {
+      return input_handler(target, keyName);
     }
-    key = String.fromCharCode(code);
-    if (nodename == "TEXTAREA" || nodename == "INPUT" ) {
-      if (typeof input_handler != 'undefined') {
-        return input_handler(evt, src, code, key);
-      }
-      return true;
-    }
-    if (evt.altKey || evt.altLeft ||
-        evt.ctrlKey || evt.ctrlLeft ||
-        evt.metaKey) {
-      // Ignore if any modifier keys are set
-      return true;
-    }
-    if (key == '?' ||
-	code == (window.event ? 27 /* ESC */ : evt.DOM_VK_ESCAPE)) {
-      var help = document.getElementById("help");
-      if (help && typeof helpDisplayed != "undefined") {
-	// Only allow the help to be turned on with the ? key.
-	if (helpDisplayed || key == '?') {
-	  helpDisplayed = !helpDisplayed;
-	}
-	help.style.display = helpDisplayed ? "" : "none";
-      }
-      return false;
-    }
-    return handler(key);
+    return true;
   }
-  return true;
+  if (keyName == 'Shift-/' /* '?' */ || keyName == 'Esc') {
+    var help = document.getElementById("help");
+    if (help) {
+      // Only allow the help to be turned on with the ? key.
+      if (helpDisplayed || keyName == 'Shift-/') {
+        helpDisplayed = !helpDisplayed;
+      }
+      help.style.display = helpDisplayed ? "" : "none";
+    }
+    return false;
+  }
+  return handler(keyName);
 }
 
 /**
- * Helper event handler for the keypress event in a comment textarea.
+ * Helper event handler for the keydown event in a comment textarea.
  * @param {Event} evt The event object that triggered this callback
  * @param {Node} src The textarea document element
- * @param {int} code The key code of the key press
- * @param {String} key The string describing the key press
- * @return false if the key press was handled
+ * @param {String} key The string with combination name
+ * @return false if the event was handled
  */
-function M_commentTextKeyPress_(evt, src, code, key) {
+function M_commentTextKeyDown_(src, key) {
   if (src.nodeName == "TEXTAREA") {
-    if (evt.ctrlKey || evt.ctrlLeft) {
-      if (key == 's' || code == 19 /* ASCII code for ^S */) {
-        // Save the form corresponding to this text area.
-        M_disableCarefulUnload();
-        if (src.form.save.onclick) {
-          return src.form.save.onclick();
-        } else {
-          src.form.submit();
-          return false;
-        }
+    if (key == 'Ctrl-S') {
+      // Save the form corresponding to this text area.
+      M_disableCarefulUnload();
+      if (src.form.save.onclick) {
+        return src.form.save.onclick();
+      } else {
+        src.form.submit();
+        return false;
       }
-    } else if (evt.altKey || evt.altLeft) {
-    } else if (evt.shiftKey || evt.shiftLeft) {
-    } else if (evt.metaKey) {
-    } else {
-      if (code == (window.event ? 27 /* ASCII code for Escape */
-                                : evt.DOM_VK_ESCAPE)) {
-	if (draftMessage) {
-	  return draftMessage.dialog_hide(true);
-	} else {
-	  return src.form.cancel.onclick();
-        }
+    }
+    if (key == 'Esc') {
+      if (src.getAttribute('id') == draftMessage.id_textarea)
+      {
+        draftMessage.dialog_hide(true);
+        src.blur();
+        return false;
+      } else {
+        // textarea of inline comment
+        return src.form.cancel.onclick();
       }
     }
   }
@@ -2073,71 +2087,71 @@ function M_jumpToHrefOrChangelist(elementId) {
 }
 
 /**
- * Event handler for the keypress event in the file view.
+ * Event handler for the keydown event in the file view.
  * @param {Event} evt The event object that triggered this callback
- * @return false if the key press was handled
+ * @return false if the event was handled
  */
-function M_keyPress(evt) {
-  return M_keyPressCommon(evt, function(key) {
-    if (key == 'n') {
+function M_keyDown(evt) {
+  return M_keyDownCommon(evt, function(key) {
+    if (key == 'N') {
       // next diff
       if (hookState) hookState.gotoNextHook();
-    } else if (key == 'p') {
+    } else if (key == 'P') {
       // previous diff
       if (hookState) hookState.gotoPrevHook();
-    } else if (key == 'N') {
+    } else if (key == 'Shift-N') {
       // next comment
       if (hookState) hookState.gotoNextHook(true);
-    } else if (key == 'P') {
+    } else if (key == 'Shift-P') {
       // previous comment
       if (hookState) hookState.gotoPrevHook(true);
-    } else if (key == 'j') {
+    } else if (key == 'J') {
       // next file
       M_jumpToHrefOrChangelist('nextFile')
-    } else if (key == 'k') {
+    } else if (key == 'K') {
       // prev file
       M_jumpToHrefOrChangelist('prevFile')
-    } else if (key == 'J') {
+    } else if (key == 'Shift-J') {
       // next file with comment
       M_jumpToHrefOrChangelist('nextFileWithComment')
-    } else if (key == 'K') {
+    } else if (key == 'Shift-K') {
       // prev file with comment
       M_jumpToHrefOrChangelist('prevFileWithComment')
-    } else if (key == 'm') {
-      document.location.href = publish_link;
     } else if (key == 'M') {
+      document.location.href = publish_link;
+    } else if (key == 'Shift-M') {
       if (draftMessage) { draftMessage.dialog_show(); }
-    } else if (key == 'u') {
+    } else if (key == 'U') {
       // up to CL
       M_upToChangelist();
-    } else if (key == 'i') {
+    } else if (key == 'I') {
       // toggle intra line diff
       if (intraLineDiff) intraLineDiff.toggle();
-    } else if (key == 's') {
+    } else if (key == 'S') {
       // toggle show/hide inline comments
       M_toggleAllInlineComments();
-    } else if (key == 'e') {
+    } else if (key == 'E') {
       M_expandAllInlineComments();
-    } else if (key == 'c') {
+    } else if (key == 'C') {
       M_collapseAllInlineComments();
-    } else if (key == '\r' || key == '\n') {
+    } else if (key == 'Enter') {
       // respond to current comment
       if (hookState) hookState.respond();
     } else {
       return true;
     }
     return false;
-  }, M_commentTextKeyPress_);
+  }, M_commentTextKeyDown_);
 }
 
 /**
- * Event handler for the keypress event in the changelist view.
+ * Event handler for the keydown event in the changelist (issue) view.
  * @param {Event} evt The event object that triggered this callback
- * @return false if the key press was handled
+ * @return false if the event was handled
  */
-function M_changelistKeyPress(evt) {
-  return M_keyPressCommon(evt, function(key) {
-    if (key == 'o' || key == '\r' || key == '\n') {
+function M_changelistKeyDown(evt) {
+  return M_keyDownCommon(evt, function(key) {
+    if (key == 'O' || key == 'Enter') {
       if (dashboardState) {
 	var child = dashboardState.curTR.cells[3].firstChild;
 	while (child && child.nextSibling && child.nodeName != "A") {
@@ -2147,7 +2161,7 @@ function M_changelistKeyPress(evt) {
 	  location.href = child.href;
 	}
       }
-    } else if (key == 'i') {
+    } else if (key == 'I') {
       if (dashboardState) {
 	var child = dashboardState.curTR.cells[2].firstChild;
 	while (child && child.nextSibling &&
@@ -2158,13 +2172,13 @@ function M_changelistKeyPress(evt) {
 	  location.href = child.href;
 	}
       }
-    } else if (key == 'k') {
+    } else if (key == 'K') {
       if (dashboardState) dashboardState.gotoPrev();
-    } else if (key == 'j') {
+    } else if (key == 'J') {
       if (dashboardState) dashboardState.gotoNext();
-    } else if (key == 'm') {
+    } else if (key == 'M') {
       document.location.href = publish_link;
-    } else if (key == 'u') {
+    } else if (key == 'U') {
       // back to dashboard
       document.location.href = base_url;
     } else {
@@ -2398,7 +2412,7 @@ function M_restoreDraftText_(draftKey, form, opt_selectAll) {
 
 /**
  * M_DashboardState class. Keeps track of the current position of
- * the selector on the dashboard, and moves it on keypress.
+ * the selector on the dashboard, and moves it on keydown.
  * @param {Window} win The window that the dashboard table is in.
  * @param {String} trName The name of TRs that we will move between.
  * @param {String} cookieName The cookie name to store the marker position into.
@@ -2528,16 +2542,16 @@ M_DashboardState.prototype.gotoNext = function() {
 }
 
 /**
- * Event handler for dashboard key presses. Dispatches cursor moves, as well as
+ * Event handler for dashboard hot keys. Dispatches cursor moves, as well as
  * opening CLs.
  */
-function M_dashboardKeyPress(evt) {
-  return M_keyPressCommon(evt, function(key) {
-    if (key == 'k') {
+function M_dashboardKeyDown(evt) {
+  return M_keyDownCommon(evt, function(key) {
+    if (key == 'K') {
       if (dashboardState) dashboardState.gotoPrev();
-    } else if (key == 'j') {
+    } else if (key == 'J') {
       if (dashboardState) dashboardState.gotoNext();
-    } else if (key == '#') {
+    } else if (key == 'Shift-3' /* '#' */) {
       if (dashboardState) {
 	var child = dashboardState.curTR.cells[1].firstChild;
 	while (child && child.className != "issue-close") {
@@ -2553,7 +2567,7 @@ function M_dashboardKeyPress(evt) {
 	  location.href = child.href;
 	}
       }
-    } else if (key == 'o' || key == '\r' || key == '\n') {
+    } else if (key == 'O' || key == 'Enter') {
       if (dashboardState) {
 	var child = dashboardState.curTR.cells[2].firstChild;
 	while (child && child.nodeName != "A") {
@@ -2922,7 +2936,7 @@ function M_draftMessage(issue_id, headless) {
 
 /**
  * Constructor.
- * Sets keypress callback and loads draft message if any.
+ * Sets keydown callback and loads draft message if any.
  */
 M_draftMessage.prototype.initialize = function() {
   this.load();

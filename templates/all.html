@@ -2,10 +2,7 @@
 {%block title1%}Recent Issues -{%endblock%}
 {%block body%}
 <script language="JavaScript" type="text/javascript"><!--
-function keyPressIntermediary(evt) {
-  return M_dashboardKeyPress(evt);
-}
-document.onkeypress = keyPressIntermediary;
+document.onkeydown = M_dashboardKeyDown;
 -->
 </script>
 <h2>Recent Issues</h2>
