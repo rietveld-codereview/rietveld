@@ -1979,6 +1979,7 @@ function M_getKeyName(evt) {
   if (evt.ctrlKey)  { name += "Ctrl-" }
   if (evt.altKey)   { name += "Alt-" }
   if (evt.shiftKey) { name += "Shift-" }
+  if (evt.metaKey) { name += "Meta-" }
   // Character keys have codes of corresponding ASCII symbols
   if (evt.keyCode >= 65 && evt.keyCode <= 90) {
     return name + String.fromCharCode(evt.keyCode);
@@ -1997,6 +1998,7 @@ function M_getKeyName(evt) {
   case 17: // Ctrl
   case 18: // Alt
   case 16: // Shift
+  // case ??: Meta ?
            return name.substr(0, name.lenght-1);
   default:
     name += "<"+evt.keyCode+">";
