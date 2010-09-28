@@ -423,9 +423,39 @@ class Comment(db.Model):
   def complete(self, patch):
     """Set the shorttext and buckets attributes."""
     # TODO(guido): Turn these into caching proprties instead.
-    # TODO(guido): Properly parse the text into quoted and unquoted buckets.
     self.shorttext = self.text.lstrip()[:50].rstrip()
-    self.buckets = [Bucket(text=self.text)]
+
+    # The strategy for buckets is that we want groups of lines that
+    # start with > to be quoted (and not displayed by
+    # default). Whitespace-only lines are not considered either quoted
+    # or not quoted. Same goes for lines that go like "On ... user
+    # wrote:".
+    cur_bucket = []
+    quoted = None
+    self.buckets = []
+
+    def _Append():
+      if cur_bucket:
+        self.buckets.append(Bucket(text="\n".join(cur_bucket),
+                                   quoted=bool(quoted)))
+
+    lines = self.text.splitlines()
+    for line in lines:
+      if line.startswith("On ") and line.endswith(":"):
+        pass
+      elif line.startswith(">"):
+        if quoted is False:
+          _Append()
+          cur_bucket = []
+        quoted = True
+      elif line.strip():
+        if quoted is True:
+          _Append()
+          cur_bucket = []
+        quoted = False
+      cur_bucket.append(line)
+
+    _Append()
 
 
 class Bucket(db.Model):
@@ -439,6 +469,7 @@ class Bucket(db.Model):
   # TODO(guido): Flesh this out.
 
   text = db.TextProperty()
+  quoted = db.BooleanProperty()
 
 
 ### Repositories and Branches ###

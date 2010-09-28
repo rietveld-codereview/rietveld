@@ -977,11 +977,23 @@ function M_editInlineCommentCommon_(cid, lineno, side) {
     return false;
   }
   M_createResizer_(form, suffix);
+
   var texts = document.getElementsByName("comment-text-" + suffix);
   var textsLength = texts.length;
   for (var i = 0; i < textsLength; i++) {
     texts[i].style.display = "none";
   }
+  var hides = document.getElementsByName("comment-hide-" + suffix);
+  var hidesLength = hides.length;
+  for (var i = 0; i < hidesLength; i++) {
+    hides[i].style.display = "none";
+    var links = hides[i].getElementsByTagName("A");
+    if (links && links.length > 0) {
+      var link = links[0];
+      link.innerHTML = "Show quoted text";
+    }
+  }
+
   M_hideElement("edit-link-" + suffix);
   M_hideElement("undo-link-" + suffix);
   form.style.display = "";
@@ -1302,10 +1314,16 @@ function M_removeInlineComment(form, cid, lineno, side) {
  * @param {Element} text The textarea whose value needs to be updated
  */
 function M_setValueFromDivs(divs, text) {
-  lines = [];
+  var lines = [];
   var divsLength = divs.length;
   for (var i = 0; i < divsLength; i++) {
     lines = lines.concat(divs[i].innerHTML.split("\n"));
+    // It's _fairly_ certain that the last line in the div will be
+    // empty, based on how the template works. If the last line in the
+    // array is empty, then ignore it.
+    if (lines.length > 0 && lines[lines.length - 1] == "") {
+      lines.length = lines.length - 1;
+    }
   }
   for (var i = 0; i < lines.length; i++) {
     // Undo the <a> tags added by urlize and urlizetrunc
@@ -1341,7 +1359,14 @@ function M_resetAndHideInlineComment(form, cid, lineno, side) {
   var texts = document.getElementsByName("comment-text-" + suffix);
   var textsLength = texts.length;
   for (var i = 0; i < textsLength; i++) {
-    texts[i].style.display = "";
+    if (texts[i].className.indexOf("comment-text-quoted") < 0) {
+      texts[i].style.display = "";
+    }
+  }
+  var hides = document.getElementsByName("comment-hide-" + suffix);
+  var hidesLength = hides.length;
+  for (var i = 0; i < hidesLength; i++) {
+    hides[i].style.display = "";
   }
   M_showElement("edit-link-" + suffix);
   hookState.gotoHook(0);
@@ -1359,11 +1384,15 @@ function M_switchQuotedText(cid, bid, lineno, side) {
   var tmp = ""
   if (typeof lineno != 'undefined' && typeof side != 'undefined')
     tmp = "-" + lineno + "-" + side;
-  var div = document.getElementById("comment-text-" + cid + tmp + "-" + bid)
+  var extra = cid + tmp + "-" + bid;
+  var div = document.getElementById("comment-text-" + extra);
+  var a = document.getElementById("comment-hide-link-" + extra);
   if (div.style.display == "none") {
     div.style.display = "";
+    a.innerHTML = "Hide quoted text";
   } else {
     div.style.display = "none";
+    a.innerHTML = "Show quoted text";
   }
   if (tmp != "") {
     hookState.gotoHook(0);
