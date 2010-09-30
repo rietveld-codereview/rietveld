@@ -16,7 +16,7 @@
 
 """Tool for uploading diffs from a version control system to the codereview app.
 
-Usage summary: upload.py [options] [-- diff_options]
+Usage summary: upload.py [options] [-- diff_options] [path...]
 
 Diff options are passed to the diff command of the underlying system.
 
@@ -447,7 +447,8 @@ class HttpRpcServer(AbstractRpcServer):
     return opener
 
 
-parser = optparse.OptionParser(usage="%prog [options] [-- diff_options]")
+parser = optparse.OptionParser(
+    usage="%prog [options] [-- diff_options] [path...]")
 parser.add_option("-y", "--assume_yes", action="store_true",
                   dest="assume_yes", default=False,
                   help="Assume that the answer to yes/no questions is 'yes'.")
@@ -1270,8 +1271,6 @@ class MercurialVCS(VersionControlSystem):
     return filename[len(self.subdir):].lstrip(r"\/")
 
   def GenerateDiff(self, extra_args):
-    # If no file specified, restrict to the current subdir
-    extra_args = extra_args or ["."]
     cmd = ["hg", "diff", "--git", "-r", self.base_rev] + extra_args
     data = RunShell(cmd, silent_ok=True)
     svndiff = []
