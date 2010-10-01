@@ -91,13 +91,13 @@ indexes:
 
 - kind: Issue
   properties:
-  - name: reviewers
+  - name: private
   - name: modified
     direction: desc
 
 - kind: Issue
   properties:
-  - name: private
+  - name: reviewers
   - name: modified
     direction: desc
 
