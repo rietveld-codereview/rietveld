@@ -423,7 +423,6 @@ class Comment(db.Model):
   def complete(self, patch):
     """Set the shorttext and buckets attributes."""
     # TODO(guido): Turn these into caching proprties instead.
-    self.shorttext = self.text.lstrip()[:50].rstrip()
 
     # The strategy for buckets is that we want groups of lines that
     # start with > to be quoted (and not displayed by
@@ -456,6 +455,13 @@ class Comment(db.Model):
       cur_bucket.append(line)
 
     _Append()
+
+    self.shorttext = self.text.lstrip()[:50].rstrip()
+    # Grab the first 50 chars from the first non-quoted bucket
+    for bucket in self.buckets:
+      if not bucket.quoted:
+        self.shorttext = bucket.text.lstrip()[:50].rstrip()
+        break
 
 
 class Bucket(db.Model):
