@@ -16,7 +16,7 @@
 
 """Tool for uploading diffs from a version control system to the codereview app.
 
-Usage summary: upload.py [options] [-- diff_options]
+Usage summary: upload.py [options] [-- diff_options] [path...]
 
 Diff options are passed to the diff command of the underlying system.
 
@@ -447,7 +447,8 @@ class HttpRpcServer(AbstractRpcServer):
     return opener
 
 
-parser = optparse.OptionParser(usage="%prog [options] [-- diff_options]")
+parser = optparse.OptionParser(
+    usage="%prog [options] [-- diff_options] [path...]")
 parser.add_option("-y", "--assume_yes", action="store_true",
                   dest="assume_yes", default=False,
                   help="Assume that the answer to yes/no questions is 'yes'.")
@@ -457,7 +458,7 @@ group.add_option("-q", "--quiet", action="store_const", const=0,
                  dest="verbose", help="Print errors only.")
 group.add_option("-v", "--verbose", action="store_const", const=2,
                  dest="verbose", default=1,
-                 help="Print info level logs (default).")
+                 help="Print info level logs.")
 group.add_option("--noisy", action="store_const", const=3,
                  dest="verbose", help="Print all logs.")
 # Review server
@@ -1095,7 +1096,7 @@ class SubversionVCS(VersionControlSystem):
                                     universal_newlines=universal_newlines,
                                     silent_ok=True)
           elif ret_code:
-            ErrorExit("Got error status from 'svn cat %s'", filename)
+            ErrorExit("Got error status from 'svn cat %s'" % filename)
         if not is_binary:
           args = []
           if self.rev_start:
@@ -1185,7 +1186,10 @@ class GitVCS(VersionControlSystem):
   def GenerateDiff(self, extra_args):
     extra_args = extra_args[:]
     if self.options.revision:
-      extra_args = [self.options.revision] + extra_args
+      if ":" in self.options.revision:
+        extra_args = self.options.revision.split(":", 1) + extra_args
+      else:
+        extra_args = [self.options.revision] + extra_args
 
     # --no-ext-diff is broken in some versions of Git, so try to work around
     # this by overriding the environment (but there is still a problem if the
@@ -1267,8 +1271,6 @@ class MercurialVCS(VersionControlSystem):
     return filename[len(self.subdir):].lstrip(r"\/")
 
   def GenerateDiff(self, extra_args):
-    # If no file specified, restrict to the current subdir
-    extra_args = extra_args or ["."]
     cmd = ["hg", "diff", "--git", "-r", self.base_rev] + extra_args
     data = RunShell(cmd, silent_ok=True)
     svndiff = []
@@ -1522,8 +1524,10 @@ def LoadSubversionAutoProperties():
       - config file doesn't exist, or
       - 'enable-auto-props' is not set to 'true-like-value' in [miscellany].
   """
-  # Todo(hayato): Windows users might use different path for configuration file.
-  subversion_config = os.path.expanduser("~/.subversion/config")
+  if os.name == 'nt':
+    subversion_config = os.environ.get("APPDATA") + "\\Subversion\\config"
+  else:
+    subversion_config = os.path.expanduser("~/.subversion/config")
   if not os.path.exists(subversion_config):
     return {}
   config = ConfigParser.ConfigParser()

@@ -36,12 +36,12 @@ Running
 
 *** NEW *** YOU MUST INSTALL DJANGO 1.0 FIRST BEFORE RUNNING LOCALLY.
 
-Download Django-1.0.2-final.tar.gz from www.djangoproject.com (or
+Download Django-1.0.4.tar.gz from http://www.djangoproject.com (or
 whatever the latest micro-version of 1.0 is) and follow the
 installation instructions.  Typically:
 
-  tar xzf Django-1.0.2-final.tar.gz
-  cd Django-1.0.2-final
+  tar xzf Django-1.0.4.tar.gz
+  cd Django-1.0.4
   sudo python setup.py install
 
 NOTE: On the Mac, if you are using the Google App Engine Launcher, the

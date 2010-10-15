@@ -2,10 +2,7 @@
 {%block title1%}Issues for {%nickname email%} -{%endblock%}
 {%block body%}
 <script language="JavaScript" type="text/javascript"><!--
-function keyPressIntermediary(evt) {
-  return M_dashboardKeyPress(evt);
-}
-document.onkeypress = keyPressIntermediary;
+document.onkeydown = M_dashboardKeyDown;
 -->
 </script>
 <h2>Issues for {%nickname email%}</h2>
