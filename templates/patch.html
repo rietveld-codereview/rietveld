@@ -2,10 +2,7 @@
 {%block body%}
 
 <script language="JavaScript" type="text/javascript"><!--
-function keyPressIntermediary(evt) {
-  return M_keyPress(evt);
-}
-document.onkeypress = keyPressIntermediary;
+document.onkeydown = M_keyDown;
 {%if user%}
 logged_in = true;
 {%else%}
@@ -84,7 +81,7 @@ login_warned = false;
   </div>
   {%if not patch.no_base_file%}
   <div style="margin-top: 5px;">
-    <a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.key.id%}{%urlappend_view_settings%}">
+    <a href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.filename%}{%urlappend_view_settings%}">
     View side-by-side diff with in-line comments</a>
   </div>
   {%endif%}
@@ -124,7 +121,6 @@ login_warned = false;
 
 {%if patch.is_binary%}
 <img src="{%url codereview.views.image issue.key.id,patchset.key.id,patch.key.id,1%}" />
-</pre>
 {%else%}
 <span id="hook-sel" style="display:none;"></span>
 
@@ -140,7 +136,6 @@ login_warned = false;
 </div>
 </div>
 
-</script>
 <script language="JavaScript" type="text/javascript"><!--
 var old_snapshot = "old";
 var new_snapshot = "new";

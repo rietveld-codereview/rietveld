@@ -2,10 +2,7 @@
 {%block body%}
 
 <script language="JavaScript" type="text/javascript"><!--
-function keyPressIntermediary(evt) {
-  return M_keyPress(evt);
-}
-document.onkeypress = keyPressIntermediary;
+document.onkeydown = M_keyDown;
 {%if user%}
 logged_in = true;
 {%else%}
@@ -71,7 +68,7 @@ login_warned = false;
   <div style="margin-top: 5px;">
     Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{patchset.key.id}});">
       {% for jump_patch in patchset.patches %}
-        <option value="{{jump_patch.key.id}}"
+        <option value="{{jump_patch.filename}}"
          {%ifequal jump_patch.key.id patch.key.id%} selected="selected"{%endifequal%}>{{jump_patch.filename}}</option>
       {% endfor %}
     </select>
@@ -138,7 +135,6 @@ login_warned = false;
 <div class="codenav">{%include "file_navigation.html"%}</div>
 </div>
 
-</script>
 <script language="JavaScript" type="text/javascript"><!--
 var old_snapshot = "old";
 var new_snapshot = "new";

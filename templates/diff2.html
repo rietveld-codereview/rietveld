@@ -3,10 +3,7 @@
 {%block body%}
 
 <script language="JavaScript" type="text/javascript"><!--
-function keyPressIntermediary(evt) {
-  return M_keyPress(evt);
-}
-document.onkeypress = keyPressIntermediary;
+document.onkeydown = M_keyDown;
 {%if user%}
 logged_in = true;
 {%else%}
@@ -92,13 +89,13 @@ login_warned = false;
     </select>
   </div>
   <div>
-    Left: <a href="{%url codereview.views.diff issue.key.id,ps_left.key.id,patch_left.key.id%}{%urlappend_view_settings%}"
+    Left: <a href="{%url codereview.views.diff issue.key.id,ps_left.key.id,patch_left.filename%}{%urlappend_view_settings%}"
              title="View regular side by side diff">Side by side diff</a>
           |
           <a href="{%url codereview.views.download_patch issue.key.id,ps_left.key.id,patch_left.key.id%}"
              title="Download patch for {{patch_left.filename}}">Download</a>
           <br/>
-    Right: <a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.key.id%}{%urlappend_view_settings%}"
+    Right: <a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.filename%}{%urlappend_view_settings%}"
               title="View regular side by side diff">Side by side diff</a>
            |
            <a href="{%url codereview.views.download_patch issue.key.id,ps_right.key.id,patch_right.key.id%}"
@@ -120,18 +117,18 @@ login_warned = false;
 <div class="codenav">
 {%comment%}
 For some reason,
-{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.key.id%}
+{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.filename%}
 doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {%endcomment%}
 {%if patch_right.prev%}
 <a id="prevFile" 
-   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.prev.key.id%}{%urlappend_view_settings%}">
+   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.prev.filename%}{%urlappend_view_settings%}">
 &laquo; {{patch_right.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch_right.next%}
 <a id="nextFile"
-   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.next.key.id%}{%urlappend_view_settings%}">
+   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.next.filename%}{%urlappend_view_settings%}">
 {{patch_right.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |
@@ -179,13 +176,13 @@ Toggle Intra-line Diffs</a> ('i')
 <div class="codenav">
 {%if patch_right.prev%}
 <a id="prevFile"
-   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.prev.key.id%}{%urlappend_view_settings%}">
+   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.prev.filename%}{%urlappend_view_settings%}">
 &laquo; {{patch_right.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch_right.next%}
 <a id="nextFile"
-   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.next.key.id%}{%urlappend_view_settings%}">
+   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.next.filename%}{%urlappend_view_settings%}">
 {{patch_right.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |
@@ -201,7 +198,6 @@ Toggle Comments</a> ('s')
 </div>
 
 </div>
-</script>
 <script language="JavaScript" type="text/javascript"><!--
 var old_snapshot = "new";
 var new_snapshot = "new";

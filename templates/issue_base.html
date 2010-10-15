@@ -20,11 +20,15 @@
     {%endcomment%}
     <a href="{%url codereview.views.mine%}">My Issues</a>
     |
-    <a href="{%url codereview.views.all%}">Recent Issues</a>
+    <a href="{%url codereview.views.all%}">Recent Issues (open)</a>
+    |
+    <a href="{%url codereview.views.all%}?closed=1">Recent Issues (all)</a>
     |
     <a href="{%url codereview.views.starred%}">Starred Issues</a>
   {%else%}
-    <a class="novisit" href="{%url codereview.views.index%}">Recent Issues</a>
+    <a class="novisit" href="{%url codereview.views.index%}">Recent Issues (open)</a>
+    |
+    <a class="novisit" href="{%url codereview.views.index%}?closed=1">Recent Issues (all)</a>
     |
     <a class="novisit" href="{{sign_in}}">Sign in</a>
     with your <a href="https://www.google.com/accounts/NewAccount">Google
@@ -75,7 +79,7 @@
             {%if last_patchset and first_patch%}
               <br/>
               <a class="novisit"
-                 href="{%url codereview.views.diff issue.key.id,last_patchset.key.id,first_patch.key.id%}">
+                 href="{%url codereview.views.diff issue.key.id,last_patchset.key.id,first_patch.filename%}">
                 <b>Start Review</b>
               </a>
             {%endif%}
