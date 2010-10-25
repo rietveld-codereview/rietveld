@@ -868,7 +868,7 @@ class SubversionVCS(VersionControlSystem):
     return self.svn_base
 
   def _GuessBase(self, required):
-    """Returns the SVN base URL.
+    """Returns base URL for current diff.
 
     Args:
       required: If true, exits if the url can't be guessed, otherwise None is
@@ -876,36 +876,24 @@ class SubversionVCS(VersionControlSystem):
     """
     info = RunShell(["svn", "info"])
     for line in info.splitlines():
-      words = line.split()
-      if len(words) == 2 and words[0] == "URL:":
-        url = words[1]
+      if line.startswith("URL: "):
+        url = line.split()[1]
         scheme, netloc, path, params, query, fragment = urlparse.urlparse(url)
         username, netloc = urllib.splituser(netloc)
         if username:
           logging.info("Removed username from base URL")
-        if netloc.endswith("svn.python.org"):
-          if netloc == "svn.python.org":
-            if path.startswith("/projects/"):
-              path = path[9:]
-          elif netloc != "pythondev@svn.python.org":
-            ErrorExit("Unrecognized Python URL: %s" % url)
-          base = "http://svn.python.org/view/*checkout*%s/" % path
-          logging.info("Guessed Python base = %s", base)
-        elif netloc.endswith("svn.collab.net"):
-          if path.startswith("/repos/"):
-            path = path[6:]
-          base = "http://svn.collab.net/viewvc/*checkout*%s/" % path
-          logging.info("Guessed CollabNet base = %s", base)
+        guess = ""
+        if netloc == "svn.python.org" and scheme == "svn+ssh":
+          path = "projects" + path
+          scheme = "http"
+          guess = "Python "
         elif netloc.endswith(".googlecode.com"):
-          path = path + "/"
-          base = urlparse.urlunparse(("http", netloc, path, params,
-                                      query, fragment))
-          logging.info("Guessed Google Code base = %s", base)
-        else:
-          path = path + "/"
-          base = urlparse.urlunparse((scheme, netloc, path, params,
-                                      query, fragment))
-          logging.info("Guessed base = %s", base)
+          scheme = "http"
+          guess = "Google Code "
+        path = path + "/"
+        base = urlparse.urlunparse((scheme, netloc, path, params,
+                                    query, fragment))
+        logging.info("Guessed %sbase = %s", guess, base)
         return base
     if required:
       ErrorExit("Can't find URL in output from svn info")
