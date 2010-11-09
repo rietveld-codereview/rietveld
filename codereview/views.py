@@ -1709,7 +1709,24 @@ def _get_patchset_info(request, patchset_id):
 
 def replace_bug(m):
   bugs = re.split(r"[\s,]+", m.group(1))
-  return ", ".join("<a href='http://code.google.com/p/chromium/issues/detail?id=%s'>%s</a>" % (i, i) for i in bugs if i != "") + "\n"
+  base_tracker_url = 'http://code.google.com/p/%s/issues/detail?id=%s'
+  valid_trackers = ('chromium', 'chromium-os', 'chrome-os-partner', 'gyp', 'v8')
+  urls = []
+  for bug in bugs:
+    if not bug:
+      continue
+    tracker = 'chromium'
+    if ':' in bug:
+      tracker, bug_id = bug.split(':', 1)
+      if tracker not in valid_trackers:
+        urls.append(bug)
+        continue
+    else:
+      bug_id = bug
+    url = '<a href="' + base_tracker_url % (tracker, bug_id) + '">'
+    urls.append(url + bug + '</a>')
+
+  return ", ".join(urls) + "\n"
 
 
 @issue_required
@@ -1736,7 +1753,9 @@ def show(request, form=None):
 
   issue.description = cgi.escape(issue.description)
   issue.description = urlize(issue.description)
-  expression = re.compile(r"(?<=BUG=)(\s*\d+\s*(?:,\s*\d+\s*)*)", re.IGNORECASE)
+  re_string = r"(?<=BUG=)"
+  re_string += "(\s*(?:[a-z0-9-]+:)?\d+\s*(?:,\s*(?:[a-z0-9-]+:)?\d+\s*)*)"
+  expression = re.compile(re_string, re.IGNORECASE)
   issue.description = re.sub(expression, replace_bug, issue.description)
   issue.description = issue.description.replace('\n', '<br/>')
   return respond(request, 'issue.html',
