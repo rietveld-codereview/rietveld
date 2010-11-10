@@ -66,6 +66,32 @@ login_warned = false;
     {%endif%}
     </span>
   </div>
+  <div style="margin-top: .4em">
+    <table>
+      <tr>
+        <td>Left:</td>
+        <td>
+          <select name="left" id="left">
+            <option value="-1">Base</option>
+            {%for p in patchsets%}
+            <option value="{{p.key.id}}" {%ifequal ps_left.key.id p.key.id%}selected="selected"{%endifequal%}>Patch Set {{forloop.counter}}: {{p.message}}</option>
+            {%endfor%}
+          </select>
+        </td>
+        <td rowspan="2"><input type="button" value="Go" onclick="M_navigateDiff({{issue.key.id}}, '{{patch_right.filename}}')"></td>
+      </tr>
+      <tr>
+        <td>Right:</td>
+        <td>
+          <select name="right" id="right">
+            {%for p in patchsets%}
+            <option value="{{p.key.id}}" {%ifequal ps_right.key.id p.key.id%}selected="selected"{%endifequal%}>Patch Set {{forloop.counter}}: {{p.message}}</option>
+            {%endfor%}
+          </select>
+        </td>
+      </tr>
+    </table>
+  </div>
   <div style="margin-top: .4em;" class="help">
     Use n/p to move between diff chunks;
     N/P to move between comments.

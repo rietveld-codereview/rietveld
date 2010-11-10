@@ -1985,6 +1985,8 @@ def diff(request):
   patchset = request.patchset
   patch = request.patch
 
+  patchsets = list(request.issue.patchset_set.order('created'))
+
   context = _get_context_for_user(request)
   column_width = _get_column_width_for_user(request)
   if patch.is_binary:
@@ -2005,6 +2007,7 @@ def diff(request):
                   'context': context,
                   'context_values': models.CONTEXT_CHOICES,
                   'column_width': column_width,
+                  'patchsets': patchsets,
                   })
 
 
@@ -2190,6 +2193,8 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
   if isinstance(data, HttpResponseNotFound):
     return data
 
+  patchsets = list(request.issue.patchset_set.order('created'))
+
   _add_next_prev(data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
                  {'issue': request.issue,
@@ -2202,6 +2207,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
                   'context': context,
                   'context_values': models.CONTEXT_CHOICES,
                   'column_width': column_width,
+                  'patchsets': patchsets,
                   })
 
 
