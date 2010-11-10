@@ -1309,13 +1309,12 @@ class MercurialVCS(VersionControlSystem):
     # the working copy
     if out[0].startswith('%s: ' % relpath):
       out = out[1:]
-    if len(out) > 1:
+    status, _ = out[0].split(' ', 1)
+    if len(out) > 1 and status == "A":
       # Moved/copied => considered as modified, use old filename to
       # retrieve base contents
       oldrelpath = out[1].strip()
       status = "M"
-    else:
-      status, _ = out[0].split(' ', 1)
     if ":" in self.base_rev:
       base_rev = self.base_rev.split(":", 1)[0]
     else:
