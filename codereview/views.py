@@ -1925,8 +1925,9 @@ def download_patch(request):
 def api_issue(request):
   """/api/<issue> - Gets an issues's data as a JSON object."""
   issue, patchsets, response = _get_patchset_info(request, None)
-  json_text = simplejson.dumps({
+  values = {
     'owner': library.get_nickname(issue.owner, True, request),
+    'owner_email': issue.owner.email(),
     'modified': str(issue.modified),
     'created': str(issue.created),
     'closed': issue.closed,
@@ -1936,8 +1937,20 @@ def api_issue(request):
     'description': issue.description,
     'subject': issue.subject,
     'issue': issue.key().id(),
-  })
-  return HttpResponse(json_text, content_type='application/json')
+    'base_url': issue.base,
+  }
+  if ('messages' in request.GET and
+      request.GET.get('messages').lower() == 'true'):
+    values['messages'] = [
+      {
+        'sender': m.sender,
+        'recipients': m.recipients,
+        'date': str(m.date),
+        'text': m.text,
+      }
+      for m in models.Message.gql('WHERE ANCESTOR IS :1', issue)
+    ]
+  return HttpResponse(simplejson.dumps(values), content_type='application/json')
 
 
 def _get_context_for_user(request):
