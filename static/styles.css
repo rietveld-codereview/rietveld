@@ -809,6 +809,8 @@ ul.errorlist li {
   height: 350px;
   opacity: 1;
   -moz-opacity: 1;
+  -khtml-opacity: 1;
+  filter: alpha(opacity=100);
 }
 
 .build-result {

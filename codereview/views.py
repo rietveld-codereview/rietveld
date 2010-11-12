@@ -941,24 +941,6 @@ def _optimize_draft_counts(issues):
       issue._num_drafts = 0
 
 
-def overview(request):
-  """/overview - show a list of reviewable issues for a set of users."""
-  emails = request.GET.getlist('email')
-  if len(emails) > 20:  # Arbitrary limit just to avoid excessive hammering.
-    raise Http404
-
-  users = []
-  for email in emails:
-    review_issues = list(db.GqlQuery(
-        'SELECT * FROM Issue '
-        'WHERE closed = FALSE AND reviewers = :1 ORDER BY modified DESC',
-        email))
-    _optimize_draft_counts(review_issues)
-    users.append({'email': email, 'review_issues': review_issues})
-
-  return respond(request, 'overview.html', {'users': users})
-
-
 @login_required
 def mine(request):
   """/mine - Show a list of issues created by the current user."""
@@ -2096,8 +2078,9 @@ def download_patch(request):
 def api_issue(request):
   """/api/<issue> - Gets an issues's data as a JSON object."""
   issue, patchsets, response = _get_patchset_info(request, None)
-  json_text = simplejson.dumps({
+  values = {
     'owner': library.get_nickname(issue.owner, True, request),
+    'owner_email': issue.owner.email(),
     'modified': str(issue.modified),
     'created': str(issue.created),
     'closed': issue.closed,
@@ -2107,8 +2090,20 @@ def api_issue(request):
     'description': issue.description,
     'subject': issue.subject,
     'issue': issue.key().id(),
-  })
-  return HttpResponse(json_text, content_type='application/json')
+    'base_url': issue.base,
+  }
+  if ('messages' in request.GET and
+      request.GET.get('messages').lower() == 'true'):
+    values['messages'] = [
+      {
+        'sender': m.sender,
+        'recipients': m.recipients,
+        'date': str(m.date),
+        'text': m.text,
+      }
+      for m in models.Message.gql('WHERE ANCESTOR IS :1', issue)
+    ]
+  return HttpResponse(simplejson.dumps(values), content_type='application/json')
 
 
 def _get_context_for_user(request):
@@ -2156,6 +2151,8 @@ def diff(request):
   patchset = request.patchset
   patch = request.patch
 
+  patchsets = list(request.issue.patchset_set.order('created'))
+
   context = _get_context_for_user(request)
   column_width = _get_column_width_for_user(request)
   if patch.filename.startswith('webkit/api'):
@@ -2178,6 +2175,7 @@ def diff(request):
                   'context': context,
                   'context_values': models.CONTEXT_CHOICES,
                   'column_width': column_width,
+                  'patchsets': patchsets,
                   })
 
 
@@ -2363,6 +2361,8 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
   if isinstance(data, HttpResponseNotFound):
     return data
 
+  patchsets = list(request.issue.patchset_set.order('created'))
+
   _add_next_prev(data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
                  {'issue': request.issue,
@@ -2375,6 +2375,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
                   'context': context,
                   'context_values': models.CONTEXT_CHOICES,
                   'column_width': column_width,
+                  'patchsets': patchsets,
                   })
 
 

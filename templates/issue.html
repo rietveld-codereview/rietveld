@@ -20,8 +20,8 @@
      href="javascript:M_toggleSection('issue-description')"
      class="toggled-section opentriangle">
     Description</a></h3>
-  <div id="issue-description" style="margin-left:15px;font-family:monospace;font-size:12px;">
-    {{issue.description|safe}}
+  <div id="issue-description" style="margin-left:15px;">
+    <pre>{{issue.description|wordwrap:80|urlizetrunc:80}}</pre>
   </div>
 {%endif%}
 
