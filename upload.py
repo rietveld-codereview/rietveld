@@ -556,7 +556,7 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
 
   # If this is the dev_appserver, use fake authentication.
   host = (host_override or server).lower()
-  if host == "localhost" or host.startswith("localhost:"):
+  if re.match(r'(http://)?localhost([:/]|$)', host):
     if email is None:
       email = "test@example.com"
       logging.info("Using debug user %s.  Override with --email" % email)
@@ -1309,13 +1309,12 @@ class MercurialVCS(VersionControlSystem):
     # the working copy
     if out[0].startswith('%s: ' % relpath):
       out = out[1:]
-    if len(out) > 1:
+    status, _ = out[0].split(' ', 1)
+    if len(out) > 1 and status == "A":
       # Moved/copied => considered as modified, use old filename to
       # retrieve base contents
       oldrelpath = out[1].strip()
       status = "M"
-    else:
-      status, _ = out[0].split(' ', 1)
     if ":" in self.base_rev:
       base_rev = self.base_rev.split(":", 1)[0]
     else:

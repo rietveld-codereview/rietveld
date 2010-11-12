@@ -59,7 +59,7 @@ def gql(cls, clause, *args, **kwds):
   return query
 
 
-### Issues, PatchSets, Messages, Contents, Patches, Comments, and Buckets ###
+### Issues, PatchSets, Patches, Contents, Comments, Messages ###
 
 
 class Issue(db.Model):

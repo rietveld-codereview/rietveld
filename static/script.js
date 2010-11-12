@@ -1493,6 +1493,19 @@ function M_toggleAllInlineComments() {
   }
 }
 
+/**
+ * Navigates to the diff with the requested versions on left/right
+ */
+function M_navigateDiff(issueid, filename) {
+  var left = document.getElementById('left').value;
+  var right = document.getElementById('right').value;
+  if (left == '-1') {
+    window.location.href = base_url + issueid + '/diff/' + right + '/' + filename;
+  } else {
+    window.location.href = base_url + issueid + '/diff2/' + left + ':' + right + '/' + filename;
+  }
+}
+
 // File view keyboard navigation
 
 /**
