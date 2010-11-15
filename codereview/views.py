@@ -1938,6 +1938,7 @@ def api_issue(request):
     'subject': issue.subject,
     'issue': issue.key().id(),
     'base_url': issue.base,
+    'private': issue.private,
   }
   if ('messages' in request.GET and
       request.GET.get('messages').lower() == 'true'):
