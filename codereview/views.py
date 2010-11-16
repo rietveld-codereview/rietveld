@@ -1281,7 +1281,7 @@ def upload_build_result(request):
   patchset = request.patchset
   existing = False
   for index, build_result in enumerate(patchset.build_results):
-    if build_result.split(UploadBuildResult.SEPARATOR)[0] == platform_id:
+    if build_result.split(UploadBuildResult.SEPARATOR, 2)[0] == platform_id:
       existing = True
       break
   if existing:
@@ -1679,7 +1679,7 @@ def _get_patchset_info(request, patchset_id):
       patchset.build_results_list = []
       for build_result in patchset.build_results:
         (platform_id, status, details_url) = build_result.split(
-            UploadBuildResult.SEPARATOR)
+            UploadBuildResult.SEPARATOR, 2)
         patchset.build_results_list.append({'platform_id': platform_id,
                                             'status': status,
                                             'details_url': details_url})
@@ -2123,7 +2123,17 @@ def api_patchset(request):
     'created': str(patchset.created),
     'modified': str(patchset.modified),
     'num_comments': patchset.num_comments,
+    'build_results': [],
   }
+  for build_result in patchset.build_results:
+    platform_id, status, details_url = build_result.split(
+        UploadBuildResult.SEPARATOR, 2)
+    values['build_results'].append(
+        {
+          'platform_id': platform_id,
+          'status': status,
+          'details_url': details_url,
+        })
   return HttpResponse(simplejson.dumps(values),
       content_type='application/json')
 
