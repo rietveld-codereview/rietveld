@@ -48,6 +48,11 @@ def BREAKPOINT():
   p.set_trace()
 
 
+# Custom Django configuration.
+os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
+from django.conf import settings
+settings._target = None
+
 # Import various parts of Django.
 import django.core.handlers.wsgi
 import django.core.signals
