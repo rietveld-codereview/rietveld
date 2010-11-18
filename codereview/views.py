@@ -1488,7 +1488,7 @@ def _get_patchset_info(request, patchset_id):
   issue = request.issue
   patchsets = list(issue.patchset_set.order('created'))
   response = None
-  if not patchset_id:
+  if not patchset_id and patchsets:
     patchset_id = patchsets[-1].key().id()
 
   if request.user:
