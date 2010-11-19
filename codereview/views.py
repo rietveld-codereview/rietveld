@@ -2237,7 +2237,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
 
   patchsets = list(request.issue.patchset_set.order('created'))
 
-  _add_next_prev(data["ps_right"], data["patch_right"])
+  _add_next_prev2(data["ps_left"], data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
                  {'issue': request.issue,
                   'ps_left': data["ps_left"],
@@ -2325,6 +2325,44 @@ def _add_next_prev(patchset, patch):
   patch.next = next_patch
   patch.prev_with_comment = last_patch_with_comment
   patch.next_with_comment = next_patch_with_comment
+
+
+def _add_next_prev2(ps_left, ps_right, patch_right):
+  """Helper to add .next and .prev attributes to a patch object."""
+  patch_right.prev = patch_right.next = None
+  patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
+                                  ps_right))
+  ps_right.patches = patches  # Required to render the jump to select.
+
+  last_patch = None
+  next_patch = None
+  last_patch_with_comment = None
+  next_patch_with_comment = None
+
+  found_patch = False
+  for p in patches:
+      if p.filename == patch_right.filename:
+        found_patch = True
+        continue
+      if not found_patch:
+          last_patch = p
+          if (p.num_comments > 0 or p.num_drafts > 0 or
+              ps_left.key().id() in p.delta):
+            last_patch_with_comment = p
+      else:
+          if next_patch is None:
+            next_patch = p
+          if (p.num_comments > 0 or p.num_drafts > 0 or
+              ps_left.key().id() in p.delta):
+            next_patch_with_comment = p
+            # safe to stop scanning now because the next with out a comment
+            # will already have been filled in by some earlier patch
+            break
+
+  patch_right.prev = last_patch
+  patch_right.next = next_patch
+  patch_right.prev_with_comment = last_patch_with_comment
+  patch_right.next_with_comment = next_patch_with_comment
 
 
 @post_required

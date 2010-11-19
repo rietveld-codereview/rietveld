@@ -153,8 +153,14 @@ For some reason,
 {%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.filename%}
 doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {%endcomment%}
+{%if patch_right.prev_with_comment%}
+<a id="prevFileWithComment"
+   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.prev_with_comment.filename%}{%urlappend_view_settings%}">
+&laquo; {{patch_right.prev_with_comment.filename}}</a> ('K'){%else%}
+<span class="disabled">&laquo; no previous file with change/comment</span>{%endif%}
+|
 {%if patch_right.prev%}
-<a id="prevFile" 
+<a id="prevFile"
    href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.prev.filename%}{%urlappend_view_settings%}">
 &laquo; {{patch_right.prev.filename}}</a> ('k'){%else%}
 <span class="disabled">&laquo; no previous file</span>{%endif%}
@@ -165,6 +171,12 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 {{patch_right.next.filename}} &raquo;</a> ('j'){%else%}
 <span class="disabled">no next file &raquo;</span>{%endif%}
 |
+{%if patch_right.next_with_comment%}
+<a id="nextFileWithComment"
+   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.next_with_comment.filename%}{%urlappend_view_settings%}">
+{{patch_right.next_with_comment.filename}} &raquo;</a> ('J'){%else%}
+<span class="disabled">no next file with change/comment &raquo;</span>{%endif%}
+<br/>
 <a href="javascript:if (intraLineDiff) intraLineDiff.toggle()">
 Toggle Intra-line Diffs</a> ('i')
 |
