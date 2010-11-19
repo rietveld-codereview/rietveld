@@ -2283,7 +2283,7 @@ def _add_next_prev(patchset, patch):
   comment_query = models.Comment.all()
   comment_query.ancestor(patchset)
   account = models.Account.current_user_account
-  
+
   # Get all comment counts with one query rather than one per patch.
   comments_by_patch = {}
   drafts_by_patch = {}
@@ -2346,13 +2346,13 @@ def _add_next_prev2(ps_left, ps_right, patch_right):
         continue
       if not found_patch:
           last_patch = p
-          if (p.num_comments > 0 or p.num_drafts > 0 or
+          if ((p.num_comments > 0 or p.num_drafts > 0) and
               ps_left.key().id() in p.delta):
             last_patch_with_comment = p
       else:
           if next_patch is None:
             next_patch = p
-          if (p.num_comments > 0 or p.num_drafts > 0 or
+          if ((p.num_comments > 0 or p.num_drafts > 0) and
               ps_left.key().id() in p.delta):
             next_patch_with_comment = p
             # safe to stop scanning now because the next with out a comment
