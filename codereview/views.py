@@ -2793,7 +2793,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
         if attempts >= 3:
           raise
     if attempts:
-      logging.error("Retried sending email %s times", attempts)
+      logging.warning("Retried sending email %s times", attempts)
 
   return msg
 
