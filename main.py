@@ -49,6 +49,10 @@ def BREAKPOINT():
 
 
 # Custom Django configuration.
+# NOTE: For obscure reasons, this must be repeated here as well as in
+# appengine_config.py.  Without the duplication, we get tracebacks
+# from Django complaining about ROOT_URLCONF when the first hit to a
+# fresh process is /_ah/stats, and the second is /.
 os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
 from django.conf import settings
 settings._target = None
