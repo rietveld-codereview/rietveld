@@ -1450,6 +1450,10 @@ def _calculate_delta(patch, patchset_id, patchsets):
           if text != patch.text:
             delta.append(other.key().id())
           break
+      else:
+        # We could not find the file in the previous patchset. It must
+        # be new wrt that patchset.
+        delta.append(other.key().id())
     else:
       # other (patchset) is too big to hold all the patches inside itself, so
       # we need to go to the datastore.  Use the index to see if there's a
@@ -1465,6 +1469,10 @@ def _calculate_delta(patch, patchset_id, patchsets):
         if op.text != patch.text:
           delta.append(other.key().id())
           break
+      else:
+        # We could not find the file in the previous patchset. It must
+        # be new wrt that patchset.
+        delta.append(other.key().id())
 
   return delta
 
@@ -2181,27 +2189,25 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   # Now find the corresponding patch in ps_left
   patch_left = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
                                 ps_left, patch_right.filename).get()
-  if patch_left is None:
-    return HttpResponseNotFound(
-        "Patch set %s doesn't have a patch with filename %s" %
-        (ps_left_id, patch_right.filename))
-  try:
-    new_content_left = patch_left.get_patched_content()
-    new_content_right = patch_right.get_patched_content()
-  except engine.FetchError, err:
-    return HttpResponseNotFound(str(err))
+  if patch_left:
+    try:
+      new_content_left = patch_left.get_patched_content()
+      new_content_right = patch_right.get_patched_content()
+    except engine.FetchError, err:
+      return HttpResponseNotFound(str(err))
+    rows = engine.RenderDiff2TableRows(request,
+                                       new_content_left.lines, patch_left,
+                                       new_content_right.lines, patch_right,
+                                       context=context,
+                                       colwidth=column_width)
+    rows = list(rows)
+    if rows and rows[-1] is None:
+      del rows[-1]
+  else:
+    request.patch = patch_right
+    rows = _get_diff_table_rows(request, patch_right, context, column_width)
 
-  rows = engine.RenderDiff2TableRows(request,
-                                     new_content_left.lines, patch_left,
-                                     new_content_right.lines, patch_right,
-                                     context=context,
-                                     colwidth=column_width)
-  rows = list(rows)
-  if rows and rows[-1] is None:
-    del rows[-1]
-
-  return dict(new_content_left=new_content_left, patch_left=patch_left,
-              new_conent_right=new_content_right, patch_right=patch_right,
+  return dict(patch_left=patch_left, patch_right=patch_right,
               ps_left=ps_left, ps_right=ps_right, rows=rows)
 
 

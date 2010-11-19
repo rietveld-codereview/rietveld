@@ -22,10 +22,15 @@ login_warned = false;
     <input type="hidden" name="lineno" value="XXX">
     <input type="hidden" name="side" value="XXX">
     <input type="hidden" name="issue" value="{{issue.key.id}}">
+    {%if patch_left%}
     <input type="hidden" name="ps_left" value="{{ps_left.key.id}}">
     <input type="hidden" name="patch_left" value="{{patch_left.key.id}}">
     <input type="hidden" name="ps_right" value="{{ps_right.key.id}}">
     <input type="hidden" name="patch_right" value="{{patch_right.key.id}}">
+    {%else%}
+    <input type="hidden" name="patchset" value="{{ps_right.key.id}}">
+    <input type="hidden" name="patch" value="{{patch_right.key.id}}">
+    {%endif%}
     <textarea name="text" cols="60" rows="5"></textarea><br>
     <input type="submit" name="save" value="Save"
            onclick="return M_submitInlineComment(this.form);">
@@ -109,18 +114,20 @@ login_warned = false;
   <div>
     Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{ps_right.key.id}});">
       {% for jump_patch in ps_right.patches %}
-        <option value="{{jump_patch.key.id}}"
-         {%ifequal jump_patch.key.id patch.key.id%} selected="selected"{%endifequal%}>{{jump_patch.filename}}</option>
+        <option value="{{jump_patch.filename}}"
+         {%ifequal jump_patch.key.id patch_right.key.id%} selected="selected"{%endifequal%}>{{jump_patch.filename}}</option>
       {% endfor %}
     </select>
   </div>
   <div>
+    {%if patch_left%}
     Left: <a href="{%url codereview.views.diff issue.key.id,ps_left.key.id,patch_left.filename%}{%urlappend_view_settings%}"
              title="View regular side by side diff">Side by side diff</a>
           |
           <a href="{%url codereview.views.download_patch issue.key.id,ps_left.key.id,patch_left.key.id%}"
              title="Download patch for {{patch_left.filename}}">Download</a>
           <br/>
+    {%endif%}
     Right: <a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.filename%}{%urlappend_view_settings%}"
               title="View regular side by side diff">Side by side diff</a>
            |
@@ -183,7 +190,11 @@ Toggle Intra-line Diffs</a> ('i')
 {%if patch_right.is_binary %}
 <tr>
 <td style="width:50%" align="center">
+  {%if patch_left%}
   <img src="{%url codereview.views.image issue.key.id,ps_left.key.id,patch_left.key.id,1%}" />
+  {%else%}
+  <img src="{%url codereview.views.image issue.key.id,ps_right.key.id,patch_right.key.id,0%}" />
+  {%endif%}
 </td>
 <td style="width:50%" align="center">
   <img src="{%url codereview.views.image issue.key.id,ps_right.key.id,patch_right.key.id,1%}" />
@@ -225,7 +236,11 @@ Toggle Comments</a> ('s')
 
 </div>
 <script language="JavaScript" type="text/javascript"><!--
+{%if patch_left%}
 var old_snapshot = "new";
+{%else%}
+var old_snapshot = "old";
+{%endif%}
 var new_snapshot = "new";
 var intraLineDiff = new M_IntraLineDiff();
 var hookState = new M_HookState(window);
