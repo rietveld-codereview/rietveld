@@ -2873,12 +2873,16 @@ function M_showPopUp(obj, id) {
  * @param {Integer} issue The issue id.
  * @param {Integer} patchset The patchset id.
  * @param {Boolean} unified If True show unified diff else s-b-s view.
+ * @param {String} opt_part The type of diff to jump to -- diff/diff2/patch
  */
-function M_jumpToPatch(select, issue, patchset, unified) {
-  if (unified) {
-    part = 'patch';
-  } else {
-    part = 'diff';
+function M_jumpToPatch(select, issue, patchset, unified, opt_part) {
+  var part = opt_part;
+  if (!part) {
+    if (unified) {
+      part = 'patch';
+    } else {
+      part = 'diff';
+    }
   }
   var url = base_url+issue+'/'+part+'/'+patchset+'/'+select.value;
   var context = document.getElementById('id_context');
