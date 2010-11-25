@@ -2074,10 +2074,11 @@ function M_keyDownCommon(evt, handler, input_handler) {
       // Only allow the help to be turned on with the ? key.
       if (helpDisplayed || keyName == 'Shift-/') {
         helpDisplayed = !helpDisplayed;
+        help.style.display = helpDisplayed ? "" : "none";
+        return false;
       }
-      help.style.display = helpDisplayed ? "" : "none";
     }
-    return false;
+    return true;
   }
   return handler(keyName);
 }
