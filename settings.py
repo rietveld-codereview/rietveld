@@ -27,8 +27,6 @@ INSTALLED_APPS = (
     'codereview',
 )
 MIDDLEWARE_CLASSES = (
-    #'firepython.middleware.FirePythonDjango',
-    'google.appengine.ext.appstats.recording.AppStatsDjangoMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.http.ConditionalGetMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',

@@ -34,14 +34,14 @@ The license is Apache 2.0.  See the file COPYING.
 Running
 -------
 
-*** NEW *** YOU MUST INSTALL DJANGO 1.0 FIRST BEFORE RUNNING LOCALLY.
+*** NOTE *** YOU MUST INSTALL DJANGO 1.1 FIRST BEFORE RUNNING LOCALLY.
 
-Download Django-1.0.4.tar.gz from http://www.djangoproject.com (or
-whatever the latest micro-version of 1.0 is) and follow the
+Download Django-1.1.2.tar.gz from http://www.djangoproject.com (or
+whatever the latest micro-version of 1.1 is) and follow the
 installation instructions.  Typically:
 
-  tar xzf Django-1.0.4.tar.gz
-  cd Django-1.0.4
+  tar xzf Django-1.1.2.tar.gz
+  cd Django-1.1.2
   sudo python setup.py install
 
 NOTE: On the Mac, if you are using the Google App Engine Launcher, the
