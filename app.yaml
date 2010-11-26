@@ -34,7 +34,7 @@ handlers:
   script: $PYTHON_LIB/google/appengine/ext/remote_api/handler.py
   login: admin
 
-- url: /stats.*
+- url: /_ah/stats.*
   script: $PYTHON_LIB/google/appengine/ext/appstats/ui.py
 
 - url: .*
@@ -43,7 +43,7 @@ handlers:
 admin_console:
   pages:
   - name: Appstats
-    url: /stats
+    url: /_ah/stats
 
 inbound_services:
 - xmpp_message
