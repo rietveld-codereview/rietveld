@@ -1929,10 +1929,8 @@ def download_patch(request):
   return HttpResponse(request.patch.text, content_type='text/plain')
 
 
-@issue_required
-def api_issue(request):
-  """/api/<issue> - Gets issue's data as a JSON-encoded dictionary."""
-  issue = request.issue
+def _issue_as_dict(issue, messages, request=None):
+  """Converts an issue into a dict."""
   values = {
     'owner': library.get_nickname(issue.owner, True, request),
     'owner_email': issue.owner.email(),
@@ -1948,8 +1946,7 @@ def api_issue(request):
     'base_url': issue.base,
     'private': issue.private,
   }
-  if ('messages' in request.GET and
-      request.GET.get('messages').lower() == 'true'):
+  if messages:
     values['messages'] = [
       {
         'sender': m.sender,
@@ -1959,6 +1956,31 @@ def api_issue(request):
       }
       for m in models.Message.gql('WHERE ANCESTOR IS :1', issue)
     ]
+  return values
+
+
+def _patchset_as_dict(patchset, request=None):
+  """Converts a patchset into a dict."""
+  values = {
+    'patchset': patchset.key().id(),
+    'issue': patchset.issue.key().id(),
+    'owner': library.get_nickname(patchset.issue.owner, True, request),
+    'owner_email': patchset.issue.owner.email(),
+    'message': patchset.message,
+    'url': patchset.url,
+    'created': str(patchset.created),
+    'modified': str(patchset.modified),
+    'num_comments': patchset.num_comments,
+  }
+  return values
+
+
+@issue_required
+def api_issue(request):
+  """/api/<issue> - Gets issue's data as a JSON-encoded dictionary."""
+  messages = ('messages' in request.GET and
+      request.GET.get('messages').lower() == 'true')
+  values = _issue_as_dict(request.issue, messages, request)
   return HttpResponse(simplejson.dumps(values), content_type='application/json')
 
 
@@ -1967,21 +1989,8 @@ def api_patchset(request):
   """/api/<issue>/<patchset> - Gets an issue's patchset data as a JSON-encoded
   dictionary.
   """
-  issue = request.issue
-  patchset = request.patchset
-  values = {
-    'patchset': patchset.key().id(),
-    'issue': patchset.issue.key().id(),
-    'owner': library.get_nickname(issue.owner, True, request),
-    'owner_email': issue.owner.email(),
-    'message': patchset.message,
-    'url': patchset.url,
-    'created': str(patchset.created),
-    'modified': str(patchset.modified),
-    'num_comments': patchset.num_comments,
-  }
-  return HttpResponse(simplejson.dumps(values),
-      content_type='application/json')
+  values = _patchset_as_dict(request.patchset, request)
+  return HttpResponse(simplejson.dumps(values), content_type='application/json')
 
 
 def _get_context_for_user(request):
