@@ -32,6 +32,7 @@ urlpatterns = patterns(
     (r'^(\d+)/(show)?$', 'show'),
     (r'^(\d+)/add$', 'add'),
     (r'^(\d+)/edit$', 'edit'),
+    (r'^(\d+)/edit_flags$', 'edit_flags'),
     (r'^(\d+)/delete$', 'delete'),
     (r'^(\d+)/close$', 'close'),
     (r'^(\d+)/mail$', 'mailissue'),

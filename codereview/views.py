@@ -53,6 +53,7 @@ from django import forms
 from django.conf import settings as django_settings
 from django.http import HttpResponse, HttpResponseRedirect
 from django.http import HttpResponseForbidden, HttpResponseNotFound
+from django.http import HttpResponseBadRequest
 from django.shortcuts import render_to_response
 import django.template
 from django.template import RequestContext
@@ -206,6 +207,7 @@ class UploadForm(forms.Form):
   private = forms.BooleanField(required=False, initial=False)
   send_mail = forms.BooleanField(required=False)
   base_hashes = forms.CharField(required=False)
+  commit = forms.BooleanField(required=False)
 
   def clean_base(self):
     base = self.cleaned_data.get('base')
@@ -252,7 +254,7 @@ class UploadBuildResult(forms.Form):
   # Not specifying a status removes this build result
   status = forms.CharField(max_length=255, required=False)
   details_url = forms.URLField(max_length=2083, required=False)
-  
+
   SEPARATOR = '|'
   _VALID_STATUS = ['failure', 'pending', 'success', '']
 
@@ -276,6 +278,12 @@ class UploadBuildResult(forms.Form):
 class EditForm(IssueBaseForm):
 
   closed = forms.BooleanField(required=False)
+
+
+class EditFlagsForm(forms.Form):
+
+  last_patchset = forms.IntegerField(widget=forms.HiddenInput())
+  commit = forms.BooleanField(required=False)
 
 
 class EditLocalBaseForm(forms.Form):
@@ -1107,6 +1115,7 @@ def upload(request):
       if form.cleaned_data.get('content_upload'):
         # Extend the response: additional lines are the expected filenames.
         issue.local_base = True
+        issue.commit = form.cleaned_data.get('commit', False)
         issue.put()
 
         base_hashes = {}
@@ -1478,6 +1487,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   else:
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
+  issue.commit = False
   issue.put()
 
   if form.cleaned_data.get('send_mail'):
@@ -1873,6 +1883,27 @@ def edit(request):
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
+@post_required
+@issue_editor_required
+@xsrf_required
+def edit_flags(request):
+  """/<issue>/edit_flags - Edit issue's flags."""
+  form = EditFlagsForm(request.POST)
+  if not form.is_valid():
+    return HttpResponseBadRequest('Invalid POST arguments',
+        content_type='text/plain')
+  # TODO: Request keys only.
+  patchsets = list(request.issue.patchset_set.order('created'))
+  if (not patchsets or
+      form.cleaned_data['last_patchset'] != patchsets[-1].key().id()):
+    return HttpResponseForbidden('Can only modify flags on last patchset',
+        content_type='text/plain')
+  if 'commit' in form.cleaned_data:
+    request.issue.commit = form.cleaned_data['commit']
+    request.issue.put()
+  return HttpResponse('OK', content_type='text/plain')
+
+
 def _delete_cached_contents(patch_set):
   """Transactional helper for edit() to delete cached contents."""
   # TODO(guido): No need to do this in a transaction.
@@ -2125,6 +2156,7 @@ def _patchset_as_dict(patchset, request=None):
     'modified': str(patchset.modified),
     'num_comments': patchset.num_comments,
     'build_results': [],
+    'commit': patchset.commit,
   }
   for build_result in patchset.build_results:
     platform_id, status, details_url = build_result.split(

@@ -80,6 +80,7 @@ class Issue(db.Model):
   closed = db.BooleanProperty(default=False)
   private = db.BooleanProperty(default=False)
   n_comments = db.IntegerProperty()
+  commit = db.BooleanProperty(default=False)
 
   _is_starred = None
 

@@ -101,16 +101,25 @@
   {%if patchset.build_results_list%}
     <table style="background: transparent">
       <tr>
-	<td><i>Trybot&nbsp;results:</i></td>
-	{%for build_result in patchset.build_results_list%}
-	  <td><a class="build-result build-status-color-{{build_result.status}}"
-		 href="{{build_result.details_url}}"
+        <td><i>Trybot&nbsp;results:</i></td>
+        {%for build_result in patchset.build_results_list%}
+          <td><a class="build-result build-status-color-{{build_result.status}}"
+                 href="{{build_result.details_url}}"
                  title="{{build_result.status}}"
                  target="_blank">&nbsp;{{build_result.platform_id}}&nbsp;</a>
-	  </td>
-	{%endfor%}
-	<td width="100%"></td>
+          </td>
+        {%endfor%}
+        <td width="100%"></td>
       </tr>
     </table>
   {%endif%}
+  {%ifequal last_patchset.key.id patchset.key.id%}
+    <form id="commitform" name="commitform" method="post">
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+      <input type="hidden" name="last_patchset" value="{{last_patchset.key.id}}">
+      Commit: <input type="checkbox" id="commit" name="commit"
+        {%if issue.commit%}checked{%endif%} {%if request.user%}{%else%}disabled{%endif%}
+        onchange="M_editFlags('{{issue.key.id}}')" />
+    </form>
+  {%endifequal%}
 </div>
