@@ -1863,6 +1863,8 @@ def edit(request):
   issue.subject = cleaned_data['subject']
   issue.description = cleaned_data['description']
   issue.closed = cleaned_data['closed']
+  if issue.closed:
+    issue.commit = False
   issue.private = cleaned_data.get('private', False)
   base_changed = (issue.base != base)
   issue.base = base
@@ -1994,12 +1996,12 @@ def _patchset_delete(ps_delete, patches):
 
 @post_required
 @issue_editor_required
-# Don't want xsrf_required for Chromium because we use it from gcl and git-cl.
-#@xsrf_required
+@xsrf_required
 def close(request):
   """/<issue>/close - Close an issue."""
   issue = request.issue
   issue.closed = True
+  issue.commit = False
   if request.method == 'POST':
     new_description = request.POST.get('description')
     if new_description:
