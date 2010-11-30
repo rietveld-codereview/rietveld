@@ -118,7 +118,8 @@
       <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
       <input type="hidden" name="last_patchset" value="{{last_patchset.key.id}}">
       Commit: <input type="checkbox" id="commit" name="commit"
-        {%if issue.commit%}checked{%endif%} {%if request.user%}{%else%}disabled{%endif%}
+        {%if issue.commit%}checked{%endif%}
+        {%if not request.user or issue.closed%}disabled{%endif%}
         onchange="M_editFlags('{{issue.key.id}}')" />
     </form>
   {%endifequal%}
