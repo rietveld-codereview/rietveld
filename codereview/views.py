@@ -296,6 +296,8 @@ class PublishForm(forms.Form):
                             widget=forms.Textarea(attrs={'cols': 60}))
   message_only = forms.BooleanField(required=False,
                                     widget=forms.HiddenInput())
+  no_redirect = forms.BooleanField(required=False,
+                                   widget=forms.HiddenInput())
 
 
 class MiniPublishForm(forms.Form):
@@ -313,6 +315,8 @@ class MiniPublishForm(forms.Form):
                             widget=forms.Textarea(attrs={'cols': 60}))
   message_only = forms.BooleanField(required=False,
                                     widget=forms.HiddenInput())
+  no_redirect = forms.BooleanField(required=False,
+                                   widget=forms.HiddenInput())
 
 
 FORM_CONTEXT_VALUES = [(x, '%d lines' % x) for x in models.CONTEXT_CHOICES]
@@ -2618,6 +2622,8 @@ def publish(request):
 
   # There are now no comments here (modulo race conditions)
   models.Account.current_user_account.update_drafts(issue, 0)
+  if form.cleaned_data.get('no_redirect', False):
+    return HttpResponse('OK', content_type='text/plain')
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
