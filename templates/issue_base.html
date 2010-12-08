@@ -1,19 +1,23 @@
 {%extends "base.html"%}
 
 {%block mainmenu%}
+{%comment%}
   <a href="{%url codereview.views.index%}" class="active">Issues</a>
   <a href="{%url codereview.views.repos%}">Repositories</a>
+{%endcomment%}
 {%endblock%}
 
 
 {%block mainmenu2%}
   {%if user%}
+    {%comment%}
     {%if uploadpy_hint%}
       <a href="{%url codereview.views.use_uploadpy%}">Create Issue</a>
     {%else%}
       <a href="{%url codereview.views.new%}">Create Issue</a>
     {%endif%}
     |
+    {%endcomment%}
     <a href="{%url codereview.views.mine%}">My Issues</a>
     |
     <a href="{%url codereview.views.all%}">Recent Issues (open)</a>
