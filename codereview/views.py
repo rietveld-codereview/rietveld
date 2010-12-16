@@ -887,7 +887,8 @@ def all(request):
                           request,
                           query,
                           'all.html',
-                          extra_nav_parameters=nav_parameters)
+                          extra_nav_parameters=nav_parameters,
+                          extra_template_params=dict(closed=closed))
 
 
 def _optimize_draft_counts(issues):

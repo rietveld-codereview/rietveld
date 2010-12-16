@@ -11,7 +11,7 @@ document.onkeydown = M_dashboardKeyDown;
   
   <tr>
     <td colspan="9" class="header">
-      <h3>Issues Created by {%nickname email%} ({{my_issues|length}})</h3>
+      <h3>Created by {%nickname email%} ({{my_issues|length}})</h3>
     </td>
   </tr>
   {%if not my_issues%}
@@ -29,7 +29,7 @@ document.onkeydown = M_dashboardKeyDown;
 
   <tr>
     <td colspan="9" class="header">
-      <h3>Issues Reviewable by {%nickname email%} ({{review_issues|length}})</h3>
+      <h3>Reviewable by {%nickname email%} ({{review_issues|length}})</h3>
     </td>
   </tr>
   {%if not review_issues%}
@@ -48,7 +48,7 @@ document.onkeydown = M_dashboardKeyDown;
 
   <tr>
     <td colspan="9" class="header">
-      <h3>Issues Closed Recently ({{closed_issues|length}})</h3>
+      <h3>Closed Recently ({{closed_issues|length}})</h3>
     </td>
   </tr>
   {%if not closed_issues%}
