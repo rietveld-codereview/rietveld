@@ -66,7 +66,7 @@
         {%endfor%}
         </td>
         <td style="white-space: nowrap">{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
-        <td style="white-space: nowrap">{{patch.num_lines}} line{{patch.num_lines|pluralize}}</td>
+        <td style="white-space: nowrap">+{{patch.num_added}} line{{patch.num_added|pluralize}}, -{{patch.num_removed}} line{{patch.num_removed|pluralize}}</td>
         <td style="white-space: nowrap">
           {%if patch.num_comments or patch.num_drafts%}<b>{%endif%}
             {{patch.num_comments}} comment{{patch.num_comments|pluralize}}

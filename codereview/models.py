@@ -272,17 +272,29 @@ class Patch(db.Model):
       self._property_changes = self.text[match.end():].splitlines()
     return self._property_changes
 
-  _num_lines = None
+  _num_added = None
 
   @property
-  def num_lines(self):
-    """The number of lines in this patch.
+  def num_added(self):
+    """The number of line additions in this patch.
 
     The value is cached.
     """
-    if self._num_lines is None:
-      self._num_lines = len(self.lines)
-    return self._num_lines
+    if self._num_added is None:
+      self._num_added = self.count_startswith('+') - 1
+    return self._num_added
+
+  _num_removed = None
+
+  @property
+  def num_removed(self):
+    """The number of line removals in this patch.
+
+    The value is cached.
+    """
+    if self._num_removed is None:
+      self._num_removed = self.count_startswith('-') - 1
+    return self._num_removed
 
   _num_chunks = None
 
@@ -295,11 +307,7 @@ class Patch(db.Model):
     The value is cached.
     """
     if self._num_chunks is None:
-      num = 0
-      for line in self.lines:
-        if line.startswith('@@'):
-          num += 1
-      self._num_chunks = num
+      self._num_chunks = self.count_startswith('@@')
     return self._num_chunks
 
   _num_comments = None
@@ -334,6 +342,10 @@ class Patch(db.Model):
                     self, account.user)
         self._num_drafts = query.count()
     return self._num_drafts
+
+  def count_startswith(self, prefix):
+    """Returns the number of lines with the specified prefix."""
+    return len([l for l in self.lines if l.startswith(prefix)])
 
   def get_content(self):
     """Get self.content, or fetch it if necessary.
