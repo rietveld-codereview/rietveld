@@ -77,6 +77,7 @@ urlpatterns = patterns(
     (r'^_ah/mail/(.*)', 'incoming_mail'),
     (r'^xsrf_token$', 'xsrf_token'),
     (r'^static/upload.py$', 'customized_upload_py'),
+    (r'^search$', 'search'),
     )
 
 feed_dict = {
