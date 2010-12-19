@@ -98,7 +98,13 @@
             {%nicknames issue.cc%}
           </div>
           <div><b>Base URL:</b><br/>
+            {%if src_url%}
+              <a href="{{src_url}}" target="blank">
+            {%endif%}
             {{issue.base}}
+            {%if src_url%}
+              </a>
+            {%endif%}
           </div>
           <div><b>Visibility:</b><br/>
             {%if issue.private%}

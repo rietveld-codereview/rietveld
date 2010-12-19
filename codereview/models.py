@@ -521,6 +521,13 @@ class Branch(db.Model):
   owner = db.UserProperty(auto_current_user_add=True)
 
 
+class UrlMap(db.Model):
+  """Mapping between base url and source code viewer url."""
+
+  base_url_template = db.StringProperty(required=True)
+  source_code_url_template = db.StringProperty(required=True)
+
+
 ### Accounts ###
 
 

@@ -83,6 +83,7 @@ urlpatterns = patterns(
     (r'^lint/issue(\d+)_(\d+)', 'lint'),
     (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
     (r'^search$', 'search'),
+    (r'^conversions$', 'conversions'),
     )
 
 feed_dict = {
