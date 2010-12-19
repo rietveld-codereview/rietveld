@@ -441,6 +441,7 @@ class SearchForm(forms.Form):
                               widget=AccountInput(attrs={'size': 60}))
   base = forms.CharField(required=False, max_length=550)
   private = forms.NullBooleanField(required=False)
+  commit = forms.NullBooleanField(required=False)
 
 
 ### Exceptions ###
@@ -3355,6 +3356,8 @@ def search(request):
     q.filter('private = ', form.cleaned_data['private'])
   if form.cleaned_data.get('base'):
     q.filter('base = ', form.cleaned_data['base'])
+  if form.cleaned_data.get('commit') != None:
+    q.filter('commit = ', form.cleaned_data['commit'])
   # Update the cursor value in the result.
   if format == 'html':
     nav_params = dict(
