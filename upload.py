@@ -393,6 +393,11 @@ class AbstractRpcServer(object):
 ##           elif e.code >= 500 and e.code < 600:
 ##             # Server Error - try again.
 ##             continue
+          elif e.code == 301:
+            # Handle permanent redirect manually.
+            url = e.info()["location"]
+            url_loc = urlparse.urlparse(url)
+            self.host = '%s://%s' % (url_loc[0], url_loc[1])
           else:
             raise
     finally:

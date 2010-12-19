@@ -928,7 +928,8 @@ def all(request):
                           request,
                           query,
                           'all.html',
-                          extra_nav_parameters=nav_parameters)
+                          extra_nav_parameters=nav_parameters,
+                          extra_template_params=dict(closed=closed))
 
 
 def _optimize_draft_counts(issues):
@@ -1684,7 +1685,8 @@ def _get_patchset_info(request, patchset_id):
           # num_drafts first though since they depend on text.
           patch.num_chunks
           patch.num_drafts
-          patch.num_lines
+          patch.num_added
+          patch.num_removed
           patch.text = None
           patch._lines = None
           patch.parsed_deltas = []
@@ -2707,7 +2709,7 @@ def _get_affected_files(issue):
       files.append(file_str)
       # No point in loading patches if the patchset is too large for email.
       if modified_count < 100:
-        modified_count += patch.num_lines
+        modified_count += patch.num_added + patch.num_removed
 
     if modified_count < 100:
       diff = patchset.data
