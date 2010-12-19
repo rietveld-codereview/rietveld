@@ -1843,6 +1843,26 @@ def replace_bug(m):
   return ", ".join(urls) + "\n"
 
 
+def _map_base_url(base):
+  """Check if Base URL can be converted into a source code viewer URL."""
+  for rule in models.UrlMap.gql('ORDER BY base_url_template'):
+    base_template = r'^%s$' % rule.base_url_template
+    m = re.match(base_template, base)
+    if not m:
+      continue
+    try:
+      src_url = re.sub(base_template,
+                       rule.source_code_url_template,
+                       base)
+    except re.error, err:
+      logging.error('err: %s base: "%s" rule: "%s" => "%s"',
+                    err, base, rule.base_url_template,
+                    rule.source_code_url_template)
+      return None
+    return src_url
+  return None
+
+
 @issue_required
 def show(request, form=None):
   """/<issue> - Show an issue."""
@@ -1872,6 +1892,7 @@ def show(request, form=None):
   expression = re.compile(re_string, re.IGNORECASE)
   issue.description = re.sub(expression, replace_bug, issue.description)
   issue.description = issue.description.replace('\n', '<br/>')
+  src_url = _map_base_url(issue.base)
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
@@ -1879,6 +1900,7 @@ def show(request, form=None):
                   'num_patchsets': num_patchsets,
                   'first_patch': first_patch,
                   'has_draft_message': has_draft_message,
+                  'src_url': src_url,
                   })
 
 
@@ -3412,6 +3434,59 @@ def repos(request):
     branches.append(branch)
   return respond(request, 'repos.html', {'branches': branches})
 
+
+@login_required
+@xsrf_required
+def conversions(request):
+  """/conversions - Show and edit the list of base=>source code URL maps."""
+  rules = models.UrlMap.gql('ORDER BY base_url_template')
+  if request.method != 'POST':
+    return respond(request, 'conversions.html', {
+            'rules': rules})
+
+  if not request.user.email().endswith('@chromium.org'):
+    # TODO(vbendeb) this domain name should be a configuration item. Or maybe
+    # only admins should be allowed to modify the conversions table.
+    warning = 'You are not authorized to modify the conversions table.'
+    return respond(request, 'conversions.html', {
+        'warning': warning,
+        'rules': rules,
+        })
+
+  for key, value in request.POST.iteritems():
+    if key.startswith('del '):
+      del_key = key[4:]
+      um = models.UrlMap.gql('WHERE base_url_template = :1', del_key)
+      if not um:
+        logging.error('No map for %s found' % del_key)
+        continue
+      db.delete(um)
+  base_url = request.POST.get('base_url_template')
+  src_url = request.POST.get('source_code_url_template')
+  if base_url and src_url:
+    warning = ''
+    try:
+      re.compile(r'%s' % base_url)
+    except re.error, err:
+      warning = 'Regex error "%s"' % err
+    if not warning:
+      um = models.UrlMap.gql('WHERE base_url_template = :1', base_url)
+      if um.count():
+        warning = 'Attempt to add a duplicate Base Url'
+    if warning:
+      rules = models.UrlMap.gql('ORDER BY base_url_template')
+      return respond(request, 'conversions.html', {
+         'warning': warning,
+         'rules': rules,
+         'base_url': base_url,
+         'src_url': src_url
+         })
+
+    new_map = models.UrlMap(base_url_template=base_url,
+                            source_code_url_template=src_url)
+    logging.info(new_map)
+    new_map.put()
+  return HttpResponseRedirect(reverse(conversions))
 
 @login_required
 @xsrf_required
