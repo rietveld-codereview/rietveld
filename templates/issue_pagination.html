@@ -15,8 +15,8 @@
       <a class="novisit" href="{{prev}}">&lsaquo; Newer</a>
     {%endif%}
     <b>{{first}}{%if last%} - {{last}}{%endif%}</b>
-    {%if next%}<a class="novisit" href="{{next}}">Older &rsaquo;</a>
-    {%else%}<span style="color:gray">Older &rsaquo;</span>{%endif%}
+    {%if next%}<a class="novisit" href="{{next}}">{{nexttext}} &rsaquo;</a>
+    {%else%}<span style="color:gray">{{nexttext}} &rsaquo;</span>{%endif%}
   </div>
 
   <table id="queues">
@@ -38,8 +38,8 @@
       <a class="novisit" href="{{prev}}">&lsaquo; Newer</a>
     {%endif%}
     <b>{{first}}{%if last%} - {{last}}{%endif%}</b>
-    {%if next%}<a class="novisit" href="{{next}}">Older &rsaquo;</a>
-    {%else%}<span style="color:gray">Older &rsaquo;</span>{%endif%}
+    {%if next%}<a class="novisit" href="{{next}}">{{nexttext}} &rsaquo;</a>
+    {%else%}<span style="color:gray">{{nexttext}} &rsaquo;</span>{%endif%}
   </div>
 
 </div>

@@ -82,6 +82,7 @@ urlpatterns = patterns(
     (r'^static/upload.py$', 'customized_upload_py'),
     (r'^lint/issue(\d+)_(\d+)', 'lint'),
     (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
+    (r'^search$', 'search'),
     )
 
 feed_dict = {
