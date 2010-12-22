@@ -3444,7 +3444,8 @@ def conversions(request):
     return respond(request, 'conversions.html', {
             'rules': rules})
 
-  if not request.user.email().endswith('@chromium.org'):
+  if (not request.user.email().endswith('@chromium.org') and
+      not request.user.email().endswith('@google.com')):
     # TODO(vbendeb) this domain name should be a configuration item. Or maybe
     # only admins should be allowed to modify the conversions table.
     warning = 'You are not authorized to modify the conversions table.'
