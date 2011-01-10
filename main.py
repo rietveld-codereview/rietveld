@@ -84,11 +84,6 @@ django.core.signals.got_request_exception.disconnect(
 
 def real_main():
   """Main program."""
-  # Don't ask. :-(
-  if os.getenv('HTTP_HOST') == 'codereview.appspot.com':
-    if os.getenv('AUTH_DOMAIN') != 'gmail.com':
-      logging.warn('Fixing auth domain (%r)', os.getenv('AUTH_DOMAIN'))
-      os.environ['AUTH_DOMAIN'] = 'gmail.com'
   # Create a Django application for WSGI.
   application = django.core.handlers.wsgi.WSGIHandler()
   # Run the WSGI CGI handler with that application.
