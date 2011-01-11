@@ -777,8 +777,12 @@ def patch_filename_required(func):
       patch = models.Patch.get_by_id(int(patch_filename),
                                      parent=request.patchset)
     if patch is None:
-      return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
-                                  (request.patchset.key().id(), patch_filename))
+      return respond(request, 'diff_missing.html',
+                     {'issue': request.issue,
+                      'patchset': request.patchset,
+                      'patch': None,
+                      'patchsets': request.issue.patchset_set,
+                      'filename': patch_filename})
     patch.patchset = request.patchset
     request.patch = patch
     return func(request, *args, **kwds)
@@ -2292,7 +2296,7 @@ def _get_skipped_lines_response(rows, id_before, id_after, where, context):
 
 
 def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
-                    column_width):
+                    column_width, patch_filename=None):
   """Helper function that returns objects for diff2 views"""
   ps_left = models.PatchSet.get_by_id(int(ps_left_id), parent=request.issue)
   if ps_left is None:
@@ -2304,31 +2308,48 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
     return HttpResponseNotFound('No patch set exists with that id (%s)' %
                                 ps_right_id)
   ps_right.issue = request.issue
-  patch_right = models.Patch.get_by_id(int(patch_id), parent=ps_right)
-  if patch_right is None:
-    return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
-                                (ps_right_id, patch_id))
-  patch_right.patchset = ps_right
+  if patch_id is not None:
+    patch_right = models.Patch.get_by_id(int(patch_id), parent=ps_right)
+  else:
+    patch_right = None
+  if patch_right is not None:
+    patch_right.patchset = ps_right
+    if patch_filename is None:
+      patch_filename = patch_right.filename
   # Now find the corresponding patch in ps_left
   patch_left = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                                ps_left, patch_right.filename).get()
+                                ps_left, patch_filename).get()
+
   if patch_left:
     try:
       new_content_left = patch_left.get_patched_content()
+    except engine.FetchError, err:
+      return HttpResponseNotFound(str(err))
+    lines_left = new_content_left.lines
+  elif patch_right:
+    lines_left = patch_right.get_content().lines
+  else:
+    lines_left = []
+
+  if patch_right:
+    try:
       new_content_right = patch_right.get_patched_content()
     except engine.FetchError, err:
       return HttpResponseNotFound(str(err))
-    rows = engine.RenderDiff2TableRows(request,
-                                       new_content_left.lines, patch_left,
-                                       new_content_right.lines, patch_right,
-                                       context=context,
-                                       colwidth=column_width)
-    rows = list(rows)
-    if rows and rows[-1] is None:
-      del rows[-1]
+    lines_right = new_content_right.lines
+  elif patch_left:
+    lines_right = patch_left.get_content().lines
   else:
-    request.patch = patch_right
-    rows = _get_diff_table_rows(request, patch_right, context, column_width)
+    lines_right = []
+
+  rows = engine.RenderDiff2TableRows(request,
+                                     lines_left, patch_left,
+                                     lines_right, patch_right,
+                                     context=context,
+                                     colwidth=column_width)
+  rows = list(rows)
+  if rows and rows[-1] is None:
+    del rows[-1]
 
   return dict(patch_left=patch_left, patch_right=patch_right,
               ps_left=ps_left, ps_right=ps_right, rows=rows)
@@ -2349,18 +2370,21 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
 
   if patch_right:
     patch_id = patch_right.key().id()
-  else:
+  elif patch_filename.isdigit():
     # Perhaps it's an ID that's passed in, based on the old URL scheme.
-    patch_id = patch_filename
+    patch_id = int(patch_filename)
+  else:  # patch doesn't exist in this patchset
+    patch_id = None
 
   data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
-                         column_width)
+                         column_width, patch_filename)
   if isinstance(data, HttpResponseNotFound):
     return data
 
   patchsets = list(request.issue.patchset_set.order('created'))
 
-  _add_next_prev2(data["ps_left"], data["ps_right"], data["patch_right"])
+  if data["patch_right"]:
+    _add_next_prev2(data["ps_left"], data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
                  {'issue': request.issue,
                   'ps_left': data["ps_left"],
@@ -2373,6 +2397,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
                   'context_values': models.CONTEXT_CHOICES,
                   'column_width': column_width,
                   'patchsets': patchsets,
+                  'filename': patch_filename,
                   })
 
 

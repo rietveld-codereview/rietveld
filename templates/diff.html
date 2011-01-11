@@ -99,6 +99,7 @@ login_warned = false;
       {% endfor %}
     </select>
   </div>
+  {%if patch%}
   <div style="margin-top: 5px;">
     <a href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}{%urlappend_view_settings%}">
     View unified diff</a>
@@ -108,6 +109,7 @@ login_warned = false;
       Download patch
     </a>
   </div>
+  {%endif%}
   {%if user%}
   <div style="margin-top: 5px;">
     <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail

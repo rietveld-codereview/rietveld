@@ -455,6 +455,14 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
       msg_new = ''
     yield '', ('<tr><td class="info">%s</td>'
                '<td class="info">%s</td></tr>' % (msg_old, msg_new))
+  elif old_patch is None or new_patch is None:
+    msg_old = msg_new = ''
+    if old_patch is None:
+      msg_old = '(no file at all)'
+    if new_patch is None:
+      msg_new = '(no file at all)'
+    yield '', ('<tr><td class="info">%s</td>'
+               '<td class="info">%s</td></tr>' % (msg_old, msg_new))
   elif old_patch != new_patch and old_patch.lines == new_patch.lines:
     yield '', ('<tr><td class="info" colspan="2">'
                '(Both sides are equal)</td></tr>')
