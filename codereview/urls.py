@@ -76,6 +76,7 @@ urlpatterns = patterns(
     (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
     (r'^_ah/mail/(.*)', 'incoming_mail'),
     (r'^xsrf_token$', 'xsrf_token'),
+    # patching upload.py on the fly
     (r'^static/upload.py$', 'customized_upload_py'),
     (r'^search$', 'search'),
     )

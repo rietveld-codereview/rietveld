@@ -1120,7 +1120,7 @@ def use_uploadpy(request):
       models.Account.current_user_account.uploadpy_hint = False
       models.Account.current_user_account.put()
     if 'download' in request.POST:
-      url = django_settings.MEDIA_URL + 'upload.py'
+      url = reverse(customized_upload_py)
     else:
       url = reverse(new)
     return HttpResponseRedirect(url)
@@ -3510,7 +3510,8 @@ def xsrf_token(request):
 
 
 def customized_upload_py(request):
-  """/static/upload.py - Return upload.py with appropiate auth type.
+  """/static/upload.py - Return patched upload.py with appropiate auth type and
+  default review server setting.
 
   This is used to let the user download a customized upload.py script
   for hosted Rietveld instances.
