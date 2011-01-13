@@ -3522,7 +3522,8 @@ def customized_upload_py(request):
 
   # When served from a Google Apps instance, the account namespace needs to be
   # switched to "Google Apps only".
-  if os.environ['AUTH_DOMAIN'] != 'gmail.com':
+  if ('AUTH_DOMAIN' in request.META
+      and request.META['AUTH_DOMAIN'] != 'gmail.com'):
     source = source.replace('AUTH_ACCOUNT_TYPE = "GOOGLE"',
                             'AUTH_ACCOUNT_TYPE = "HOSTED"')
 
@@ -3530,9 +3531,9 @@ def customized_upload_py(request):
   # current hostname. This might give weird results when using versioned appspot
   # URLs (eg. 1.latest.codereview.appspot.com), but this should only affect
   # testing.
-  if os.environ['HTTP_HOST'] != 'codereview.appspot.com':
-    review_server = os.environ['HTTP_HOST']
-    if 'HTTPS' in os.environ and os.environ['HTTPS'] == 'on':
+  if request.META['HTTP_HOST'] != 'codereview.appspot.com':
+    review_server = request.META['HTTP_HOST']
+    if 'HTTPS' in request.META and request.META['HTTPS'] == 'on':
       review_server = 'https://' + review_server
     source = source.replace('DEFAULT_REVIEW_SERVER = "codereview.appspot.com"',
                             'DEFAULT_REVIEW_SERVER = "%s"' % review_server)
