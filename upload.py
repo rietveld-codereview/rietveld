@@ -471,7 +471,7 @@ group.add_option("-v", "--verbose", action="store_const", const=2,
                  help="Print info level logs.")
 group.add_option("--noisy", action="store_const", const=3,
                  dest="verbose", help="Print all logs.")
-group.add_option("--print_diffs", dest="print_diffs", default=False,
+group.add_option("--print_diffs", dest="print_diffs", action="store_true",
                  help="Print full diffs.")
 # Review server
 group = parser.add_option_group("Review server options")
