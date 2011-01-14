@@ -3533,7 +3533,7 @@ def customized_upload_py(request):
   # testing.
   if request.META['HTTP_HOST'] != 'codereview.appspot.com':
     review_server = request.META['HTTP_HOST']
-    if 'HTTPS' in request.META and request.META['HTTPS'] == 'on':
+    if request.is_secure():
       review_server = 'https://' + review_server
     source = source.replace('DEFAULT_REVIEW_SERVER = "codereview.appspot.com"',
                             'DEFAULT_REVIEW_SERVER = "%s"' % review_server)
