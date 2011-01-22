@@ -2267,6 +2267,7 @@ def _issue_as_dict(issue, messages, request=None):
     'issue': issue.key().id(),
     'base_url': issue.base,
     'private': issue.private,
+    'commit': issue.commit,
   }
   if messages:
     values['messages'] = [
@@ -2294,7 +2295,6 @@ def _patchset_as_dict(patchset, request=None):
     'modified': str(patchset.modified),
     'num_comments': patchset.num_comments,
     'build_results': [],
-    'commit': patchset.commit,
   }
   for build_result in patchset.build_results:
     platform_id, status, details_url = build_result.split(
