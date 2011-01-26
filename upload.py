@@ -905,9 +905,6 @@ class SubversionVCS(VersionControlSystem):
       if line.startswith("URL: "):
         url = line.split()[1]
         scheme, netloc, path, params, query, fragment = urlparse.urlparse(url)
-        username, netloc = urllib.splituser(netloc)
-        if username:
-          logging.info("Removed username from base URL")
         guess = ""
         if netloc == "svn.python.org" and scheme == "svn+ssh":
           path = "projects" + path
@@ -2030,6 +2027,12 @@ def RealMain(argv, data=None):
                             options.account_type)
   form_fields = [("subject", message)]
   if base:
+    b = urlparse.urlparse(base)
+    username, netloc = urllib.splituser(b.netloc)
+    if username:
+      logging.info("Removed username from base URL")
+      base = urlparse.urlunparse((b.scheme, netloc, b.path, b.params,
+                                  b.query, b.fragment))
     form_fields.append(("base", base))
   if options.issue:
     form_fields.append(("issue", str(options.issue)))
