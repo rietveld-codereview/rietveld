@@ -2021,7 +2021,7 @@ def patch_helper(request, nav_type='patch'):
   request.patch.nav_type = nav_type
   parsed_lines = patching.ParsePatchToLines(request.patch.lines)
   if parsed_lines is None:
-    return HttpResponseNotFound('Can\'t parse the patch')
+    return HttpResponseNotFound('Can\'t parse the patch to lines')
   rows = engine.RenderUnifiedTableRows(request, parsed_lines)
   return respond(request, 'patch.html',
                  {'patch': request.patch,
@@ -2190,7 +2190,7 @@ def _get_diff_table_rows(request, patch, context, column_width):
   """
   chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
-    raise engine.FetchError('Can\'t parse the patch')
+    raise engine.FetchError('Can\'t parse the patch to chunks')
 
   # Possible engine.FetchErrors are handled in diff() and diff_skipped_lines().
   content = request.patch.get_content()
