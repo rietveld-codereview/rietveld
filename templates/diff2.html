@@ -83,7 +83,7 @@ login_warned = false;
             {%endfor%}
           </select>
         </td>
-        <td rowspan="2"><input type="button" value="Go" onclick="M_navigateDiff({{issue.key.id}}, '{{patch_right.filename}}')"></td>
+        <td rowspan="2"><input type="button" value="Go" onclick="M_navigateDiff({{issue.key.id}}, '{{filename}}')"></td>
       </tr>
       <tr>
         <td>Right:</td>
@@ -128,11 +128,13 @@ login_warned = false;
              title="Download patch for {{patch_left.filename}}">Download</a>
           <br/>
     {%endif%}
+    {%if patch_right%}
     Right: <a href="{%url codereview.views.diff issue.key.id,ps_right.key.id,patch_right.filename%}{%urlappend_view_settings%}"
               title="View regular side by side diff">Side by side diff</a>
            |
            <a href="{%url codereview.views.download_patch issue.key.id,ps_right.key.id,patch_right.key.id%}"
              title="Download patch for {{patch_right.filename}}">Download</a>
+    {%endif%}
     {%if user%}
   </div>
   <div style="margin-top: 5px;">
@@ -258,7 +260,9 @@ var intraLineDiff = new M_IntraLineDiff();
 var hookState = new M_HookState(window);
 hookState.updateHooks();
 
+{%if patch_right%}
 var skipped_lines_url = ('{%url diff2_skipped_lines_prefix issue.key.id,ps_left.key.id,ps_right.key.id,patch_id%}');
+{%endif%}
 // -->
 </script>
 

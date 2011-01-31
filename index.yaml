@@ -36,15 +36,9 @@ indexes:
 
 - kind: Comment
   ancestor: yes
-
-- kind: Comment
-  ancestor: yes
   properties:
   - name: author
   - name: draft
-
-- kind: Content
-  ancestor: yes
 
 - kind: Issue
   properties:
@@ -114,21 +108,12 @@ indexes:
   - name: issue
   - name: date
 
-- kind: Message
-  ancestor: yes
-
 - kind: Patch
   properties:
   - name: patchset
   - name: filename
 
-- kind: Patch
-  ancestor: yes
-
 - kind: PatchSet
   properties:
   - name: issue
   - name: created
-
-- kind: PatchSet
-  ancestor: yes

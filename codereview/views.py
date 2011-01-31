@@ -818,8 +818,12 @@ def patch_filename_required(func):
       patch = models.Patch.get_by_id(int(patch_filename),
                                      parent=request.patchset)
     if patch is None:
-      return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
-                                  (request.patchset.key().id(), patch_filename))
+      return respond(request, 'diff_missing.html',
+                     {'issue': request.issue,
+                      'patchset': request.patchset,
+                      'patch': None,
+                      'patchsets': request.issue.patchset_set,
+                      'filename': patch_filename})
     patch.patchset = request.patchset
     request.patch = patch
     return func(request, *args, **kwds)
@@ -1162,7 +1166,7 @@ def use_uploadpy(request):
       models.Account.current_user_account.uploadpy_hint = False
       models.Account.current_user_account.put()
     if 'download' in request.POST:
-      url = django_settings.MEDIA_URL + 'upload.py'
+      url = reverse(customized_upload_py)
     else:
       url = reverse(new)
     return HttpResponseRedirect(url)
@@ -2225,7 +2229,7 @@ def patch_helper(request, nav_type='patch'):
   request.patch.nav_type = nav_type
   parsed_lines = patching.ParsePatchToLines(request.patch.lines)
   if parsed_lines is None:
-    return HttpResponseNotFound('Can\'t parse the patch')
+    return HttpResponseNotFound('Can\'t parse the patch to lines')
   rows = engine.RenderUnifiedTableRows(request, parsed_lines)
   return respond(request, 'patch.html',
                  {'patch': request.patch,
@@ -2295,6 +2299,7 @@ def _patchset_as_dict(patchset, request=None):
     'modified': str(patchset.modified),
     'num_comments': patchset.num_comments,
     'build_results': [],
+    'files': {},
   }
   for build_result in patchset.build_results:
     platform_id, status, details_url = build_result.split(
@@ -2305,6 +2310,19 @@ def _patchset_as_dict(patchset, request=None):
           'status': status,
           'details_url': details_url,
         })
+  for patch in models.Patch.gql("WHERE patchset = :1", patchset):
+    # num_comments and num_drafts are left out for performance reason:
+    # they cause a datastore query on first access. They could be added
+    # optionally if the need ever arises.
+    values['files'][patch.filename] = {
+        'id': patch.key().id(),
+        'is_binary': patch.is_binary,
+        'no_base_file': patch.no_base_file,
+        'num_added': patch.num_added,
+        'num_chunks': patch.num_chunks,
+        'num_removed': patch.num_removed,
+        'status': patch.status,
+    }
   return values
 
 
@@ -2407,7 +2425,7 @@ def _get_diff_table_rows(request, patch, context, column_width):
   """
   chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
-    raise engine.FetchError('Can\'t parse the patch')
+    raise engine.FetchError('Can\'t parse the patch to chunks')
 
   # Possible engine.FetchErrors are handled in diff() and diff_skipped_lines().
   content = request.patch.get_content()
@@ -2513,7 +2531,7 @@ def _get_skipped_lines_response(rows, id_before, id_after, where, context):
 
 
 def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
-                    column_width):
+                    column_width, patch_filename=None):
   """Helper function that returns objects for diff2 views"""
   ps_left = models.PatchSet.get_by_id(int(ps_left_id), parent=request.issue)
   if ps_left is None:
@@ -2525,31 +2543,48 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
     return HttpResponseNotFound('No patch set exists with that id (%s)' %
                                 ps_right_id)
   ps_right.issue = request.issue
-  patch_right = models.Patch.get_by_id(int(patch_id), parent=ps_right)
-  if patch_right is None:
-    return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
-                                (ps_right_id, patch_id))
-  patch_right.patchset = ps_right
+  if patch_id is not None:
+    patch_right = models.Patch.get_by_id(int(patch_id), parent=ps_right)
+  else:
+    patch_right = None
+  if patch_right is not None:
+    patch_right.patchset = ps_right
+    if patch_filename is None:
+      patch_filename = patch_right.filename
   # Now find the corresponding patch in ps_left
   patch_left = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                                ps_left, patch_right.filename).get()
+                                ps_left, patch_filename).get()
+
   if patch_left:
     try:
       new_content_left = patch_left.get_patched_content()
+    except engine.FetchError, err:
+      return HttpResponseNotFound(str(err))
+    lines_left = new_content_left.lines
+  elif patch_right:
+    lines_left = patch_right.get_content().lines
+  else:
+    lines_left = []
+
+  if patch_right:
+    try:
       new_content_right = patch_right.get_patched_content()
     except engine.FetchError, err:
       return HttpResponseNotFound(str(err))
-    rows = engine.RenderDiff2TableRows(request,
-                                       new_content_left.lines, patch_left,
-                                       new_content_right.lines, patch_right,
-                                       context=context,
-                                       colwidth=column_width)
-    rows = list(rows)
-    if rows and rows[-1] is None:
-      del rows[-1]
+    lines_right = new_content_right.lines
+  elif patch_left:
+    lines_right = patch_left.get_content().lines
   else:
-    request.patch = patch_right
-    rows = _get_diff_table_rows(request, patch_right, context, column_width)
+    lines_right = []
+
+  rows = engine.RenderDiff2TableRows(request,
+                                     lines_left, patch_left,
+                                     lines_right, patch_right,
+                                     context=context,
+                                     colwidth=column_width)
+  rows = list(rows)
+  if rows and rows[-1] is None:
+    del rows[-1]
 
   return dict(patch_left=patch_left, patch_right=patch_right,
               ps_left=ps_left, ps_right=ps_right, rows=rows)
@@ -2570,18 +2605,21 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
 
   if patch_right:
     patch_id = patch_right.key().id()
-  else:
+  elif patch_filename.isdigit():
     # Perhaps it's an ID that's passed in, based on the old URL scheme.
-    patch_id = patch_filename
+    patch_id = int(patch_filename)
+  else:  # patch doesn't exist in this patchset
+    patch_id = None
 
   data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
-                         column_width)
+                         column_width, patch_filename)
   if isinstance(data, HttpResponseNotFound):
     return data
 
   patchsets = list(request.issue.patchset_set.order('created'))
 
-  _add_next_prev2(data["ps_left"], data["ps_right"], data["patch_right"])
+  if data["patch_right"]:
+    _add_next_prev2(data["ps_left"], data["ps_right"], data["patch_right"])
   return respond(request, 'diff2.html',
                  {'issue': request.issue,
                   'ps_left': data["ps_left"],
@@ -2594,6 +2632,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
                   'context_values': models.CONTEXT_CHOICES,
                   'column_width': column_width,
                   'patchsets': patchsets,
+                  'filename': patch_filename,
                   })
 
 
@@ -3861,7 +3900,8 @@ def xsrf_token(request):
 
 
 def customized_upload_py(request):
-  """/static/upload.py - Return upload.py with appropiate auth type.
+  """/static/upload.py - Return patched upload.py with appropiate auth type and
+  default review server setting.
 
   This is used to let the user download a customized upload.py script
   for hosted Rietveld instances.
@@ -3872,7 +3912,8 @@ def customized_upload_py(request):
 
   # When served from a Google Apps instance, the account namespace needs to be
   # switched to "Google Apps only".
-  if os.environ['AUTH_DOMAIN'] != 'gmail.com':
+  if ('AUTH_DOMAIN' in request.META
+      and request.META['AUTH_DOMAIN'] != 'gmail.com'):
     source = source.replace('AUTH_ACCOUNT_TYPE = "GOOGLE"',
                             'AUTH_ACCOUNT_TYPE = "HOSTED"')
 
@@ -3880,9 +3921,9 @@ def customized_upload_py(request):
   # current hostname. This might give weird results when using versioned appspot
   # URLs (eg. 1.latest.codereview.appspot.com), but this should only affect
   # testing.
-  if os.environ['HTTP_HOST'] != 'codereview.appspot.com':
-    review_server = os.environ['HTTP_HOST']
-    if 'HTTPS' in os.environ and os.environ['HTTPS'] == 'on':
+  if request.META['HTTP_HOST'] != 'codereview.appspot.com':
+    review_server = request.META['HTTP_HOST']
+    if request.is_secure():
       review_server = 'https://' + review_server
     source = source.replace('DEFAULT_REVIEW_SERVER = "codereview.appspot.com"',
                             'DEFAULT_REVIEW_SERVER = "%s"' % review_server)

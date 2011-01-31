@@ -471,7 +471,7 @@ group.add_option("-v", "--verbose", action="store_const", const=2,
                  help="Print info level logs.")
 group.add_option("--noisy", action="store_const", const=3,
                  dest="verbose", help="Print all logs.")
-group.add_option("--print_diffs", dest="print_diffs", default=False,
+group.add_option("--print_diffs", dest="print_diffs", action="store_true",
                  help="Print full diffs.")
 # Review server
 group = parser.add_option_group("Review server options")
@@ -905,9 +905,6 @@ class SubversionVCS(VersionControlSystem):
       if line.startswith("URL: "):
         url = line.split()[1]
         scheme, netloc, path, params, query, fragment = urlparse.urlparse(url)
-        username, netloc = urllib.splituser(netloc)
-        if username:
-          logging.info("Removed username from base URL")
         guess = ""
         if netloc == "svn.python.org" and scheme == "svn+ssh":
           path = "projects" + path
@@ -2030,6 +2027,12 @@ def RealMain(argv, data=None):
                             options.account_type)
   form_fields = [("subject", message)]
   if base:
+    b = urlparse.urlparse(base)
+    username, netloc = urllib.splituser(b.netloc)
+    if username:
+      logging.info("Removed username from base URL")
+      base = urlparse.urlunparse((b.scheme, netloc, b.path, b.params,
+                                  b.query, b.fragment))
     form_fields.append(("base", base))
   if options.issue:
     form_fields.append(("issue", str(options.issue)))
