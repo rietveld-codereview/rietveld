@@ -512,7 +512,7 @@ def _clean_int(value, default, min_value=None, max_value=None):
 def _can_view_issue(user, issue):
   if user is None:
     return not issue.private
-  user_email = db.Email(user.email())
+  user_email = db.Email(user.email().lower())
   return (not issue.private
           or issue.owner == user
           or user_email in issue.cc
@@ -1071,7 +1071,7 @@ def _show_user(request):
   review_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1 '
-      'ORDER BY modified DESC', user.email())
+      'ORDER BY modified DESC', user.email().lower())
       if issue.owner != user and _can_view_issue(request.user, issue)]
   closed_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
