@@ -1064,8 +1064,12 @@ class SubversionVCS(VersionControlSystem):
         # File does not exist in the requested revision.
         # Reset mimetype, it contains an error message.
         mimetype = ""
+      else:
+        mimetype = mimetype.strip()
       get_base = False
-      is_binary = bool(mimetype) and not mimetype.startswith("text/")
+      is_binary = (bool(mimetype) and
+        not mimetype.startswith("text/") and
+        not mimetype in TEXT_MIMETYPES)
       if status[0] == " ":
         # Empty base content just to force an upload.
         base_content = ""
