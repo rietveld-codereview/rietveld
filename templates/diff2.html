@@ -83,7 +83,7 @@ login_warned = false;
             {%endfor%}
           </select>
         </td>
-        <td rowspan="2"><input type="button" value="Go" onclick="M_navigateDiff({{issue.key.id}}, '{{filename}}')"></td>
+        <td rowspan="2"><input type="button" value="Go" onclick="M_navigateDiff({{issue.key.id}}, '{{filename|escapejs}}')"></td>
       </tr>
       <tr>
         <td>Right:</td>

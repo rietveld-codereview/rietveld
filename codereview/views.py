@@ -553,7 +553,7 @@ def _clean_int(value, default, min_value=None, max_value=None):
 def _can_view_issue(user, issue):
   if user is None:
     return not issue.private
-  user_email = db.Email(user.email())
+  user_email = db.Email(user.email().lower())
   return (not issue.private
           or issue.owner == user
           or user_email in issue.cc
@@ -728,7 +728,7 @@ def user_key_required(func):
       if not account:
         logging.info("account not found for nickname %s" % user_key)
         return HttpResponseNotFound('No user found with that key (%s)' %
-                                    user_key)
+                                    urllib.quote(user_key))
       request.user_to_show = account.user
     return func(request, *args, **kwds)
 
@@ -1112,7 +1112,7 @@ def _show_user(request):
   review_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = FALSE AND reviewers = :1 '
-      'ORDER BY modified DESC', user.email())
+      'ORDER BY modified DESC', user.email().lower())
       if issue.owner != user and _can_view_issue(request.user, issue)]
   cc_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
