@@ -1,5 +1,5 @@
 application: codereview
-version: 54
+version: 55
 runtime: python
 api_version: 1
 
@@ -26,13 +26,6 @@ handlers:
 - url: /static
   static_dir: static
 
-- url: /remote_api
-  script: $PYTHON_LIB/google/appengine/ext/remote_api/handler.py
-  login: admin
-
-- url: /_ah/stats.*
-  script: $PYTHON_LIB/google/appengine/ext/appstats/ui.py
-
 - url: .*
   script: main.py
 
@@ -44,3 +37,7 @@ admin_console:
 inbound_services:
 - xmpp_message
 - mail
+
+builtins:
+- remote_api: on
+- appstats: on
