@@ -32,16 +32,6 @@ handlers:
   static_dir: static
 #  secure: always
 
-- url: /remote_api
-  script: $PYTHON_LIB/google/appengine/ext/remote_api/handler.py
-  login: admin
-#  secure: always
-
-- url: /_ah/stats.*
-  script: $PYTHON_LIB/google/appengine/ext/appstats/ui.py
-  login: required
-#  secure: always
-
 - url: .*
   script: main.py
 #  secure: always
@@ -54,3 +44,7 @@ admin_console:
 inbound_services:
 - xmpp_message
 - mail
+
+builtins:
+- remote_api: on
+- appstats: on

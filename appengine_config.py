@@ -31,7 +31,7 @@ def appstats_normalize_path(path):
 
 # Declare the Django version we need.
 from google.appengine.dist import use_library
-use_library('django', '1.1')
+use_library('django', '1.2')
 
 # Fail early if we can't import Django 1.x.  Log identifying information.
 import django
