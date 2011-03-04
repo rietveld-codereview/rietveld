@@ -1116,7 +1116,8 @@ def _show_user(request):
       if issue.owner != user and _can_view_issue(request.user, issue)]
   cc_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND cc = :1 ORDER BY modified DESC', user.email())
+      'WHERE closed = FALSE AND cc = :1 '
+      'ORDER BY modified DESC', user.email())
       if issue.owner != user and _can_view_issue(request.user, issue)]
   closed_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
