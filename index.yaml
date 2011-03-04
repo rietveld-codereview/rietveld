@@ -79,6 +79,13 @@ indexes:
 
 - kind: Issue
   properties:
+  - name: cc
+  - name: closed
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
   - name: owner
   - name: modified
     direction: desc

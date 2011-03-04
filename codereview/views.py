@@ -1079,7 +1079,12 @@ def _show_user(request):
       'ORDER BY modified DESC',
       datetime.datetime.now() - datetime.timedelta(days=7), user)
       if _can_view_issue(request.user, issue)]
-  all_issues = my_issues + review_issues + closed_issues
+  cc_issues = [issue for issue in db.GqlQuery(
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND cc = :1 '
+      'ORDER BY modified DESC', user.email())
+      if issue.owner != user and _can_view_issue(request.user, issue)]
+  all_issues = my_issues + review_issues + closed_issues + cc_issues
   _load_users_for_issues(all_issues)
   _optimize_draft_counts(all_issues)
   return respond(request, 'user.html',
@@ -1087,6 +1092,7 @@ def _show_user(request):
                   'my_issues': my_issues,
                   'review_issues': review_issues,
                   'closed_issues': closed_issues,
+                  'cc_issues': cc_issues,
                   })
 
 
