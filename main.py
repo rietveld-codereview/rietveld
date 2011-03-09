@@ -36,6 +36,9 @@ import appengine_config
 # AppEngine imports.
 from google.appengine.ext.webapp import util
 
+# Import webapp.template.  This makes most Django setup issues go away.
+from google.appengine.ext.webapp import template
+
 
 # Helper to enter the debugger.  This passes in __stdin__ and
 # __stdout__, because stdin and stdout are connected to the request
@@ -47,15 +50,6 @@ def BREAKPOINT():
   p = pdb.Pdb(None, sys.__stdin__, sys.__stdout__)
   p.set_trace()
 
-
-# Custom Django configuration.
-# NOTE: For obscure reasons, this must be repeated here as well as in
-# appengine_config.py.  Without the duplication, we get tracebacks
-# from Django complaining about ROOT_URLCONF when the first hit to a
-# fresh process is /_ah/stats, and the second is /.
-os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
-from django.conf import settings
-settings._target = None
 
 # Import various parts of Django.
 import django.core.handlers.wsgi
