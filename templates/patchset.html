@@ -47,7 +47,7 @@
       <tr name="patch">
         <td class="first" width="14"><img src="{{media_url}}closedtriangle.gif" 
     style="visibility: hidden;" width="12" height="9" /></td>
-        <td>{%if patch.status%}{{patch.status}}{%endif%}</td>
+        <td style="white-space: nowrap">{%if patch.status%}{{patch.status}}{%endif%}</td>
         <td>
           <a class="noul"
              href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}">

@@ -25,6 +25,7 @@ Supported version control systems:
   Mercurial
   Subversion
   Perforce
+  CVS
 
 It is important for Git/Mercurial users to specify a tree/node/branch to diff
 against by using the '--rev' option.
@@ -89,6 +90,7 @@ VCS_GIT = "Git"
 VCS_MERCURIAL = "Mercurial"
 VCS_SUBVERSION = "Subversion"
 VCS_PERFORCE = "Perforce"
+VCS_CVS = "CVS"
 VCS_UNKNOWN = "Unknown"
 
 # whitelist for non-binary filetypes which do not start with "text/"
@@ -105,6 +107,7 @@ VCS_ABBREVIATIONS = {
   VCS_PERFORCE.lower(): VCS_PERFORCE,
   "p4": VCS_PERFORCE,
   VCS_GIT.lower(): VCS_GIT,
+  VCS_CVS.lower(): VCS_CVS,
 }
 
 # The result of parsing Subversion's [auto-props] setting.
@@ -1263,6 +1266,71 @@ class GitVCS(VersionControlSystem):
     return (base_content, new_content, is_binary, status)
 
 
+class CVSVCS(VersionControlSystem):
+  """Implementation of the VersionControlSystem interface for CVS."""
+
+  def __init__(self, options):
+    super(CVSVCS, self).__init__(options)
+
+  def GetOriginalContent_(self, filename):
+    RunShell(["cvs", "up", filename], silent_ok=True)
+    # TODO need detect file content encoding
+    content = open(filename).read()
+    return content.replace("\r\n", "\n")
+
+  def GetBaseFile(self, filename):
+    base_content = None
+    new_content = None
+    is_binary = False
+    status = "A"
+
+    output, retcode = RunShellWithReturnCode(["cvs", "status", filename])
+    if retcode:
+      ErrorExit("Got error status from 'cvs status %s'" % filename)
+
+    if output.find("Status: Locally Modified") != -1:
+      status = "M"
+      temp_filename = "%s.tmp123" % filename
+      os.rename(filename, temp_filename)
+      base_content = self.GetOriginalContent_(filename)
+      os.rename(temp_filename, filename)
+    elif output.find("Status: Locally Added"):
+      status = "A"
+      base_content = ""
+    elif output.find("Status: Needs Checkout"):
+      status = "D"
+      base_content = self.GetOriginalContent_(filename)
+
+    return (base_content, new_content, is_binary, status)
+
+  def GenerateDiff(self, extra_args):
+    cmd = ["cvs", "diff", "-u", "-N"]
+    if self.options.revision:
+      cmd += ["-r", self.options.revision]
+
+    cmd.extend(extra_args)
+    data, retcode = RunShellWithReturnCode(cmd)
+    count = 0
+    if retcode == 0:
+      for line in data.splitlines():
+        if line.startswith("Index:"):
+          count += 1
+          logging.info(line)
+
+    if not count:
+      ErrorExit("No valid patches found in output from cvs diff")
+
+    return data
+
+  def GetUnknownFiles(self):
+    status = RunShell(["cvs", "diff"],
+                    silent_ok=True)
+    unknown_files = []
+    for line in status.split("\n"):
+      if line and line[0] == "?":
+        unknown_files.append(line)
+    return unknown_files
+
 class MercurialVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Mercurial."""
 
@@ -1759,7 +1827,8 @@ def GuessVCSName(options):
 
   Returns:
     A pair (vcs, output).  vcs is a string indicating which VCS was detected
-    and is one of VCS_GIT, VCS_MERCURIAL, VCS_SUBVERSION, or VCS_UNKNOWN.
+    and is one of VCS_GIT, VCS_MERCURIAL, VCS_SUBVERSION, VCS_PERFORCE,
+    VCS_CVS, or VCS_UNKNOWN.
     Since local perforce repositories can't be easily detected, this method
     will only guess VCS_PERFORCE if any perforce options have been specified.
     output is a string containing any interesting output from the vcs
@@ -1794,6 +1863,15 @@ def GuessVCSName(options):
       return (VCS_GIT, None)
   except OSError, (errno, message):
     if errno != 2:  # ENOENT -- they don't have git installed.
+      raise
+
+  # detect CVS repos use `cvs status && $? == 0` rules
+  try:
+    out, returncode = RunShellWithReturnCode(["cvs", "status"])
+    if returncode == 0:
+      return (VCS_CVS, None)
+  except OSError, (errno, message):
+    if error != 2:
       raise
 
   return (VCS_UNKNOWN, None)
@@ -1832,6 +1910,8 @@ def GuessVCS(options):
     return PerforceVCS(options)
   elif vcs == VCS_GIT:
     return GitVCS(options)
+  elif vcs == VCS_CVS:
+    return CVSVCS(options)
 
   ErrorExit(("Could not guess version control system. "
              "Are you in a working copy directory?"))
