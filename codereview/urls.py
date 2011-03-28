@@ -53,6 +53,7 @@ urlpatterns = patterns(
     (r'^(\d+)/upload_content/(\d+)/(\d+)$', 'upload_content'),
     (r'^(\d+)/upload_patch/(\d+)$', 'upload_patch'),
     (r'^(\d+)/description$', 'description'),
+    (r'^(\d+)/fields', 'fields'),
     (r'^(\d+)/star$', 'star'),
     (r'^(\d+)/unstar$', 'unstar'),
     (r'^(\d+)/draft_message$', 'draft_message'),

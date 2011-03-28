@@ -1509,30 +1509,34 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
 
 def _get_emails(form, label):
   """Helper to return the list of reviewers, or None for error."""
-  emails = []
   raw_emails = form.cleaned_data.get(label)
   if raw_emails:
-    for email in raw_emails.split(','):
-      email = email.strip()
-      if email:
-        try:
-          if '@' not in email:
-            account = models.Account.get_account_for_nickname(email)
-            if account is None:
-              raise db.BadValueError('Unknown user: %s' % email)
-            db_email = db.Email(account.user.email().lower())
-          elif email.count('@') != 1:
+    return _get_emails_from_raw(raw_emails.split(','), form=form)
+
+def _get_emails_from_raw(raw_emails, form=None):
+  emails = []
+  for email in raw_emails:
+    email = email.strip()
+    if email:
+      try:
+        if '@' not in email:
+          account = models.Account.get_account_for_nickname(email)
+          if account is None:
+            raise db.BadValueError('Unknown user: %s' % email)
+          db_email = db.Email(account.user.email().lower())
+        elif email.count('@') != 1:
+          raise db.BadValueError('Invalid email address: %s' % email)
+        else:
+          head, tail = email.split('@')
+          if '.' not in tail:
             raise db.BadValueError('Invalid email address: %s' % email)
-          else:
-            head, tail = email.split('@')
-            if '.' not in tail:
-              raise db.BadValueError('Invalid email address: %s' % email)
-            db_email = db.Email(email.lower())
-        except db.BadValueError, err:
+          db_email = db.Email(email.lower())
+      except db.BadValueError, err:
+        if form:
           form.errors[label] = [unicode(err)]
-          return None
-        if db_email not in emails:
-          emails.append(db_email)
+        return None
+      if db_email not in emails:
+        emails.append(db_email)
   return emails
 
 
@@ -1998,6 +2002,43 @@ def description(request):
       return HttpResponse('Login required', status=401)
   issue = request.issue
   issue.description = request.POST.get('description')
+  issue.put()
+  _notify_issue(request, issue, 'Changed')
+  return HttpResponse('')
+
+
+@issue_required
+@upload_required
+def fields(request):
+  """/<issue>/fields - Gets/Sets fields on the issue.
+
+  Used by upload.py or similar scripts for partial updates of the issue
+  without a patchset..
+  """
+  # Only recognizes a few fields for now.
+  if request.method != 'POST':
+    fields = request.GET.getlist('field')
+    response = {}
+    if 'reviewers' in fields:
+      response['reviewers'] = request.issue.reviewers or []
+    if 'description' in fields:
+      response['description'] = request.issue.description
+    if 'subject' in fields:
+      response['subject'] = request.issue.subject
+    return HttpResponse(simplejson.dumps(response),
+                        content_type='application/json')
+
+  if request.issue.owner != request.user:
+    if not IS_DEV:
+      return HttpResponse('Login required', status=401)
+  fields = simplejson.loads(request.POST.get('fields'))
+  issue = request.issue
+  if 'description' in fields:
+    issue.description = fields['description']
+  if 'reviewers' in fields:
+    issue.reviewers = _get_emails_from_raw(fields['reviewers'])
+  if 'subject' in fields:
+    issue.subject = fields['subject']
   issue.put()
   _notify_issue(request, issue, 'Changed')
   return HttpResponse('')
