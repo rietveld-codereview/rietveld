@@ -1871,7 +1871,7 @@ def GuessVCSName(options):
     if returncode == 0:
       return (VCS_CVS, None)
   except OSError, (errno, message):
-    if error != 2:
+    if errno != 2:
       raise
 
   return (VCS_UNKNOWN, None)
