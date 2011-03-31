@@ -15,6 +15,11 @@
 """Minimal Django settings."""
 
 import os
+import re
+
+DISALLOWED_USER_AGENTS = (
+    re.compile(r'^Googlebot'),
+)
 
 APPEND_SLASH = False
 DEBUG = os.environ['SERVER_SOFTWARE'].startswith('Dev')
