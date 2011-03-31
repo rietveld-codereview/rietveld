@@ -1755,7 +1755,7 @@ def patchset(request):
 @login_required
 def account(request):
   """/account/?q=blah&limit=10&timestamp=blah - Used for autocomplete."""
-  def searchAccounts(property, added, response):
+  def searchAccounts(property, domain, added, response):
     query = request.GET.get('q').lower()
     limit = _clean_int(request.GET.get('limit'), 10, 10, 100)
 
@@ -1766,6 +1766,8 @@ def account(request):
     for account in accounts:
       if account.key() in added:
         continue
+      if domain and not account.email.endswith(domain):
+        continue
       if len(added) >= limit:
         break
       added.add(account.key())
@@ -1774,8 +1776,14 @@ def account(request):
 
   added = set()
   response = ''
-  added, response = searchAccounts("nickname", added, response)
-  added, response = searchAccounts("email", added, response)
+  domain = os.environ['AUTH_DOMAIN']
+  if domain != 'gmail.com':
+    # 'gmail.com' is the value AUTH_DOMAIN is set to if the app is running
+    # on appspot.com and shouldn't prioritize the custom domain.
+    added, response = searchAccounts("email", domain, added, response)
+    added, response = searchAccounts("nickname", domain, added, response)
+  added, response = searchAccounts("nickname", "", added, response)
+  added, response = searchAccounts("email", "", added, response)
   return HttpResponse(response)
 
 
