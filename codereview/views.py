@@ -1512,6 +1512,7 @@ def _get_emails(form, label):
   raw_emails = form.cleaned_data.get(label)
   if raw_emails:
     return _get_emails_from_raw(raw_emails.split(','), form=form)
+  return []
 
 def _get_emails_from_raw(raw_emails, form=None):
   emails = []
@@ -2028,7 +2029,7 @@ def fields(request):
     return HttpResponse(simplejson.dumps(response),
                         content_type='application/json')
 
-  if request.issue.owner != request.user:
+  if not request.issue.user_can_edit(request.user):
     if not IS_DEV:
       return HttpResponse('Login required', status=401)
   fields = simplejson.loads(request.POST.get('fields'))
