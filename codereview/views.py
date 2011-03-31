@@ -1619,10 +1619,10 @@ def _get_emails(form, label):
   """Helper to return the list of reviewers, or None for error."""
   raw_emails = form.cleaned_data.get(label)
   if raw_emails:
-    return _get_emails_from_raw(raw_emails.split(','), form=form)
+    return _get_emails_from_raw(raw_emails.split(','), form=form, label=label)
   return []
 
-def _get_emails_from_raw(raw_emails, form=None):
+def _get_emails_from_raw(raw_emails, form=None, label=None):
   emails = []
   for email in raw_emails:
     email = email.strip()
