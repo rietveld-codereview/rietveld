@@ -675,10 +675,10 @@ def GetContentType(filename):
 # Use a shell for subcommands on Windows to get a PATH search.
 use_shell = sys.platform.startswith("win")
 
-def RunShellWithReturnCode(command, print_output=False,
+def RunShellWithReturnCodeAndStderr(command, print_output=False,
                            universal_newlines=True,
                            env=os.environ):
-  """Executes a command and returns the output from stdout and the return code.
+  """Executes a command and returns the output from stdout, stderr and the return code.
 
   Args:
     command: Command to execute.
@@ -687,9 +687,11 @@ def RunShellWithReturnCode(command, print_output=False,
     universal_newlines: Use universal_newlines flag (default: True).
 
   Returns:
-    Tuple (output, return code)
+    Tuple (stdout, stderr, return code)
   """
   logging.info("Running %s", command)
+  env = env.copy()
+  env['LC_MESSAGES'] = 'C'
   p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                        shell=use_shell, universal_newlines=universal_newlines,
                        env=env)
@@ -710,8 +712,15 @@ def RunShellWithReturnCode(command, print_output=False,
     print >>sys.stderr, errout
   p.stdout.close()
   p.stderr.close()
-  return output, p.returncode
+  return output, errout, p.returncode
 
+def RunShellWithReturnCode(command, print_output=False,
+                           universal_newlines=True,
+                           env=os.environ):
+  """Executes a command and returns the output from stdout and the return code."""
+  out, err, retcode = RunShellWithReturnCodeAndStderr(command, print_output,
+                           universal_newlines, env)
+  return out, retcode
 
 def RunShell(command, silent_ok=False, universal_newlines=True,
              print_output=False, env=os.environ):
@@ -1013,10 +1022,16 @@ class SubversionVCS(VersionControlSystem):
       dirname, relfilename = os.path.split(filename)
       if dirname not in self.svnls_cache:
         cmd = ["svn", "list", "-r", self.rev_start, dirname or "."]
-        out, returncode = RunShellWithReturnCode(cmd)
+        out, err, returncode = RunShellWithReturnCodeAndStderr(cmd)
         if returncode:
-          ErrorExit("Failed to get status for %s." % filename)
-        old_files = out.splitlines()
+          # Directory might not yet exist at start revison
+          # svn: Unable to find repository location for 'abc' in revision nnn
+          if re.match('^svn: Unable to find repository location for .+ in revision \d+', err):
+            old_files = ()
+          else:
+            ErrorExit("Failed to get status for %s:\n%s" % (filename, err))
+        else:
+          old_files = out.splitlines()
         args = ["svn", "list"]
         if self.rev_end:
           args += ["-r", self.rev_end]
