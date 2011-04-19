@@ -2,7 +2,7 @@ Welcome to Rietveld
 -------------------
 
 This project shows how to create a somewhat substantial web application
-using Django on Google App Engine.  It requires Django version 1.1.
+using Django on Google App Engine.  It requires Django version 1.2.
 
 In addition, I hope it will serve as a practical tool for the Python
 developer community, and hopefully for other open source communities.
@@ -34,30 +34,17 @@ The license is Apache 2.0.  See the file COPYING.
 Running
 -------
 
-*** NOTE *** YOU MUST INSTALL DJANGO 1.1 FIRST BEFORE RUNNING LOCALLY.
-
-Download Django-1.1.2.tar.gz from http://www.djangoproject.com (or
-whatever the latest micro-version of 1.1 is) and follow the
-installation instructions.  Typically:
-
-  tar xzf Django-1.1.2.tar.gz
-  cd Django-1.1.2
-  sudo python setup.py install
-
-NOTE: On the Mac, if you are using the Google App Engine Launcher, the
-Python version it uses may differ from the default you have on the
-command line.  To install Django into the correct Python version, you
-may have to do the following:
-
-  sudo /usr/bin/python setup.py install
-
 To run the app locally (e.g. for testing), download the Google App
 Engine SDK from http://code.google.com/appengine/downloads.html.  You
 can then run the server using
 
   make serve
 
-(assuming you're on Linux or Mac OS X).
+(assuming you're on Linux or Mac OS X).  On Windows just use Google
+App Engine Launcher.
+
+Rietveld uses Django 1.2 libraries.  They are included in App Engine
+SDK version 1.4.2 and above.
 
 The server is only accessible on http://localhost:8080.  The server in
 the Google App Engine SDK is not designed for serving real traffic.
