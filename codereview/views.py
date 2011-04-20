@@ -2373,6 +2373,7 @@ def _patchset_as_dict(patchset, request=None):
         'num_chunks': patch.num_chunks,
         'num_removed': patch.num_removed,
         'status': patch.status,
+        'property_changes': '\n'.join(patch.property_changes),
     }
   return values
 

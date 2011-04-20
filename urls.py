@@ -1,4 +1,4 @@
-# Copyright 2008 Google Inc.
+# Copyright 2008-2011 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,11 @@
 # NOTE: Must import *, since Django looks for things here, e.g. handler500.
 from django.conf.urls.defaults import *
 
+# If you don't want to run Rietveld from the root level, add the
+# subdirectory as shown in the following example:
+#
+#    url(r'subpath/', include('codereview.urls')),
+#
 urlpatterns = patterns(
     '',
     url(r'', include('codereview.urls')),

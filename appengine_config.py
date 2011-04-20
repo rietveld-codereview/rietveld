@@ -13,10 +13,6 @@ def webapp_add_wsgi_middleware(app):
   app = recording.appstats_wsgi_middleware(app)
   return app
 
-# Appstats URL.
-# TODO: Drop this once it is the default.
-appstats_stats_url = '/_ah/stats'
-
 # Custom Appstats path normalization.
 def appstats_normalize_path(path):
     if path.startswith('/user/'):

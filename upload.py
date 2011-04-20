@@ -35,6 +35,7 @@ against by using the '--rev' option.
 
 import ConfigParser
 import cookielib
+import errno
 import fnmatch
 import getpass
 import logging
@@ -674,10 +675,10 @@ def GetContentType(filename):
 # Use a shell for subcommands on Windows to get a PATH search.
 use_shell = sys.platform.startswith("win")
 
-def RunShellWithReturnCode(command, print_output=False,
+def RunShellWithReturnCodeAndStderr(command, print_output=False,
                            universal_newlines=True,
                            env=os.environ):
-  """Executes a command and returns the output from stdout and the return code.
+  """Executes a command and returns the output from stdout, stderr and the return code.
 
   Args:
     command: Command to execute.
@@ -686,9 +687,11 @@ def RunShellWithReturnCode(command, print_output=False,
     universal_newlines: Use universal_newlines flag (default: True).
 
   Returns:
-    Tuple (output, return code)
+    Tuple (stdout, stderr, return code)
   """
   logging.info("Running %s", command)
+  env = env.copy()
+  env['LC_MESSAGES'] = 'C'
   p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                        shell=use_shell, universal_newlines=universal_newlines,
                        env=env)
@@ -709,8 +712,15 @@ def RunShellWithReturnCode(command, print_output=False,
     print >>sys.stderr, errout
   p.stdout.close()
   p.stderr.close()
-  return output, p.returncode
+  return output, errout, p.returncode
 
+def RunShellWithReturnCode(command, print_output=False,
+                           universal_newlines=True,
+                           env=os.environ):
+  """Executes a command and returns the output from stdout and the return code."""
+  out, err, retcode = RunShellWithReturnCodeAndStderr(command, print_output,
+                           universal_newlines, env)
+  return out, retcode
 
 def RunShell(command, silent_ok=False, universal_newlines=True,
              print_output=False, env=os.environ):
@@ -1012,10 +1022,16 @@ class SubversionVCS(VersionControlSystem):
       dirname, relfilename = os.path.split(filename)
       if dirname not in self.svnls_cache:
         cmd = ["svn", "list", "-r", self.rev_start, dirname or "."]
-        out, returncode = RunShellWithReturnCode(cmd)
+        out, err, returncode = RunShellWithReturnCodeAndStderr(cmd)
         if returncode:
-          ErrorExit("Failed to get status for %s." % filename)
-        old_files = out.splitlines()
+          # Directory might not yet exist at start revison
+          # svn: Unable to find repository location for 'abc' in revision nnn
+          if re.match('^svn: Unable to find repository location for .+ in revision \d+', err):
+            old_files = ()
+          else:
+            ErrorExit("Failed to get status for %s:\n%s" % (filename, err))
+        else:
+          old_files = out.splitlines()
         args = ["svn", "list"]
         if self.rev_end:
           args += ["-r", self.rev_end]
@@ -1838,16 +1854,26 @@ def GuessVCSName(options):
     if attribute.startswith("p4") and value != None:
       return (VCS_PERFORCE, None)
   
+  def RunDetectCommand(vcs_type, command):
+    """Helper to detect VCS by executing command.
+    
+    Returns:
+       A pair (vcs, output) or None. Throws exception on error.
+    """
+    try:
+      out, returncode = RunShellWithReturnCode(command)
+      if returncode == 0:
+        return (vcs_type, out.strip())
+    except OSError, (errcode, message):
+      if errcode != errno.ENOENT:  # command not found code
+        raise
+  
   # Mercurial has a command to get the base directory of a repository
   # Try running it, but don't die if we don't have hg installed.
   # NOTE: we try Mercurial first as it can sit on top of an SVN working copy.
-  try:
-    out, returncode = RunShellWithReturnCode(["hg", "root"])
-    if returncode == 0:
-      return (VCS_MERCURIAL, out.strip())
-  except OSError, (errno, message):
-    if errno != 2:  # ENOENT -- they don't have hg installed.
-      raise
+  res = RunDetectCommand(VCS_MERCURIAL, ["hg", "root"])
+  if res != None:
+    return res
 
   # Subversion has a .svn in all working directories.
   if os.path.isdir('.svn'):
@@ -1856,23 +1882,15 @@ def GuessVCSName(options):
 
   # Git has a command to test if you're in a git tree.
   # Try running it, but don't die if we don't have git installed.
-  try:
-    out, returncode = RunShellWithReturnCode(["git", "rev-parse",
-                                              "--is-inside-work-tree"])
-    if returncode == 0:
-      return (VCS_GIT, None)
-  except OSError, (errno, message):
-    if errno != 2:  # ENOENT -- they don't have git installed.
-      raise
+  res = RunDetectCommand(VCS_GIT, ["git", "rev-parse",
+                                   "--is-inside-work-tree"])
+  if res != None:
+    return res
 
   # detect CVS repos use `cvs status && $? == 0` rules
-  try:
-    out, returncode = RunShellWithReturnCode(["cvs", "status"])
-    if returncode == 0:
-      return (VCS_CVS, None)
-  except OSError, (errno, message):
-    if errno != 2:
-      raise
+  res = RunDetectCommand(VCS_CVS, ["cvs", "status"])
+  if res != None:
+    return res
 
   return (VCS_UNKNOWN, None)
 
@@ -2057,9 +2075,6 @@ def RealMain(argv, data=None):
     The patchset id is None if the base files are not uploaded by this
     script (applies only to SVN checkouts).
   """
-  logging.basicConfig(format=("%(asctime).19s %(levelname)s %(filename)s:"
-                              "%(lineno)s %(message)s "))
-  os.environ['LC_ALL'] = 'C'
   options, args = parser.parse_args(argv[1:])
   global verbosity
   verbosity = options.verbose
@@ -2199,6 +2214,9 @@ def RealMain(argv, data=None):
 
 def main():
   try:
+    logging.basicConfig(format=("%(asctime).19s %(levelname)s %(filename)s:"
+                                "%(lineno)s %(message)s "))
+    os.environ['LC_ALL'] = 'C'
     RealMain(sys.argv)
   except KeyboardInterrupt:
     print
