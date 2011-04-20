@@ -134,7 +134,7 @@ class IssueBaseForm(forms.Form):
   private = forms.BooleanField(required=False, initial=False)
 
   def set_branch_choices(self, base=None):
-    branches = models.Branch.gql('ORDER BY repo, category, name')
+    branches = models.Branch.all()
     bound_field = self['branch']
     choices = []
     default = None
@@ -3234,9 +3234,11 @@ def repos(request):
   for repo in list(models.Repository.all()):
     repo_map[str(repo.key())] = repo
   branches = []
-  for branch in list(models.Branch.gql('ORDER BY repo, category, name')):
+  for branch in models.Branch.all():
     branch.repository = repo_map[str(branch._repo)]
     branches.append(branch)
+  branches.sort(key=lambda b: map(
+    unicode.lower, (b.repository.name, b.category, b.name)))
   return respond(request, 'repos.html', {'branches': branches})
 
 

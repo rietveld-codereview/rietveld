@@ -10,12 +10,6 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
-- kind: Branch
-  properties:
-  - name: repo
-  - name: category
-  - name: name
-
 - kind: Comment
   properties:
   - name: left

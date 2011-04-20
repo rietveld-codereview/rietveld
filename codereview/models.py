@@ -505,7 +505,7 @@ class Repository(db.Model):
 
 
 class Branch(db.Model):
-  """A trunk, branch, or atag in a specific Subversion repository."""
+  """A trunk, branch, or a tag in a specific Subversion repository."""
 
   repo = db.ReferenceProperty(Repository, required=True)
   # Cache repo.name as repo_name, to speed up set_branch_choices()

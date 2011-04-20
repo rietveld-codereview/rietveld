@@ -812,3 +812,16 @@ ul.errorlist li {
   -khtml-opacity: 1;
   filter: alpha(opacity=100);
 }
+
+#repoview div {
+  margin-top: 1.5em;
+}
+
+#repoview .header {
+  font-size: 120%;
+  font-weight: bold;
+}
+
+#repoview table {
+  margin-top: 0.5em;
+}
