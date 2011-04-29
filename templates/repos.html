@@ -6,10 +6,11 @@
 <div id="repoview">
 {%regroup branches by repository as repo_list%}
 {%for repo in repo_list%}
-  <div><span class="header">Repository: {{repo.grouper.name}}</span>
+  <div class="header"><span>{{repo.grouper.name}}</span>
     {%if user%}
     (<a href="{%url codereview.views.branch_new repo.grouper.key.id%}">add branch</a>)
     {%endif%}
+    <a name="{{repo.grouper.name|slugify}}" class="anchor" href="#{{repo.grouper.name|slugify}}">&para;</a>
   </div>
   <table>
   {%for br in repo.list%}
