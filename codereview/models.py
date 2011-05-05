@@ -163,7 +163,6 @@ class PatchSet(db.Model):
   message = db.StringProperty()
   data = db.BlobProperty()
   url = db.LinkProperty()
-  owner = db.UserProperty(auto_current_user_add=True, required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty(default=0)
