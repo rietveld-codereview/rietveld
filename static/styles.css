@@ -74,6 +74,14 @@ a.redlink {
   font-weight: bold;
 }
 
+a.anchor {
+  visibility: hidden;
+}
+
+div.header:hover > a.anchor {
+  visibility: visible;
+}
+
 a.noul, a.noulv {
   color: #4182fa; /* #93b7fa; */
   text-decoration: none;
@@ -785,6 +793,25 @@ ul.errorlist li {
   font-weight: bold;
 }
 
+.build-result {
+  display: block;
+  height: 17px;
+  text-decoration: none;
+  color: #333333;
+}
+
+.build-status-color-failure {
+  background-color: rgb(233, 128, 128);
+}
+
+.build-status-color-pending {
+  background-color: rgb(255, 252,108);
+}
+
+.build-status-color-success {
+  background-color: rgb(143, 223, 95);
+}
+
 
 #reviewmsgdlg {
   background-color: #E9F2DF;
@@ -813,21 +840,15 @@ ul.errorlist li {
   filter: alpha(opacity=100);
 }
 
-.build-result {
-  display: block;
-  height: 17px;
-  text-decoration: none;
-  color: #333333;
+#repoview div.header {
+  margin-top: 1.5em;
 }
 
-.build-status-color-failure {
-  background-color: rgb(233, 128, 128);
+#repoview div.header span {
+  font-size: 120%;
+  font-weight: bold;
 }
 
-.build-status-color-pending {
-  background-color: rgb(255, 252,108);
-}
-
-.build-status-color-success {
-  background-color: rgb(143, 223, 95);
+#repoview table {
+  margin-top: 0.5em;
 }

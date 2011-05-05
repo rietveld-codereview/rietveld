@@ -10,12 +10,6 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
-- kind: Branch
-  properties:
-  - name: repo
-  - name: category
-  - name: name
-
 - kind: Comment
   properties:
   - name: left
@@ -42,45 +36,45 @@ indexes:
 
 - kind: Issue
   properties:
-  - name: closed
-  - name: owner
-  - name: modified
-    direction: desc
-
-- kind: Issue
-  properties:
-  - name: closed
-  - name: owner
-  - name: private
-  - name: modified
-    direction: desc
-
-- kind: Issue
-  properties:
-  - name: closed
-  - name: private
-  - name: modified
-    direction: desc
-
-- kind: Issue
-  properties:
-  - name: closed
-  - name: private
-  - name: reviewers
-  - name: modified
-    direction: desc
-
-- kind: Issue
-  properties:
-  - name: closed
-  - name: reviewers
-  - name: modified
-    direction: desc
-
-- kind: Issue
-  properties:
   - name: cc
   - name: closed
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: owner
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: owner
+  - name: private
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: private
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: private
+  - name: reviewers
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: reviewers
   - name: modified
     direction: desc
 
