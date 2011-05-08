@@ -35,7 +35,11 @@
      <link rel="alternate" type="application/atom+xml"
  	    title="Issue {{issue.key.id}}"
  	    href="{%url django.contrib.syndication.views.feed url="issue"%}/{{issue.key.id}}" />
-   {%endif%} 
+   {%endif%}
+
+   <!-- head block to insert js/css for forms processing -->
+   {%block head%}{%endblock%}
+   <!-- /head -->
 </head>
 <body onunload="M_unloadPage();">
 

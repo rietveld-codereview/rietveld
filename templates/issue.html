@@ -1,5 +1,6 @@
 {%extends "issue_base.html"%}
 
+{%block head%}{{form.media}}{%endblock%}
 {%block issue_body%}
 {%if issue.draft_count or has_draft_message%}
   <div class="error">
