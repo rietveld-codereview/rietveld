@@ -87,6 +87,9 @@ IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
 class AccountInput(forms.TextInput):
   # Associates the necessary css/js files for the control.  See
   # http://docs.djangoproject.com/en/dev/topics/forms/media/.
+  # 
+  # Don't forget to place {{formname.media}} into html header
+  # when using this html control.
   class Media:
     css = {
       'all': ('autocomplete/jquery.autocomplete.css',)
@@ -100,8 +103,7 @@ class AccountInput(forms.TextInput):
 
   def render(self, name, value, attrs=None):
     output = super(AccountInput, self).render(name, value, attrs)
-    # TODO(John): Why is the line below needed, it should be automatic.
-    output += mark_safe(AccountInput().media)
+    # TODO(anatoli): move this into .js media for this form
     return output + mark_safe(u'''<script type="text/javascript">
                               jQuery("#id_%s").autocomplete("%s", {
                               max: 10,
@@ -1470,6 +1472,7 @@ def _make_new(request, form):
     issue = models.Issue(subject=form.cleaned_data['subject'],
                          description=form.cleaned_data['description'],
                          base=base,
+                         owner_email=request.user.email(),
                          reviewers=reviewers,
                          cc=cc,
                          private=form.cleaned_data.get('private', False),
@@ -2303,6 +2306,7 @@ def _issue_as_dict(issue, messages, request=None):
   """Converts an issue into a dict."""
   values = {
     'owner': library.get_nickname(issue.owner, True, request),
+    # Some issues may still miss Issue.owner_email.
     'owner_email': issue.owner.email(),
     'modified': str(issue.modified),
     'created': str(issue.created),

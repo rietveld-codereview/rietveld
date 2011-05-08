@@ -1,5 +1,6 @@
 {%extends "issue_base.html"%}
 {%block title1%}Edit Issue -{%endblock%}
+{%block head%}{{form.media}}{%endblock%}
 {%block issue_body%}
 <form action="{%url codereview.views.edit issue.key.id%}"
       method="post" id="edit-form">
