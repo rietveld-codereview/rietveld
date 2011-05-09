@@ -53,8 +53,6 @@ login_warned = false;
     <b>Left Patch Set: {%if ps_left.message%}{{ps_left.message}}{%endif%}</b>
     <span class="extra">
     Created {{ps_left.created|timesince}} ago
-    {%ifnotequal ps_left.owner issue.owner%}
-    by <b>{{ps_left.owner|show_user}}</b>{%endifnotequal%}
     {%if ps_left.url%},
     Downloaded from: <a href="{{ps_left.url}}">{{ps_left.url}}</a>
     {%endif%}
@@ -64,8 +62,6 @@ login_warned = false;
     <b>Right Patch Set: {%if ps_right.message%}{{ps_right.message}}{%endif%}</b>
     <span class="extra">
     Created {{ps_right.created|timesince}} ago
-    {%ifnotequal ps_right.owner issue.owner%}
-    by <b>{{ps_right.owner|show_user}}</b>{%endifnotequal%}
     {%if ps_right.url%},
     Downloaded from: <a href="{{ps_right.url}}">{{ps_right.url}}</a>
     {%endif%}

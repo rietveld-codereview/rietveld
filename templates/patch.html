@@ -47,8 +47,6 @@ login_warned = false;
     <b>Patch Set: {%if patchset.message%}{{patchset.message}}{%endif%}</b>
     <span class="extra">
     Created {{patchset.created|timesince}} ago
-    {%ifnotequal patchset.owner issue.owner%}
-    by <b>{{patchset.owner|show_user}}</b>{%endifnotequal%}
     {%if patchset.url%},
     Downloaded from: <a href="{{patchset.url}}">{{patchset.url}}</a>
     {%endif%}
