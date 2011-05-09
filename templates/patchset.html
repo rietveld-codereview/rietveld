@@ -8,8 +8,6 @@
   <div class="pagination">
     <div style="float: left;">
       <i>Created:</i> {{patchset.created|timesince}} ago
-      {%ifnotequal patchset.owner issue.owner%}
-      by <b>{%nickname patchset.owner%}</b>{%endifnotequal%}
     </div>
     <div style="float: right;">
       {%if patchset.data%}
@@ -19,7 +17,7 @@
         <span class="disabled">(Patch set is too large to download)</span>
       {% endif %}
       {%ifnotequal 1 num_patchsets%}
-        {%ifequal patchset.owner user%}
+        {%ifequal issue.owner user%}
         <form method="post" action="{%url codereview.views.delete_patchset issue.key.id patchset.key.id %}">
           <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
           <input type="hidden" name="_method" value="delete" />
