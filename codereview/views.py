@@ -20,6 +20,7 @@
 
 # Python imports
 import binascii
+import cgi
 import datetime
 import email  # see incoming_mail()
 import email.utils
@@ -29,6 +30,8 @@ import os
 import random
 import re
 import urllib
+import md5
+import sha
 from cStringIO import StringIO
 from xml.etree import ElementTree
 
@@ -55,6 +58,8 @@ from django.shortcuts import render_to_response
 import django.template
 from django.template import RequestContext
 from django.utils import simplejson
+from django.utils.html import strip_tags
+from django.utils.html import urlize
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 
@@ -204,6 +209,7 @@ class UploadForm(forms.Form):
   private = forms.BooleanField(required=False, initial=False)
   send_mail = forms.BooleanField(required=False)
   base_hashes = forms.CharField(required=False)
+  commit = forms.BooleanField(required=False)
 
   def clean_base(self):
     base = self.cleaned_data.get('base')
@@ -243,9 +249,43 @@ class UploadPatchForm(forms.Form):
     return self.files['data'].read()
 
 
+class UploadBuildResult(forms.Form):
+  platform_id = forms.CharField(max_length=255)
+  # If password is not specified, we use user authetication INSTEAD.
+  password = forms.CharField(max_length=255, required=False)
+  # Not specifying a status removes this build result
+  status = forms.CharField(max_length=255, required=False)
+  details_url = forms.URLField(max_length=2083, required=False)
+
+  SEPARATOR = '|'
+  _VALID_STATUS = ['failure', 'pending', 'success', '']
+
+  def is_valid(self):
+    if not super(UploadBuildResult, self).is_valid():
+      return False
+    if self.cleaned_data['status'] not in UploadBuildResult._VALID_STATUS:
+      self.errors['status'] = ['"%s" is not a valid build result status' %
+                               self.cleaned_data['status']]
+      return False
+    return True
+
+  def __str__(self):
+    return '%s%s%s%s%s' % (strip_tags(self.cleaned_data['platform_id']),
+                           UploadBuildResult.SEPARATOR,
+                           strip_tags(self.cleaned_data['status']),
+                           UploadBuildResult.SEPARATOR,
+                           strip_tags(self.cleaned_data['details_url']))
+
+
 class EditForm(IssueBaseForm):
 
   closed = forms.BooleanField(required=False)
+
+
+class EditFlagsForm(forms.Form):
+
+  last_patchset = forms.IntegerField(widget=forms.HiddenInput())
+  commit = forms.BooleanField(required=False)
 
 
 class EditLocalBaseForm(forms.Form):
@@ -403,6 +443,7 @@ class SearchForm(forms.Form):
                               widget=AccountInput(attrs={'size': 60}))
   base = forms.CharField(required=False, max_length=550)
   private = forms.NullBooleanField(required=False)
+  commit = forms.NullBooleanField(required=False)
 
 
 ### Exceptions ###
@@ -518,7 +559,9 @@ def _can_view_issue(user, issue):
   return (not issue.private
           or issue.owner == user
           or user_email in issue.cc
-          or user_email in issue.reviewers)
+          or user_email in issue.reviewers
+          or user_email.endswith("@chromium.org")
+          or user_email.endswith("@google.com"))
 
 
 def _notify_issue(request, issue, message):
@@ -1090,17 +1133,17 @@ def _show_user(request):
       'WHERE closed = FALSE AND reviewers = :1 '
       'ORDER BY modified DESC', user.email().lower())
       if issue.owner != user and _can_view_issue(request.user, issue)]
+  cc_issues = [issue for issue in db.GqlQuery(
+      'SELECT * FROM Issue '
+      'WHERE closed = FALSE AND cc = :1 '
+      'ORDER BY modified DESC', user.email())
+      if issue.owner != user and _can_view_issue(request.user, issue)]
   closed_issues = [issue for issue in db.GqlQuery(
       'SELECT * FROM Issue '
       'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
       'ORDER BY modified DESC',
       datetime.datetime.now() - datetime.timedelta(days=7), user)
       if _can_view_issue(request.user, issue)]
-  cc_issues = [issue for issue in db.GqlQuery(
-      'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND cc = :1 '
-      'ORDER BY modified DESC', user.email())
-      if issue.owner != user and _can_view_issue(request.user, issue)]
   all_issues = my_issues + review_issues + closed_issues + cc_issues
   _load_users_for_issues(all_issues)
   _optimize_draft_counts(all_issues)
@@ -1108,8 +1151,8 @@ def _show_user(request):
                  {'email': user.email(),
                   'my_issues': my_issues,
                   'review_issues': review_issues,
-                  'closed_issues': closed_issues,
                   'cc_issues': cc_issues,
+                  'closed_issues': closed_issues,
                   })
 
 
@@ -1209,6 +1252,7 @@ def upload(request):
       if form.cleaned_data.get('content_upload'):
         # Extend the response: additional lines are the expected filenames.
         issue.local_base = True
+        issue.commit = form.cleaned_data.get('commit', False)
         issue.put()
 
         base_hashes = {}
@@ -1353,6 +1397,71 @@ def upload_patch(request):
 
   msg = 'OK\n' + str(patch.key().id())
   return HttpResponse(msg, content_type='text/plain')
+
+
+@post_required
+@patchset_required
+def upload_build_result(request):
+  """/<issue>/upload_build_result/<patchset> - Set build result for a patchset.
+
+  Used to upload results from a build made with the patchset on a given
+  platform.
+  """
+  form = UploadBuildResult(request.POST, request.FILES)
+  if not form.is_valid():
+    return HttpResponse('ERROR: Upload build result errors:\n%s' %
+                        repr(form.errors), content_type='text/plain')
+  # Use a backdoor password for automated builds to be able to push data here.
+  if sha.new(form.cleaned_data.get('password', '')).hexdigest() != \
+      '980954318b0845754d89cd5410edbace13487356':
+    if request.user is None:
+      if False and IS_DEV:
+        request.user = users.User(request.POST.get('user', 'test@example.com'))
+      else:
+        return HttpResponse('Error: Login required', status=401)
+    if request.user != request.issue.owner:
+      return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
+                          (request.user, request.issue.key().id()))
+  # Do we already have build results for this patchset on this platform?
+  platform_id = strip_tags(form.cleaned_data['platform_id'])
+  patchset = request.patchset
+  existing = False
+  for index, build_result in enumerate(patchset.build_results):
+    if build_result.split(UploadBuildResult.SEPARATOR, 2)[0] == platform_id:
+      existing = True
+      break
+  if existing:
+    if form.cleaned_data['status']:
+      patchset.build_results[index] = str(form)
+      message = 'Updated existing result.'
+    else:
+      # An empty status means remove this build result.
+      patchset.build_results.pop(index)
+      message = 'Removed existing result.'
+  elif form.cleaned_data['status']:
+    patchset.build_results.append(str(form))
+    message = 'Adding new status result.'
+  else:
+    message = 'Not adding empty status result.'
+
+  patchset.put()
+  return HttpResponse(message, content_type='text/plain')
+
+
+@patchset_required
+def get_build_results(request):
+  """/<issue>/get_build_results/<patchset> - Get build results for a patchset.
+
+  Used to retrieve the build results for a given patchset. The format of the
+  returned data is as follows:
+    <platform_id>|<status>|<details_url>
+    <platform_id>|<status>|<details_url>
+    etc...
+  """
+  response = ""
+  for build_result in request.patchset.build_results:
+    response = "%s%s\n" % (response, str(build_result))
+  return HttpResponse(response, content_type='text/plain')
 
 
 class EmptyPatchSet(Exception):
@@ -1519,6 +1628,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   else:
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
+  issue.commit = False
   issue.put()
 
   if form.cleaned_data.get('send_mail'):
@@ -1560,6 +1670,16 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
       if db_email not in emails:
         emails.append(db_email)
   return emails
+
+
+def _reorder_patches_by_filename(patches):
+  """Reorder a list of patches to put C/C++ headers before sources."""
+  splits = [os.path.splitext(patch.filename) for patch in patches]
+  for i in range(len(splits) - 1):
+    if (splits[i][0] == splits[i+1][0] and
+        splits[i][1] in ['.c', '.cc', '.cpp'] and
+        splits[i+1][1] in ['.h', '.hxx', '.hpp']):
+      patches[i:i+2] = [patches[i+1], patches[i]]
 
 
 def _calculate_delta(patch, patchset_id, patchsets):
@@ -1667,6 +1787,8 @@ def _get_patchset_info(request, patchset_id):
     patchset.parsed_patches = None
     if patchset_id == patchset.key().id():
       patchset.patches = list(patchset.patch_set.order('filename'))
+      # Reorder the list of patches to put .h files before .cc.
+      _reorder_patches_by_filename(patchset.patches)
       try:
         attempt = _clean_int(request.GET.get('attempt'), 0, 0)
         if attempt < 0:
@@ -1719,10 +1841,59 @@ def _get_patchset_info(request, patchset_id):
           response = HttpResponseRedirect('%s?attempt=%d' %
                                           (request.path, attempt + 1))
         break
+      patchset.build_results_list = []
+      for build_result in patchset.build_results:
+        (platform_id, status, details_url) = build_result.split(
+            UploadBuildResult.SEPARATOR, 2)
+        patchset.build_results_list.append({'platform_id': platform_id,
+                                            'status': status,
+                                            'details_url': details_url})
   # Reduce memory usage (see above comment).
   for patchset in patchsets:
     patchset.parsed_patches = None
   return issue, patchsets, response
+
+
+def replace_bug(m):
+  bugs = re.split(r"[\s,]+", m.group(1))
+  base_tracker_url = 'http://code.google.com/p/%s/issues/detail?id=%s'
+  valid_trackers = ('chromium', 'chromium-os', 'chrome-os-partner', 'gyp', 'v8')
+  urls = []
+  for bug in bugs:
+    if not bug:
+      continue
+    tracker = 'chromium'
+    if ':' in bug:
+      tracker, bug_id = bug.split(':', 1)
+      if tracker not in valid_trackers:
+        urls.append(bug)
+        continue
+    else:
+      bug_id = bug
+    url = '<a href="' + base_tracker_url % (tracker, bug_id) + '">'
+    urls.append(url + bug + '</a>')
+
+  return ", ".join(urls) + "\n"
+
+
+def _map_base_url(base):
+  """Check if Base URL can be converted into a source code viewer URL."""
+  for rule in models.UrlMap.gql('ORDER BY base_url_template'):
+    base_template = r'^%s$' % rule.base_url_template
+    m = re.match(base_template, base)
+    if not m:
+      continue
+    try:
+      src_url = re.sub(base_template,
+                       rule.source_code_url_template,
+                       base)
+    except re.error, err:
+      logging.error('err: %s base: "%s" rule: "%s" => "%s"',
+                    err, base, rule.base_url_template,
+                    rule.source_code_url_template)
+      return None
+    return src_url
+  return None
 
 
 @issue_required
@@ -1746,6 +1917,15 @@ def show(request, form=None):
     elif msg.draft and request.user and msg.sender == request.user.email():
       has_draft_message = True
   num_patchsets = len(patchsets)
+
+  issue.description = cgi.escape(issue.description)
+  issue.description = urlize(issue.description)
+  re_string = r"(?<=BUG=)"
+  re_string += "(\s*(?:[a-z0-9-]+:)?\d+\s*(?:,\s*(?:[a-z0-9-]+:)?\d+\s*)*)"
+  expression = re.compile(re_string, re.IGNORECASE)
+  issue.description = re.sub(expression, replace_bug, issue.description)
+  issue.description = issue.description.replace('\n', '<br/>')
+  src_url = _map_base_url(issue.base)
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
@@ -1753,6 +1933,7 @@ def show(request, form=None):
                   'num_patchsets': num_patchsets,
                   'first_patch': first_patch,
                   'has_draft_message': has_draft_message,
+                  'src_url': src_url,
                   })
 
 
@@ -1859,6 +2040,8 @@ def edit(request):
   issue.subject = cleaned_data['subject']
   issue.description = cleaned_data['description']
   issue.closed = cleaned_data['closed']
+  if issue.closed:
+    issue.commit = False
   issue.private = cleaned_data.get('private', False)
   base_changed = (issue.base != base)
   issue.base = base
@@ -1877,6 +2060,27 @@ def edit(request):
   _notify_issue(request, issue, message)
 
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
+
+
+@post_required
+@issue_editor_required
+@xsrf_required
+def edit_flags(request):
+  """/<issue>/edit_flags - Edit issue's flags."""
+  form = EditFlagsForm(request.POST)
+  if not form.is_valid():
+    return HttpResponseBadRequest('Invalid POST arguments',
+        content_type='text/plain')
+  # TODO: Request keys only.
+  patchsets = list(request.issue.patchset_set.order('created'))
+  if (not patchsets or
+      form.cleaned_data['last_patchset'] != patchsets[-1].key().id()):
+    return HttpResponseForbidden('Can only modify flags on last patchset',
+        content_type='text/plain')
+  if 'commit' in form.cleaned_data:
+    request.issue.commit = form.cleaned_data['commit']
+    request.issue.put()
+  return HttpResponse('OK', content_type='text/plain')
 
 
 def _delete_cached_contents(patch_set):
@@ -1974,6 +2178,7 @@ def close(request):
   """/<issue>/close - Close an issue."""
   issue = request.issue
   issue.closed = True
+  issue.commit = False
   if request.method == 'POST':
     new_description = request.POST.get('description')
     if new_description:
@@ -2141,6 +2346,7 @@ def _issue_as_dict(issue, messages, request=None):
     'issue': issue.key().id(),
     'base_url': issue.base,
     'private': issue.private,
+    'commit': issue.commit,
   }
   if messages:
     values['messages'] = [
@@ -2167,8 +2373,18 @@ def _patchset_as_dict(patchset, request=None):
     'created': str(patchset.created),
     'modified': str(patchset.modified),
     'num_comments': patchset.num_comments,
+    'build_results': [],
     'files': {},
   }
+  for build_result in patchset.build_results:
+    platform_id, status, details_url = build_result.split(
+        UploadBuildResult.SEPARATOR, 2)
+    values['build_results'].append(
+        {
+          'platform_id': platform_id,
+          'status': status,
+          'details_url': details_url,
+        })
   for patch in models.Patch.gql("WHERE patchset = :1", patchset):
     # num_comments and num_drafts are left out for performance reason:
     # they cause a datastore query on first access. They could be added
@@ -2253,6 +2469,8 @@ def diff(request):
 
   context = _get_context_for_user(request)
   column_width = _get_column_width_for_user(request)
+  if patch.filename.startswith('webkit/api'):
+    column_width = engine.MAX_COLUMN_WIDTH
   if patch.is_binary:
     rows = None
   else:
@@ -2545,6 +2763,7 @@ def _add_next_prev(patchset, patch):
   patch.prev = patch.next = None
   patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
                                   patchset))
+  _reorder_patches_by_filename(patches)
   patchset.patches = patches  # Required to render the jump to select.
 
   comments_by_patch, drafts_by_patch = _get_comment_counts(
@@ -2747,7 +2966,9 @@ def _get_affected_files(issue):
   patchsets = list(issue.patchset_set.order('created'))
   if len(patchsets):
     patchset = patchsets[-1]
-    for patch in patchset.patch_set.order('filename'):
+    patches = list(patchset.patch_set.order('filename'))
+    _reorder_patches_by_filename(patches)
+    for patch in patches:
       file_str = ''
       if patch.status:
         file_str += patch.status + ' '
@@ -2985,8 +3206,11 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   my_email = db.Email(request.user.email())
   to = [db.Email(issue.owner.email())] + issue.reviewers
   cc = issue.cc[:]
-  if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
-    cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
+  # Chromium's instance adds reply@chromiumcodereview.appspotmail.com to the
+  # Google Group which is CCd on all reviews.
+  #cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
+  #if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
+  #  cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
   reply_to = to + cc
   if my_email in to and len(to) > 1:  # send_mail() wants a non-empty to list
     to.remove(my_email)
@@ -3169,6 +3393,90 @@ def _delete_draft_message(request, draft):
   return HttpResponse('OK', content_type='text/plain')
 
 
+def _lint_patch(patch):
+  patch.lint_error_count = 0
+  patch.lint_errors = {}
+
+  try:
+    import cpplint
+  except ImportError:
+    return False
+
+  if patch.is_binary or patch.no_base_file:
+    return False
+
+  if os.path.splitext(patch.filename)[1] not in ['.c', '.cc', '.cpp', '.h']:
+    return False
+
+  try:
+    patch.get_patched_content()
+  except engine.FetchError, err:
+    return False
+
+  patch.parsed_lines = patching.ParsePatchToLines(patch.lines)
+  if patch.parsed_lines is None:
+    return False
+
+  new_line_numbers = set()
+  for old_line_no, new_line_no, line in patch.parsed_lines:
+    if old_line_no == 0 and new_line_no != 0:
+      # Line is newly added, so check lint errors in it.
+      new_line_numbers.add(new_line_no)
+
+  def Error(filename, linenum, category, confidence, message):
+    if linenum in new_line_numbers:
+      patch.lint_errors.setdefault(linenum, []).append(message)
+
+  file_extension = os.path.splitext(patch.filename)[1]
+  lines = patch.get_patched_content().text.splitlines()
+  cpplint.ProcessFileData(patch.filename, file_extension, lines, Error)
+
+  return True
+
+
+@patchset_required
+def lint(request):
+  """/lint/<issue>_<patchset> - Lint a patch set."""
+  patches = list(request.patchset.patch_set)
+  for patch in patches:
+    if not _lint_patch(patch):
+      continue
+
+    for line in patch.lint_errors:
+      patch.lint_error_count += len(patch.lint_errors[line])
+  db.put(patches)
+
+  return HttpResponse('Done', content_type='text/plain')
+
+
+@patch_required
+def lint_patch(request):
+  """/<issue>/lint/<patchset>/<patch> - View lint results for a patch."""
+  if not _lint_patch(request.patch):
+    return HttpResponseNotFound('Can\'t lint file')
+
+  result = ['<html><head><link type="text/css" rel="stylesheet" href="/static/styles.css" /></head><body>']
+  result.append('<div class="code" style="margin-top: .8em; display: table; margin-left: auto; margin-right: auto;">')
+  result.append('<table style="padding: 5px;" cellpadding="0" cellspacing="0"')
+
+  error_count = 0
+  for old_line_no, new_line_no, line in request.patch.parsed_lines:
+    result.append('<tr><td class="udiff">%s</td></tr>' % cgi.escape(line))
+    if old_line_no == 0 and new_line_no in request.patch.lint_errors:
+      for error in request.patch.lint_errors[new_line_no]:
+        result.append('<tr><td style="color:red">%s</td></tr>' % error)
+        error_count += 1
+
+  result.append('</table></div>')
+  result.append('</body></html>')
+
+  if request.patch.lint_error_count != error_count:
+    request.patch.lint_error_count = error_count
+    request.patch.put()
+
+  return HttpResponse(''.join(result))
+
+
 def search(request):
   """/search - Search for issues or patchset."""
   if request.method == 'GET':
@@ -3207,6 +3515,8 @@ def search(request):
     q.filter('private = ', form.cleaned_data['private'])
   if form.cleaned_data.get('base'):
     q.filter('base = ', form.cleaned_data['base'])
+  if form.cleaned_data.get('commit') != None:
+    q.filter('commit = ', form.cleaned_data['commit'])
   # Update the cursor value in the result.
   if format == 'html':
     nav_params = dict(
@@ -3263,6 +3573,60 @@ def repos(request):
     unicode.lower, (b.repository.name, b.category, b.name)))
   return respond(request, 'repos.html', {'branches': branches})
 
+
+@login_required
+@xsrf_required
+def conversions(request):
+  """/conversions - Show and edit the list of base=>source code URL maps."""
+  rules = models.UrlMap.gql('ORDER BY base_url_template')
+  if request.method != 'POST':
+    return respond(request, 'conversions.html', {
+            'rules': rules})
+
+  if (not request.user.email().endswith('@chromium.org') and
+      not request.user.email().endswith('@google.com')):
+    # TODO(vbendeb) this domain name should be a configuration item. Or maybe
+    # only admins should be allowed to modify the conversions table.
+    warning = 'You are not authorized to modify the conversions table.'
+    return respond(request, 'conversions.html', {
+        'warning': warning,
+        'rules': rules,
+        })
+
+  for key, value in request.POST.iteritems():
+    if key.startswith('del '):
+      del_key = key[4:]
+      um = models.UrlMap.gql('WHERE base_url_template = :1', del_key)
+      if not um:
+        logging.error('No map for %s found' % del_key)
+        continue
+      db.delete(um)
+  base_url = request.POST.get('base_url_template')
+  src_url = request.POST.get('source_code_url_template')
+  if base_url and src_url:
+    warning = ''
+    try:
+      re.compile(r'%s' % base_url)
+    except re.error, err:
+      warning = 'Regex error "%s"' % err
+    if not warning:
+      um = models.UrlMap.gql('WHERE base_url_template = :1', base_url)
+      if um.count():
+        warning = 'Attempt to add a duplicate Base Url'
+    if warning:
+      rules = models.UrlMap.gql('ORDER BY base_url_template')
+      return respond(request, 'conversions.html', {
+         'warning': warning,
+         'rules': rules,
+         'base_url': base_url,
+         'src_url': src_url
+         })
+
+    new_map = models.UrlMap(base_url_template=base_url,
+                            source_code_url_template=src_url)
+    logging.info(new_map)
+    new_map.put()
+  return HttpResponseRedirect(reverse(conversions))
 
 @login_required
 @xsrf_required
@@ -3540,6 +3904,15 @@ def _process_incoming_mail(raw_message, recipients):
 
   if 'X-Google-Appengine-App-Id' in incoming_msg:
     raise InvalidIncomingEmailError('Mail sent by App Engine')
+
+  # big hack until Groups lets X-Appengine-App-Id through.  Once that happens,
+  # we should use that header instead.  See http://b/issue?id=2257571.
+  receivedspf = incoming_msg.get_all('Received-SPF')
+  # Groups and AE both add this header, need to look for the AE one if it exists.
+  if receivedspf:
+    for header in receivedspf:
+      if header.find('@apphosting.bounces.google.com') != -1:
+        return  # message was sent by us, so don't add it again to the issue
 
   subject = incoming_msg.get('Subject', '')
   match = re.search(r'\(issue *(?P<id>\d+)\)$', subject)

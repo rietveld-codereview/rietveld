@@ -793,6 +793,25 @@ ul.errorlist li {
   font-weight: bold;
 }
 
+.build-result {
+  display: block;
+  height: 17px;
+  text-decoration: none;
+  color: #333333;
+}
+
+.build-status-color-failure {
+  background-color: rgb(233, 128, 128);
+}
+
+.build-status-color-pending {
+  background-color: rgb(255, 252,108);
+}
+
+.build-status-color-success {
+  background-color: rgb(143, 223, 95);
+}
+
 
 #reviewmsgdlg {
   background-color: #E9F2DF;
