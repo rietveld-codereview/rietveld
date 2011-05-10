@@ -123,7 +123,9 @@ login_warned = false;
 <span id="hook-sel" style="display:none;"></span>
 
 <table style="padding: 5px;" cellpadding="0" cellspacing="0" id="thecode"
-       ondblclick="M_handleTableDblClick(event)">
+       ondblclick="M_handleTableDblClick(event)"
+       ontouchstart="M_handleTableTouchStart(event)"
+       ontouchend="M_handleTableTouchEnd(event)">
 {%for row in rows%}{{row|safe}}{%endfor%}
 </table>
 {%endif%}

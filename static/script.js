@@ -1434,6 +1434,43 @@ function M_handleTableDblClick(evt) {
   }
 }
 
+var M_timerLongTap = null;
+
+/**
+ * Resets the long tap timer iff activated.
+ */
+function M_clearTableTouchTimeout() {
+  if (M_timerLongTap) {
+    clearTimeout(M_timerLongTap);
+  }
+  M_timerLongTap = null;
+}
+
+/**
+ * Handles long tap events on mobile devices (touchstart).
+ *
+ * This function activates a 1sec timeout that redirects the event to
+ * M_handleTableDblClick().
+ */
+function M_handleTableTouchStart(evt) {
+  if (evt.touches && evt.touches.length == 1) { // 1 finger touch
+    M_clearTableTouchTimeout();
+    M_timerLongTap = setTimeout(function() {
+     M_clearTableTouchTimeout();
+      M_handleTableDblClick(evt);
+    }, 1000);
+  }
+}
+
+
+/**
+ * Handles touchend event for long taps on mobile devices.
+ */
+function M_handleTableTouchEnd(evt) {
+  M_clearTableTouchTimeout();
+}
+
+
 /**
  * Makes all inline comments visible. This is the default view.
  */

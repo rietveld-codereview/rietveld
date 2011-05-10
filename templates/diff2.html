@@ -193,7 +193,10 @@ Toggle Intra-line Diffs</a> ('i')
 <span id="hook-sel" style="display:none;"></span>
 
 <table border="0" cellpadding="0" cellspacing="0" id="thecode"
-       ondblclick="M_handleTableDblClick(event)" width="100%">
+       ondblclick="M_handleTableDblClick(event)"
+       ontouchstart="M_handleTableTouchStart(event)"
+       ontouchend="M_handleTableTouchEnd(event)"
+       width="100%">
 
 <tr><th>LEFT</th><th>RIGHT</th></tr>
 
