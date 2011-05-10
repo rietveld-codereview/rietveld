@@ -73,10 +73,6 @@ class Issue(db.Model):
   base = db.StringProperty()
   local_base = db.BooleanProperty(default=False)
   owner = db.UserProperty(auto_current_user_add=True, required=True)
-  # Adds the email address separately so we can filter on naked email address
-  # when owner.user_id() changes, for example when a user switch from Google
-  # Account to Google Apps.
-  owner_email = db.EmailProperty()
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   reviewers = db.ListProperty(db.Email)

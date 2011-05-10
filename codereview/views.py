@@ -1388,7 +1388,6 @@ def _make_new(request, form):
     issue = models.Issue(subject=form.cleaned_data['subject'],
                          description=form.cleaned_data['description'],
                          base=base,
-                         owner_email=request.user.email(),
                          reviewers=reviewers,
                          cc=cc,
                          private=form.cleaned_data.get('private', False),
@@ -2128,7 +2127,6 @@ def _issue_as_dict(issue, messages, request=None):
   """Converts an issue into a dict."""
   values = {
     'owner': library.get_nickname(issue.owner, True, request),
-    # Some issues may still miss Issue.owner_email.
     'owner_email': issue.owner.email(),
     'modified': str(issue.modified),
     'created': str(issue.created),
