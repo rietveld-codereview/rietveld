@@ -56,8 +56,10 @@ class BaseFeed(Feed):
     return 'the title'
 
   def item_author_name(self, item):
-    if isinstance(item, models.Issue) or isinstance(item, models.PatchSet):
+    if isinstance(item, models.Issue):
       return library.get_nickname(item.owner, True)
+    if isinstance(item, models.PatchSet):
+      return library.get_nickname(item.issue.owner, True)
     if isinstance(item, models.Message):
       return library.get_nickname(item.sender, True)
     return 'Rietveld'
