@@ -1338,7 +1338,7 @@ class CVSVCS(VersionControlSystem):
     cmd.extend(extra_args)
     data, retcode = RunShellWithReturnCode(cmd)
     count = 0
-    if retcode == 0:
+    if retcode in [0, 1]:
       for line in data.splitlines():
         if line.startswith("Index:"):
           count += 1
@@ -1350,10 +1350,11 @@ class CVSVCS(VersionControlSystem):
     return data
 
   def GetUnknownFiles(self):
-    status = RunShell(["cvs", "diff"],
-                    silent_ok=True)
+    data, retcode = RunShellWithReturnCode(["cvs", "diff"])
+    if retcode not in [0, 1]:
+      ErrorExit("Got error status from 'cvs diff':\n%s" % (data,))
     unknown_files = []
-    for line in status.split("\n"):
+    for line in data.split("\n"):
       if line and line[0] == "?":
         unknown_files.append(line)
     return unknown_files

@@ -737,13 +737,6 @@ function M_replyToComment(author, written_time, ccs, cid, prefix, opt_lineno,
 function M_replyToMessage(message_id, written_time, author) {
   var form = document.getElementById('message-reply-form');
   form = form.cloneNode(true);
-  if (typeof form.message == 'undefined') {
-    var form_template = document.getElementById('message-reply-form');
-    form = document.createElement('form');
-    form.setAttribute('method', 'POST');
-    form.setAttribute('action', form_template.getAttribute('action'));
-    form.innerHTML = form_template.innerHTML;
-  }
   container = document.getElementById('message-reply-'+message_id);
   container.appendChild(form);
   container.style.display = '';
@@ -861,24 +854,16 @@ function M_createResizer_(form, suffix) {
       form.text.focus();
     };
 
-    // Using form.elements would be far more concise, but this hack is
-    // necessary because Konqueror/Safari don't populate form.elements at this
-    // point if the form is cloned.
-    var formContainer = null;
-    for (formContainer = form.firstChild; formContainer;
-         formContainer = formContainer.nextSibling) {
-      if (formContainer.getAttribute &&
-          formContainer.getAttribute("name") == "form-container") break;
-    }
-    if (!formContainer) return;
-
-    for (var n = formContainer.firstChild; n; n = n.nextSibling) {
-      if (n.nodeName == "TEXTAREA") {
-        formContainer.insertBefore(resizer, n.nextSibling);
+    var elementsLength = form.elements.length;
+    for (var i = 0; i < elementsLength; ++i) {
+      var node = form.elements[i];
+      if (node.nodeName == "TEXTAREA") {
+        var parent = M_getParent(node);
+        parent.insertBefore(resizer, node.nextSibling);
         resizer.style.display = "";
+        form.hasResizer = true;
       }
     }
-    form.hasResizer = true;
   }
 }
 
@@ -943,12 +928,6 @@ function M_createInlineComment(lineno, side) {
   var form = document.getElementById("comment-form-" + suffix);
   if (!form) {
     form = document.getElementById("dainlineform").cloneNode(true);
-    if (typeof form.save == "undefined") {
-      // For Opera form elements of the cloned form aren't accessible
-      // by name but using innerHTML works.
-      form = document.createElement("form");
-      form.innerHTML = document.getElementById("dainlineform").innerHTML;
-    }
     form.name = form.id = "comment-form-" + suffix;
     M_assignToCancel_(form, M_removeTempInlineComment);
     M_createResizer_(form, suffix);
@@ -1486,6 +1465,43 @@ function M_handleTableDblClick(evt) {
     M_createInlineComment(parseInt(target.id.substr(7)), side);
   }
 }
+
+var M_timerLongTap = null;
+
+/**
+ * Resets the long tap timer iff activated.
+ */
+function M_clearTableTouchTimeout() {
+  if (M_timerLongTap) {
+    clearTimeout(M_timerLongTap);
+  }
+  M_timerLongTap = null;
+}
+
+/**
+ * Handles long tap events on mobile devices (touchstart).
+ *
+ * This function activates a 1sec timeout that redirects the event to
+ * M_handleTableDblClick().
+ */
+function M_handleTableTouchStart(evt) {
+  if (evt.touches && evt.touches.length == 1) { // 1 finger touch
+    M_clearTableTouchTimeout();
+    M_timerLongTap = setTimeout(function() {
+     M_clearTableTouchTimeout();
+      M_handleTableDblClick(evt);
+    }, 1000);
+  }
+}
+
+
+/**
+ * Handles touchend event for long taps on mobile devices.
+ */
+function M_handleTableTouchEnd(evt) {
+  M_clearTableTouchTimeout();
+}
+
 
 /**
  * Makes all inline comments visible. This is the default view.

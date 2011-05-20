@@ -35,7 +35,7 @@ class="{%if bucket.quoted%}comment-text-quoted{%else%}comment-text{%endif%}"
 <form id="comment-form-{{forloop.counter0}}-{{lineno}}-{{side}}"
       name="comment-form-{{forloop.counter0}}-{{lineno}}-{{side}}"
       style="display:none" action="{%url codereview.views.inline_draft%}" method = "POST">
-<div name="form-container">
+<div>
 <input type="hidden" name="issue" value="{{issue.key.id}}">
 <input type="hidden" name="patchset" value="{{patchset.key.id}}">
 <input type="hidden" name="patch" value="{{patch.key.id}}">
