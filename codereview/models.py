@@ -24,6 +24,7 @@ import time
 # AppEngine imports
 from google.appengine.ext import db
 from google.appengine.api import memcache
+from google.appengine.api import users
 
 # Local imports
 import engine
@@ -774,6 +775,15 @@ class Account(db.Model):
 
   def get_xsrf_token(self, offset=0):
     """Return an XSRF token for the current user."""
+    # This code assumes that
+    # self.user.email() == users.get_current_user().email()
+    current_user = users.get_current_user()
+    if self.user.user_id() != current_user.user_id():
+      # Mainly for Google Account plus conversion.
+      logging.info('Updating user_id for %s from %s to %s' % (
+        self.user.email(), self.user.user_id(), current_user.user_id()))
+      self.user = current_user
+      self.put()
     if not self.xsrf_secret:
       self.xsrf_secret = os.urandom(8)
       self.put()
