@@ -463,6 +463,59 @@ function M_toggleSectionForPS(issue, patchset) {
 }
 
 /**
+ * Change the commit bit for the given issue by using edit_flags.
+ * @param {String} issue The issue key
+ */
+function M_editFlags(issue) {
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  // This timeout can potentially race with the request coming back OK. In
+  // general, if it hasn't come back for 60 seconds, it won't ever come back.
+  var aborted = false;
+  var httpreq_timeout = setTimeout(function() {
+    aborted = true;
+    httpreq.abort();
+    alert("Commit bit could not be updated for 60 seconds. Please ensure " +
+          "connectivity (and that the server is up) and try again.");
+  }, 60000);
+  httpreq.onreadystatechange = function () {
+    // Firefox 2.0, at least, runs this with readyState = 4 but all other
+    // fields unset when the timeout aborts the request, against all
+    // documentation.
+    if (httpreq.readyState == 4 && !aborted) {
+      clearTimeout(httpreq_timeout);
+      if (httpreq.status != 200) {
+        alert("An error occurred while trying to set the commit bit");
+      }
+    }
+  }
+  httpreq.open("POST", base_url + issue + "/edit_flags", true);
+  httpreq.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+  var req = [];
+  var len = document.commitform.elements.length;
+  for (var i = 0; i < len; i++) {
+    var element = document.commitform.elements[i];
+    var value = undefined;
+    if (element.type == "hidden") {
+      value = element.value;
+    } else if (element.type == "checkbox") {
+      if (element.checked) {
+        value = '1';
+      } else {
+        value = '0';
+      }
+    }
+    if (value != undefined) {
+      req.push(element.name + "=" + encodeURIComponent(value));
+    }
+  }
+  httpreq.send(req.join("&"));
+  return true;
+}
+
+/**
  * Toggle the visibility of the "Quick LGTM" link on the changelist page.
  * @param {String} id The id of the target element
  */
