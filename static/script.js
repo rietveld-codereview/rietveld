@@ -696,9 +696,9 @@ function M_replyToMessage(message_id, written_time, author) {
   lbl.setAttribute('for', form.send_mail.id);
   form.message.value = "On " + written_time + ", " + author + " wrote:\n";
   var divs = document.getElementsByName("cl-message-" + message_id);
+  form.message.focus();
   M_setValueFromDivs(divs, form.message);
   form.message.value += "\n";
-  form.message.focus();
   M_addTextResizer_(form);
   document.getElementById('message-reply-href-'+message_id).style.display = "none";
 }
