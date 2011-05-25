@@ -385,19 +385,23 @@ function M_hideAllDiffs(num) {
 
 /**
  * Changes the elements display style to "" which renders it visible.
- * @param {String} id The id of the target element
+ * @param {String|Element} elt The id of the element or the element itself
  */
-function M_showElement(id) {
-  var elt = document.getElementById(id);
+function M_showElement(elt) {
+  if (typeof elt == "string") {
+    elt = document.getElementById(elt);
+  }
   if (elt) elt.style.display = "";
 }
 
 /**
  * Changes the elements display style to "none" which renders it invisible.
- * @param {String} id The id of the target element
+ * @param {String|Element} elt The id of the element or the element itself
  */
-function M_hideElement(id) {
-  var elt = document.getElementById(id);
+function M_hideElement(elt) {
+  if (typeof elt == "string") {
+    elt = document.getElementById(elt);
+  }
   if (elt) elt.style.display = "none";
 }
 
@@ -684,12 +688,14 @@ function M_replyToComment(author, written_time, ccs, cid, prefix, opt_lineno,
 function M_replyToMessage(message_id, written_time, author) {
   var form = document.getElementById('message-reply-form');
   form = form.cloneNode(true);
-  container = document.getElementById('message-reply-'+message_id);
+  var container = document.getElementById('message-reply-'+message_id);
+  var replyLink = document.getElementById('message-reply-href-'+message_id);
   container.appendChild(form);
-  container.style.display = '';
+  M_showElement(container);
+
   form.discard.onclick = function () {
-    document.getElementById('message-reply-href-'+message_id).style.display = "";
-    document.getElementById('message-reply-'+message_id).innerHTML = "";
+    M_showElement(replyLink);
+    container.innerHTML = "";
   }
   form.send_mail.id = 'message-reply-send-mail-'+message_id;
   var lbl = document.getElementById(form.send_mail.id).nextSibling.nextSibling;
@@ -700,7 +706,7 @@ function M_replyToMessage(message_id, written_time, author) {
   M_setValueFromDivs(divs, form.message);
   form.message.value += "\n";
   M_addTextResizer_(form);
-  document.getElementById('message-reply-href-'+message_id).style.display = "none";
+  M_hideElement(replyLink);
 }
 
 
