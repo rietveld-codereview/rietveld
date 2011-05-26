@@ -376,8 +376,7 @@ class SearchForm(forms.Form):
       required=False,
       choices=(
         ('html', 'html'),
-        ('json', 'json'),
-        ('json_pretty', 'json_pretty')),
+        ('json', 'json')),
       widget=forms.HiddenInput(attrs={'value': 'html'}))
   keys_only = forms.BooleanField(
       required=False,
@@ -827,6 +826,24 @@ def image_required(func):
     return func(request, *args, **kwds)
 
   return image_wrapper
+
+
+def json_response(func):
+  """Decorator that converts into JSON any returned value that is not an
+  HttpResponse. It handles `pretty` URL parameter to tune JSON response for
+  either performance or readability."""
+
+  def json_wrapper(request, *args, **kwds):
+    data = func(request, *args, **kwds)
+    if isinstance(data, HttpResponse):
+      return data
+    if request.REQUEST.get('pretty','0').lower() in ('1', 'true', 'on'):
+      data = simplejson.dumps(data, indent='  ', sort_keys=True)
+    else:
+      data = simplejson.dumps(data, separators=(',',':'))
+    return HttpResponse(data, content_type='application/json')
+
+  return json_wrapper
 
 
 ### Request handlers ###
@@ -2051,6 +2068,7 @@ def description(request):
 
 @issue_required
 @upload_required
+@json_response
 def fields(request):
   """/<issue>/fields - Gets/Sets fields on the issue.
 
@@ -2067,8 +2085,7 @@ def fields(request):
       response['description'] = request.issue.description
     if 'subject' in fields:
       response['subject'] = request.issue.subject
-    return HttpResponse(simplejson.dumps(response),
-                        content_type='application/json')
+    return response
 
   if not request.issue.user_can_edit(request.user):
     if not IS_DEV:
@@ -2198,21 +2215,23 @@ def _patchset_as_dict(patchset, request=None):
 
 
 @issue_required
+@json_response
 def api_issue(request):
   """/api/<issue> - Gets issue's data as a JSON-encoded dictionary."""
   messages = ('messages' in request.GET and
       request.GET.get('messages').lower() == 'true')
   values = _issue_as_dict(request.issue, messages, request)
-  return HttpResponse(simplejson.dumps(values), content_type='application/json')
+  return values
 
 
 @patchset_required
+@json_response
 def api_patchset(request):
   """/api/<issue>/<patchset> - Gets an issue's patchset data as a JSON-encoded
   dictionary.
   """
   values = _patchset_as_dict(request.patchset, request)
-  return HttpResponse(simplejson.dumps(values), content_type='application/json')
+  return values
 
 
 def _get_context_for_user(request):
@@ -2321,6 +2340,7 @@ def _get_diff_table_rows(request, patch, context, column_width):
 
 
 @patch_required
+@json_response
 def diff_skipped_lines(request, id_before, id_after, where, column_width):
   """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines.
 
@@ -2360,7 +2380,7 @@ def _strip_invalid_xml(s):
 
 
 def _get_skipped_lines_response(rows, id_before, id_after, where, context):
-  """Helper function that creates a Response object for skipped lines"""
+  """Helper function that returns response data for skipped lines"""
   response_rows = []
   id_before_start = int(id_before)
   id_after_end = int(id_after)
@@ -2396,7 +2416,7 @@ def _get_skipped_lines_response(rows, id_before, id_after, where, context):
   for node in dom.getroot().getchildren():
     content = [[x.items(), x.text] for x in node.getchildren()]
     response.append([node.items(), content])
-  return HttpResponse(simplejson.dumps(response))
+  return response
 
 
 def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
@@ -2506,6 +2526,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
 
 
 @issue_required
+@json_response
 def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
                         id_before, id_after, where, column_width):
   """/<issue>/diff2/... - Returns a fragment of skipped lines"""
@@ -3180,6 +3201,7 @@ def _delete_draft_message(request, draft):
   return HttpResponse('OK', content_type='text/plain')
 
 
+@json_response
 def search(request):
   """/search - Search for issues or patchset."""
   if request.method == 'GET':
@@ -3247,11 +3269,7 @@ def search(request):
     messages = form.cleaned_data['with_messages']
     data['results'] = [_issue_as_dict(i, messages, request)
                       for i in filtered_results],
-  if format == 'json_pretty':
-    out = simplejson.dumps(data, indent=2, sort_keys=True)
-  else:
-    out = simplejson.dumps(data, separators=(',',':'))
-  return HttpResponse(out, content_type='application/json')
+  return data
 
 
 ### Repositories and Branches ###
