@@ -171,6 +171,7 @@ class ClientLoginError(urllib2.HTTPError):
     urllib2.HTTPError.__init__(self, url, code, msg, headers, None)
     self.args = args
     self.reason = args["Error"]
+    self.info = args.get("Info", None)
 
 
 class AbstractRpcServer(object):
@@ -314,37 +315,42 @@ class AbstractRpcServer(object):
       try:
         auth_token = self._GetAuthToken(credentials[0], credentials[1])
       except ClientLoginError, e:
+        print >>sys.stderr, ''
         if e.reason == "BadAuthentication":
-          print >>sys.stderr, "Invalid username or password."
-          continue
-        if e.reason == "CaptchaRequired":
+          if e.info == "InvalidSecondFactor":
+            print >>sys.stderr, (
+                "Use an application-specific password instead "
+                "of your regular account password.\n"
+                "See http://www.google.com/"
+                "support/accounts/bin/answer.py?answer=185833")
+          else:
+            print >>sys.stderr, "Invalid username or password."
+        elif e.reason == "CaptchaRequired":
           print >>sys.stderr, (
               "Please go to\n"
               "https://www.google.com/accounts/DisplayUnlockCaptcha\n"
               "and verify you are a human.  Then try again.\n"
               "If you are using a Google Apps account the URL is:\n"
               "https://www.google.com/a/yourdomain.com/UnlockCaptcha")
-          break
-        if e.reason == "NotVerified":
+        elif e.reason == "NotVerified":
           print >>sys.stderr, "Account not verified."
-          break
-        if e.reason == "TermsNotAgreed":
+        elif e.reason == "TermsNotAgreed":
           print >>sys.stderr, "User has not agreed to TOS."
-          break
-        if e.reason == "AccountDeleted":
+        elif e.reason == "AccountDeleted":
           print >>sys.stderr, "The user account has been deleted."
-          break
-        if e.reason == "AccountDisabled":
+        elif e.reason == "AccountDisabled":
           print >>sys.stderr, "The user account has been disabled."
           break
-        if e.reason == "ServiceDisabled":
+        elif e.reason == "ServiceDisabled":
           print >>sys.stderr, ("The user's access to the service has been "
                                "disabled.")
-          break
-        if e.reason == "ServiceUnavailable":
+        elif e.reason == "ServiceUnavailable":
           print >>sys.stderr, "The service is not available; try again later."
-          break
-        raise
+        else:
+          # Unknown error.
+          raise
+        print >>sys.stderr, ''
+        continue
       self._GetAuthCookie(auth_token)
       return
 
