@@ -197,6 +197,16 @@ class Message(db.Model):
   text = db.TextProperty()
   draft = db.BooleanProperty(default=False)
 
+  _approval = None
+
+  @property
+  def approval(self):
+    if self._approval is None:
+      self._approval = any(
+          True for line in self.text.lower().splitlines()
+          if not line.strip().startswith('>') and 'lgtm' in line)
+    return self._approval
+
 
 class Content(db.Model):
   """The content of a text file.

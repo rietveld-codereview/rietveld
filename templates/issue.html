@@ -109,9 +109,10 @@
     </div>
 
     {%for message in messages%}
-      <div class="message" id="msg-{{message.key}}"
-	   name="{{forloop.counter0}}">
-	<a name="msg-{{message.key}}"></a>
+      <div class="message {%if message.approval%}approval{%endif%}"
+           id="msg-{{message.key}}"
+           name="{{forloop.counter0}}">
+        <a name="msg-{{message.key}}"></a>
         <div class="header">
           <table border="0" width="100%" cellspacing="0" cellpadding="0">
             <tr class="comment_title"
@@ -161,14 +162,13 @@
 
       </div>
     {%endfor%}
-    
-    
+
     <div>
       <a href="javascript:M_showAllComments('cl', {{messages|length}})">
       Expand All Messages</a>
       |
       <a href="javascript:M_hideAllComments('cl', {{messages|length}})">
-      Collapse All Messages</a>
+        Collapse All Messages</a>
     </div>
 
   </div>
