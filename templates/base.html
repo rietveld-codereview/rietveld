@@ -240,6 +240,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
   <div style="margin-top: .3em;">This is Rietveld <a href='http://code.google.com/p/rietveld/updates/list'>{%include "live_revision.html"%}</a></div>
 </div>
 
+{%if not is_dev%}
 <script type="text/javascript">
 var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
 document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
@@ -249,5 +250,7 @@ var pageTracker = _gat._getTracker("UA-4803694-4");
 pageTracker._initData();
 pageTracker._trackPageview();
 </script>
+{%endif%}
+
 </body>
 </html>
