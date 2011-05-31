@@ -102,13 +102,17 @@ class AccountInput(forms.TextInput):
     )
 
   def render(self, name, value, attrs=None):
+    data = {'name': name, 'url': reverse(account),
+            'multiple': 'true'}
+    if self.attrs.get('multiple', True) == False:
+      data['multiple'] = 'false'
     output = super(AccountInput, self).render(name, value, attrs)
     # TODO(anatoli): move this into .js media for this form
     return output + mark_safe(u'''<script type="text/javascript">
-                              jQuery("#id_%s").autocomplete("%s", {
+                              jQuery("#id_%(name)s").autocomplete("%(url)s", {
                               max: 10,
                               highlight: false,
-                              multiple: true,
+                              multiple: %(multiple)s,
                               multipleSeparator: ", ",
                               scroll: true,
                               scrollHeight: 300,
@@ -117,7 +121,7 @@ class AccountInput(forms.TextInput):
                                 return row[0].replace(/ .+/gi, '');
                               }
                               });
-                              </script>''' % (name, reverse(account)))
+                              </script>''' % data)
 
 
 class IssueBaseForm(forms.Form):
@@ -436,13 +440,50 @@ class SearchForm(forms.Form):
   closed = forms.NullBooleanField(required=False)
   owner = forms.CharField(required=False,
                           max_length=1000,
-                          widget=AccountInput(attrs={'size': 60}))
-  reviewer = forms.EmailField(required=False,
-                              max_length=1000,
-                              widget=AccountInput(attrs={'size': 60}))
+                          widget=AccountInput(attrs={'size': 60,
+                                                     'multiple': False}))
+  reviewer = forms.CharField(required=False,
+                             max_length=1000,
+                             widget=AccountInput(attrs={'size': 60,
+                                                        'multiple': False}))
   base = forms.CharField(required=False, max_length=550)
   private = forms.NullBooleanField(required=False)
   commit = forms.NullBooleanField(required=False)
+
+  def _clean_accounts(self, key):
+    """Cleans up autocomplete field.
+
+    The input is validated to be zero or one name/email and it's
+    validated that the users exists.
+
+    Args:
+      key: the field name.
+
+    Returns an User instance or raises ValidationError.
+    """
+    accounts = filter(None,
+                      (x.strip()
+                       for x in self.cleaned_data.get(key, '').split(',')))
+    if len(accounts) > 1:
+      raise forms.ValidationError('Only one user name is allowed.')
+    elif not accounts:
+      return None
+    account = accounts[0]
+    if '@' in account:
+      acct = models.Account.get_account_for_email(account)
+    else:
+      acct = models.Account.get_account_for_nickname(account)
+    if not acct:
+      raise forms.ValidationError('Unknown user')
+    return acct.user
+
+  def clean_owner(self):
+    return self._clean_accounts('owner')
+
+  def clean_reviewer(self):
+    user = self._clean_accounts('reviewer')
+    if user:
+      return user.email()
 
 
 ### Exceptions ###
@@ -1141,6 +1182,15 @@ def show_user(request):
 
 def _show_user(request):
   user = request.user_to_show
+  if user == request.user:
+    query = models.Comment.all().filter('draft =', True)
+    query = query.filter('author =', request.user).fetch(100)
+    draft_keys = [
+      d.parent_key().parent().parent()
+      for d in query]
+    draft_issues = models.Issue.get(draft_keys)
+  else:
+    draft_issues = draft_keys = []
   my_issues = [
       issue for issue in db.GqlQuery(
           'SELECT * FROM Issue '
@@ -1148,7 +1198,7 @@ def _show_user(request):
           'ORDER BY modified DESC '
           'LIMIT 100',
           user)
-      if _can_view_issue(request.user, issue)]
+      if issue.key() not in draft_keys and _can_view_issue(request.user, issue)]
   review_issues = [
       issue for issue in db.GqlQuery(
           'SELECT * FROM Issue '
@@ -1156,7 +1206,8 @@ def _show_user(request):
           'ORDER BY modified DESC '
           'LIMIT 100',
           user.email().lower())
-      if issue.owner != user and _can_view_issue(request.user, issue)]
+      if (issue.key() not in draft_keys and issue.owner != user
+          and _can_view_issue(request.user, issue))]
   closed_issues = [
       issue for issue in db.GqlQuery(
           'SELECT * FROM Issue '
@@ -1165,7 +1216,7 @@ def _show_user(request):
           'LIMIT 100',
           datetime.datetime.now() - datetime.timedelta(days=7),
           user)
-      if _can_view_issue(request.user, issue)]
+      if issue.key() not in draft_keys and _can_view_issue(request.user, issue)]
   cc_issues = [
       issue for issue in db.GqlQuery(
           'SELECT * FROM Issue '
@@ -1173,7 +1224,8 @@ def _show_user(request):
           'ORDER BY modified DESC '
           'LIMIT 100',
           user.email())
-      if issue.owner != user and _can_view_issue(request.user, issue)]
+      if (issue.key() not in draft_keys and issue.owner != user
+          and _can_view_issue(request.user, issue))]
   all_issues = my_issues + review_issues + closed_issues + cc_issues
   _load_users_for_issues(all_issues)
   _optimize_draft_counts(all_issues)
@@ -1183,6 +1235,7 @@ def _show_user(request):
                   'review_issues': review_issues,
                   'cc_issues': cc_issues,
                   'closed_issues': closed_issues,
+                  'draft_issues': draft_issues,
                   })
 
 
@@ -3516,7 +3569,7 @@ def search(request):
   if request.method == 'GET':
     form = SearchForm(request.GET)
     if not form.is_valid() or not request.GET:
-      return respond(request, 'search.html', {'form': SearchForm()})
+      return respond(request, 'search.html', {'form': form})
   else:
     form = SearchForm(request.POST)
     if not form.is_valid():
@@ -3533,18 +3586,9 @@ def search(request):
   if form.cleaned_data.get('closed') != None:
     q.filter('closed = ', form.cleaned_data['closed'])
   if form.cleaned_data.get('owner'):
-    if '@' in form.cleaned_data['owner']:
-      user = users.User(form.cleaned_data['owner'])
-    else:
-      account = models.Account.get_account_for_nickname(
-          form.cleaned_data['owner'])
-      if not account:
-        return HttpResponseBadRequest('Invalid owner',
-            content_type='text/plain')
-      user = account.user
-    q.filter('owner = ', user)
+    q.filter('owner = ', form.cleaned_data['owner'])
   if form.cleaned_data.get('reviewer'):
-    q.filter('reviewers = ', db.Email(form.cleaned_data['reviewer']))
+    q.filter('reviewers = ', form.cleaned_data['reviewer'])
   if form.cleaned_data.get('private') != None:
     q.filter('private = ', form.cleaned_data['private'])
   if form.cleaned_data.get('base'):
