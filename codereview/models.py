@@ -211,8 +211,9 @@ class Message(db.Model):
       self._approval = any(
             True for line in self.text.lower().splitlines()
             if not line.strip().startswith('>') and 'lgtm' in line)
-      # Must not be issue owner.
-      self._approval &= self.issue.owner.email() != self.sender
+      # Must not be issue owner not commit-bot.
+      self._approval &= self.sender not in (
+            self.issue.owner.email(), 'commit-bot@chromium.org')
     return self._approval
 
 
