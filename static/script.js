@@ -690,21 +690,30 @@ function M_replyToMessage(message_id, written_time, author) {
   form = form.cloneNode(true);
   var container = document.getElementById('message-reply-'+message_id);
   var replyLink = document.getElementById('message-reply-href-'+message_id);
+  var msgTextarea = replyLink.nextSibling.nextSibling;
+  form.insertBefore(msgTextarea, form.firstChild);
+  M_showElement(msgTextarea);
   container.appendChild(form);
   M_showElement(container);
 
   form.discard.onclick = function () {
+    form.message.value = "";
+    M_getParent(container).insertBefore(msgTextarea, replyLink.nextSibling.nextSibling);
     M_showElement(replyLink);
+    M_hideElement(msgTextarea);
     container.innerHTML = "";
   }
+
   form.send_mail.id = 'message-reply-send-mail-'+message_id;
   var lbl = document.getElementById(form.send_mail.id).nextSibling.nextSibling;
   lbl.setAttribute('for', form.send_mail.id);
-  form.message.value = "On " + written_time + ", " + author + " wrote:\n";
-  var divs = document.getElementsByName("cl-message-" + message_id);
-  form.message.focus();
-  M_setValueFromDivs(divs, form.message);
-  form.message.value += "\n";
+  if (!form.message.value) {
+    form.message.value = "On " + written_time + ", " + author + " wrote:\n";
+    var divs = document.getElementsByName("cl-message-" + message_id);
+    form.message.focus();
+    M_setValueFromDivs(divs, form.message);
+    form.message.value += "\n";
+  }
   M_addTextResizer_(form);
   M_hideElement(replyLink);
 }
