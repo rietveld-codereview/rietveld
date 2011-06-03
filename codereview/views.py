@@ -82,7 +82,7 @@ IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
 class AccountInput(forms.TextInput):
   # Associates the necessary css/js files for the control.  See
   # http://docs.djangoproject.com/en/dev/topics/forms/media/.
-  # 
+  #
   # Don't forget to place {{formname.media}} into html header
   # when using this html control.
   class Media:
@@ -97,26 +97,29 @@ class AccountInput(forms.TextInput):
     )
 
   def render(self, name, value, attrs=None):
-    data = {'name': name, 'url': reverse(account),
-            'multiple': 'true'}
-    if self.attrs.get('multiple', True) == False:
-      data['multiple'] = 'false'
     output = super(AccountInput, self).render(name, value, attrs)
-    # TODO(anatoli): move this into .js media for this form
-    return output + mark_safe(u'''<script type="text/javascript">
-                              jQuery("#id_%(name)s").autocomplete("%(url)s", {
-                              max: 10,
-                              highlight: false,
-                              multiple: %(multiple)s,
-                              multipleSeparator: ", ",
-                              scroll: true,
-                              scrollHeight: 300,
-                              matchContains: true,
-                              formatResult : function(row) {
-                                return row[0].replace(/ .+/gi, '');
-                              }
-                              });
-                              </script>''' % data)
+    if models.Account.current_user_account is not None:
+      # TODO(anatoli): move this into .js media for this form
+      data = {'name': name, 'url': reverse(account),
+              'multiple': 'true'}
+      if self.attrs.get('multiple', True) == False:
+        data['multiple'] = 'false'
+      output += mark_safe(u'''
+      <script type="text/javascript">
+          jQuery("#id_%(name)s").autocomplete("%(url)s", {
+          max: 10,
+          highlight: false,
+          multiple: %(multiple)s,
+          multipleSeparator: ", ",
+          scroll: true,
+          scrollHeight: 300,
+          matchContains: true,
+          formatResult : function(row) {
+          return row[0].replace(/ .+/gi, '');
+          }
+          });
+      </script>''' % data)
+    return output
 
 
 class IssueBaseForm(forms.Form):
