@@ -152,6 +152,7 @@
             {%if user%}
               <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{%nickname message.sender True%}')"
                  id="message-reply-href-{{forloop.counter0}}">Reply</a>
+              <textarea rows="7" cols="70" name="message" style="display:none"></textarea>
               <div id="message-reply-{{forloop.counter0}}"
                    style="display:none;"></div>
             {%else%}
@@ -189,9 +190,7 @@
     <form method="POST" action="{%url codereview.views.publish issue.key.id%}"
           id="message-reply-form">
       <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
-      <div>
-        <textarea rows="7" cols="70" name="message"></textarea>
-      </div>
+      <div></div>
       <input type="hidden" name="subject" value="{{issue.subject}}" />
       <input type="hidden" name="message_only" value="1" />
       <input type="submit" value="Send Message" />
