@@ -99,7 +99,8 @@ VCS_UNKNOWN = "Unknown"
 TEXT_MIMETYPES = ['application/javascript', 'application/json',
                   'application/x-javascript', 'application/xml',
                   'application/x-freemind', 'application/x-sh',
-                  'application/x-ruby', 'application/x-httpd-php']
+                  'application/x-ruby', 'application/x-httpd-php',
+                  'application/x-httpd-eruby']
 
 VCS_ABBREVIATIONS = {
   VCS_MERCURIAL.lower(): VCS_MERCURIAL,
