@@ -3578,13 +3578,13 @@ def incoming_chat(request):
 
   Just reply saying we ignored the chat.
   """
-  sender = request.POST.get('from')
-  if not sender:
-    logging.warn('Incoming chat without "from" key ignored')
-  else:
-    sts = xmpp.send_message([sender],
-                            'Sorry, Rietveld does not support chat input')
-    logging.debug('XMPP status %r', sts)
+  try:
+    msg = xmpp.Message(request.POST)
+  except xmpp.InvalidMessageError, err:
+    logging.warn('Incoming invalid chat message: %s' % err)
+    return HttpResponse('')
+  sts = msg.reply('Sorry, Rietveld does not support chat input')
+  logging.debug('XMPP status %r', sts)
   return HttpResponse('')
 
 
