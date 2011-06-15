@@ -3019,17 +3019,17 @@ def _get_draft_details(request, comments):
   """Helper to display comments with context in the email message."""
   last_key = None
   output = []
-  linecache = {}  # Maps (c.patch.filename, c.left) to list of lines
+  linecache = {}  # Maps (c.patch.key(), c.left) to list of lines
   modified_patches = []
   for c in comments:
-    if (c.patch.filename, c.left) != last_key:
+    if (c.patch.key(), c.left) != last_key:
       url = request.build_absolute_uri(
         reverse(diff, args=[request.issue.key().id(),
                             c.patch.patchset.key().id(),
                             c.patch.filename]))
       output.append('\n%s\nFile %s (%s):' % (url, c.patch.filename,
                                              c.left and "left" or "right"))
-      last_key = (c.patch.filename, c.left)
+      last_key = (c.patch.key(), c.left)
       patch = c.patch
       if patch.no_base_file:
         linecache[last_key] = patching.ParsePatchToLines(patch.lines)
@@ -3040,7 +3040,7 @@ def _get_draft_details(request, comments):
         else:
           new_lines = patch.get_patched_content().text.splitlines(True)
           linecache[last_key] = new_lines
-    file_lines = linecache.get(last_key, ())
+    file_lines = linecache[last_key]
     context = ''
     if patch.no_base_file:
       for old_line_no, new_line_no, line_text in file_lines:
