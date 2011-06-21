@@ -100,7 +100,7 @@ TEXT_MIMETYPES = ['application/javascript', 'application/json',
                   'application/x-javascript', 'application/xml',
                   'application/x-freemind', 'application/x-sh',
                   'application/x-ruby', 'application/x-httpd-php',
-                  'application/x-httpd-eruby']
+                  'application/x-httpd-eruby', 'application/x-msdos-program']
 
 VCS_ABBREVIATIONS = {
   VCS_MERCURIAL.lower(): VCS_MERCURIAL,
