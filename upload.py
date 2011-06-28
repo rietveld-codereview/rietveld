@@ -1459,7 +1459,7 @@ class PerforceVCS(VersionControlSystem):
   """Implementation of the VersionControlSystem interface for Perforce."""
 
   def __init__(self, options):
-    
+
     def ConfirmLogin():
       # Make sure we have a valid perforce session
       while True:
@@ -1471,21 +1471,21 @@ class PerforceVCS(VersionControlSystem):
           break
         print "Enter perforce password: "
         self.RunPerforceCommandWithReturnCode(["login"])
-      
+
     super(PerforceVCS, self).__init__(options)
-    
+
     self.p4_changelist = options.p4_changelist
     if not self.p4_changelist:
       ErrorExit("A changelist id is required")
     if (options.revision):
       ErrorExit("--rev is not supported for perforce")
-    
+
     self.p4_port = options.p4_port
     self.p4_client = options.p4_client
     self.p4_user = options.p4_user
-    
+
     ConfirmLogin()
-    
+
     if not options.message:
       description = self.RunPerforceCommand(["describe", self.p4_changelist],
                                             marshal_output=True)
@@ -1495,7 +1495,7 @@ class PerforceVCS(VersionControlSystem):
         lines = raw_message.splitlines()
         if len(lines):
           options.message = lines[0]
-  
+
   def RunPerforceCommandWithReturnCode(self, extra_args, marshal_output=False,
                                        universal_newlines=True):
     args = ["p4"]
@@ -1509,13 +1509,13 @@ class PerforceVCS(VersionControlSystem):
     if self.p4_user:
       args.extend(["-u", self.p4_user])
     args.extend(extra_args)
-    
+
     data, retcode = RunShellWithReturnCode(
         args, print_output=False, universal_newlines=universal_newlines)
     if marshal_output and data:
       data = marshal.loads(data)
     return data, retcode
-    
+
   def RunPerforceCommand(self, extra_args, marshal_output=False,
                          universal_newlines=True):
     # This might be a good place to cache call results, since things like
@@ -1529,7 +1529,7 @@ class PerforceVCS(VersionControlSystem):
   def GetFileProperties(self, property_key_prefix = "", command = "describe"):
     description = self.RunPerforceCommand(["describe", self.p4_changelist],
                                           marshal_output=True)
-    
+
     changed_files = {}
     file_index = 0
     # Try depotFile0, depotFile1, ... until we don't find a match
@@ -1584,52 +1584,52 @@ class PerforceVCS(VersionControlSystem):
         "branch", # p4 integrate (to a new file), similar to hg "add"
         "add", # p4 integrate (to a new file), after modifying the new file
     ]
-    
+
     # We only see a different base for "add" if this is a downgraded branch
-    # after a file was branched (integrated), then edited. 
+    # after a file was branched (integrated), then edited.
     if self.GetAction(filename) in actionsWithDifferentBases:
       # -Or shows information about pending integrations/moves
       fstat_result = self.RunPerforceCommand(["fstat", "-Or", filename],
                                              marshal_output=True)
-      
+
       baseFileKey = "resolveFromFile0" # I think it's safe to use only file0
       if baseFileKey in fstat_result:
         return fstat_result[baseFileKey]
-    
+
     return filename
 
   def GetBaseRevision(self, filename):
     base_filename = self.GetBaseFilename(filename)
-    
+
     have_result = self.RunPerforceCommand(["have", base_filename],
                                           marshal_output=True)
     if "haveRev" in have_result:
       return have_result["haveRev"]
-    
+
   def GetLocalFilename(self, filename):
     where = self.RunPerforceCommand(["where", filename], marshal_output=True)
     if "path" in where:
       return where["path"]
 
-  def GenerateDiff(self, args): 
+  def GenerateDiff(self, args):
     class DiffData:
       def __init__(self, perforceVCS, filename, action):
         self.perforceVCS = perforceVCS
         self.filename = filename
         self.action = action
         self.base_filename = perforceVCS.GetBaseFilename(filename)
-        
+
         self.file_body = None
         self.base_rev = None
         self.prefix = None
         self.working_copy = True
         self.change_summary = None
-         
+
     def GenerateDiffHeader(diffData):
       header = []
       header.append("Index: %s" % diffData.filename)
       header.append("=" * 67)
-      
+
       if diffData.base_filename != diffData.filename:
         if diffData.action.startswith("move"):
           verb = "rename"
@@ -1637,7 +1637,7 @@ class PerforceVCS(VersionControlSystem):
           verb = "copy"
         header.append("%s from %s" % (verb, diffData.base_filename))
         header.append("%s to %s" % (verb, diffData.filename))
-        
+
       suffix = "\t(revision %s)" % diffData.base_rev
       header.append("--- " + diffData.base_filename + suffix)
       if diffData.working_copy:
@@ -1646,14 +1646,14 @@ class PerforceVCS(VersionControlSystem):
       if diffData.change_summary:
         header.append(diffData.change_summary)
       return header
-  
+
     def GenerateMergeDiff(diffData, args):
       # -du generates a unified diff, which is nearly svn format
       diffData.file_body = self.RunPerforceCommand(
           ["diff", "-du", diffData.filename] + args)
       diffData.base_rev = self.GetBaseRevision(diffData.filename)
       diffData.prefix = ""
-      
+
       # We have to replace p4's file status output (the lines starting
       # with +++ or ---) to match svn's diff format
       lines = diffData.file_body.splitlines()
@@ -1682,13 +1682,13 @@ class PerforceVCS(VersionControlSystem):
       diffData.change_summary += " @@"
       diffData.prefix = "+"
       return diffData
-    
+
     def GenerateDeleteDiff(diffData):
       diffData.base_rev = self.GetBaseRevision(diffData.filename)
       is_base_binary = self.IsBaseBinary(diffData.filename)
       # For deletes, base_filename == filename
-      diffData.file_body = self.GetFileContent(diffData.base_filename, 
-          None, 
+      diffData.file_body = self.GetFileContent(diffData.base_filename,
+          None,
           is_base_binary)
       # Replicate svn's list of changed lines
       line_count = len(diffData.file_body.splitlines())
@@ -1698,16 +1698,16 @@ class PerforceVCS(VersionControlSystem):
       diffData.change_summary += " +0,0 @@"
       diffData.prefix = "-"
       return diffData
-  
+
     changed_files = self.GetChangedFiles()
-    
+
     svndiff = []
     filecount = 0
     for (filename, action) in changed_files.items():
       svn_status = self.PerforceActionToSvnStatus(action)
       if svn_status == "SKIP":
         continue
-    
+
       diffData = DiffData(self, filename, action)
       # Is it possible to diff a branched file? Stackoverflow says no:
       # http://stackoverflow.com/questions/1771314/in-perforce-command-line-how-to-diff-a-file-reopened-for-add
@@ -1720,9 +1720,9 @@ class PerforceVCS(VersionControlSystem):
       else:
         ErrorExit("Unknown file action %s (svn action %s)." % \
                   (action, svn_status))
-      
+
       svndiff += GenerateDiffHeader(diffData)
-      
+
       for line in diffData.file_body.splitlines():
         svndiff.append(diffData.prefix + line)
       filecount += 1
@@ -1748,16 +1748,16 @@ class PerforceVCS(VersionControlSystem):
     changed_files = self.GetChangedFiles()
     if not filename in changed_files:
       ErrorExit("Trying to get base version of unknown file %s." % filename)
-      
+
     return changed_files[filename]
 
   def GetBaseFile(self, filename):
     base_filename = self.GetBaseFilename(filename)
     base_content = ""
     new_content = None
-    
+
     status = self.PerforceActionToSvnStatus(self.GetAction(filename))
-    
+
     if status != "A":
       revision = self.GetBaseRevision(base_filename)
       if not revision:
@@ -1766,13 +1766,13 @@ class PerforceVCS(VersionControlSystem):
       base_content = self.GetFileContent(base_filename,
                                          revision,
                                          is_base_binary)
-    
+
     is_binary = self.IsPendingBinary(filename)
     if status != "D" and status != "SKIP":
       relpath = self.GetLocalFilename(filename)
       if is_binary and self.IsImage(relpath):
         new_content = open(relpath, "rb").read()
-    
+
     return base_content, new_content, is_binary, status
 
 # NOTE: The SplitPatch function is duplicated in engine.py, keep them in sync.
@@ -1862,10 +1862,10 @@ def GuessVCSName(options):
   for attribute, value in options.__dict__.iteritems():
     if attribute.startswith("p4") and value != None:
       return (VCS_PERFORCE, None)
-  
+
   def RunDetectCommand(vcs_type, command):
     """Helper to detect VCS by executing command.
-    
+
     Returns:
        A pair (vcs, output) or None. Throws exception on error.
     """
@@ -1876,7 +1876,7 @@ def GuessVCSName(options):
     except OSError, (errcode, message):
       if errcode != errno.ENOENT:  # command not found code
         raise
-  
+
   # Mercurial has a command to get the base directory of a repository
   # Try running it, but don't die if we don't have hg installed.
   # NOTE: we try Mercurial first as it can sit on top of an SVN working copy.
