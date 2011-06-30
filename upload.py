@@ -94,14 +94,6 @@ VCS_PERFORCE = "Perforce"
 VCS_CVS = "CVS"
 VCS_UNKNOWN = "Unknown"
 
-# whitelist for non-binary filetypes which do not start with "text/"
-# .mm (Objective-C) shows up as application/x-freemind on my Linux box.
-TEXT_MIMETYPES = ['application/javascript', 'application/json',
-                  'application/x-javascript', 'application/xml',
-                  'application/x-freemind', 'application/x-sh',
-                  'application/x-ruby', 'application/x-httpd-php',
-                  'application/x-httpd-eruby', 'application/x-msdos-program']
-
 VCS_ABBREVIATIONS = {
   VCS_MERCURIAL.lower(): VCS_MERCURIAL,
   "hg": VCS_MERCURIAL,
@@ -878,15 +870,11 @@ class VersionControlSystem(object):
       return False
     return mimetype.startswith("image/")
 
-  def IsBinary(self, filename):
-    """Returns true if the guessed mimetyped isnt't in text group."""
-    mimetype = mimetypes.guess_type(filename)[0]
-    if not mimetype:
-      return False  # e.g. README, "real" binaries usually have an extension
-    # special case for text files which don't start with text/
-    if mimetype in TEXT_MIMETYPES:
-      return False
-    return not mimetype.startswith("text/")
+  def IsBinaryData(self, data):
+    """Returns true if data contains a null byte."""
+    # Derived from how Mercurial's heuristic, see
+    # http://selenic.com/hg/file/848a6658069e/mercurial/util.py#l229
+    return bool(data and "\0" in data)
 
 
 class SubversionVCS(VersionControlSystem):
@@ -1094,9 +1082,12 @@ class SubversionVCS(VersionControlSystem):
       else:
         mimetype = mimetype.strip()
       get_base = False
+      # this test for binary is exactly the test prescribed by the
+      # official SVN docs at
+      # http://subversion.apache.org/faq.html#binary-files
       is_binary = (bool(mimetype) and
         not mimetype.startswith("text/") and
-        not mimetype in TEXT_MIMETYPES)
+        mimetype not in ("image/x-xbitmap", "image/x-xpixmap"))
       if status[0] == " ":
         # Empty base content just to force an upload.
         base_content = ""
@@ -1258,7 +1249,6 @@ class GitVCS(VersionControlSystem):
     hash_before, hash_after = self.hashes.get(filename, (None,None))
     base_content = None
     new_content = None
-    is_binary = self.IsBinary(filename)
     status = None
 
     if filename in self.renames:
@@ -1274,6 +1264,7 @@ class GitVCS(VersionControlSystem):
     else:
       status = "M"
 
+    is_binary = self.IsBinaryData(base_content)
     is_image = self.IsImage(filename)
 
     # Grab the before/after content if we need it.
@@ -1305,7 +1296,6 @@ class CVSVCS(VersionControlSystem):
   def GetBaseFile(self, filename):
     base_content = None
     new_content = None
-    is_binary = False
     status = "A"
 
     output, retcode = RunShellWithReturnCode(["cvs", "status", filename])
@@ -1325,7 +1315,7 @@ class CVSVCS(VersionControlSystem):
       status = "D"
       base_content = self.GetOriginalContent_(filename)
 
-    return (base_content, new_content, is_binary, status)
+    return (base_content, new_content, self.IsBinaryData(base_content), status)
 
   def GenerateDiff(self, extra_args):
     cmd = ["cvs", "diff", "-u", "-N"]
@@ -1442,10 +1432,10 @@ class MercurialVCS(VersionControlSystem):
     if status != "A":
       base_content = RunShell(["hg", "cat", "-r", base_rev, oldrelpath],
         silent_ok=True)
-      is_binary = "\0" in base_content  # Mercurial's heuristic
+      is_binary = self.IsBinaryData(base_content)
     if status != "R":
       new_content = open(relpath, "rb").read()
-      is_binary = is_binary or "\0" in new_content
+      is_binary = is_binary or self.IsBinaryData(new_content)
     if is_binary and base_content:
       # Fetch again without converting newlines
       base_content = RunShell(["hg", "cat", "-r", base_rev, oldrelpath],
@@ -1557,9 +1547,6 @@ class PerforceVCS(VersionControlSystem):
 
   def IsPendingBinary(self, filename):
     return self.IsBinaryHelper(filename, "describe")
-
-  def IsBinary(self, filename):
-    ErrorExit("IsBinary is not safe: call IsBaseBinary or IsPendingBinary")
 
   def IsBinaryHelper(self, filename, command):
     file_types = self.GetFileProperties("type", command)
