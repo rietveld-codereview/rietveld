@@ -110,9 +110,8 @@
 
     {%for message in messages%}
       <div class="message {%if message.approval%}approval{%endif%}"
-           id="msg-{{message.key}}"
+           id="msg{{forloop.counter}}"
            name="{{forloop.counter0}}">
-        <a name="msg-{{message.key}}"></a>
         <div class="header">
           <table border="0" width="100%" cellspacing="0" cellpadding="0">
             <tr class="comment_title"
@@ -125,11 +124,12 @@
                        width="100%">
                   <tr>
                     <td>
-                      <div style="white-space: nowrap; overflow: hidden;{%if forloop.last%} visibility: hidden;{%endif%}"
+                      <span style="white-space: nowrap; overflow: hidden;{%if forloop.last%} display: none;{%endif%}"
                            class="extra"
                            id="cl-preview-{{forloop.counter0}}">
                           {{message.text|truncatewords:15}}
-                       </div>
+                      </span>
+                      <a class="anchor" href="#msg{{forloop.counter}}">&para;</a>
                     </td>
                   </tr>
                 </table>
@@ -180,7 +180,7 @@
   <!--
     document.onkeydown = M_changelistKeyDown;
     var dashboardState = new M_DashboardState(window, 'patch', 'M_CLPatchMarker');
-    M_switchChangelistCommentByAnchor();
+    M_toggleIssueMessageByAnchor();
   // -->
 </script>
 
