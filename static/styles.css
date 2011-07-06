@@ -78,7 +78,7 @@ a.anchor {
   visibility: hidden;
 }
 
-div.header:hover > a.anchor {
+div.header:hover a.anchor {
   visibility: visible;
 }
 
@@ -748,19 +748,22 @@ span.visualtab {
 /* Approved messages have light green header background and dark green border */
 .message.approval .header {
   background-color: #7FFF7F;
-  border: 1px solid green;
-  border-bottom: none;
+  border-color: green;
 }
-
-.message.approval .message-body {
-  border-left: 1px solid green;
-  border-right: 1px solid green;
-}
-
+.message.approval .message-body,
 .message.approval .message-actions {
-  border: 1px solid green;
-  border-top: none;
+  border-color: green;
 }
+
+.message.referenced .header {
+  background-color: #FFFF7F;
+  border-color: yellow;
+}
+.message.referenced .message-body,
+.message.referenced .message-actions {
+  border-color: yellow;
+}
+
 
 .popup {
   visibility: hidden;
