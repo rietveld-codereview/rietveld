@@ -129,7 +129,6 @@
                            id="cl-preview-{{forloop.counter0}}">
                           {{message.text|truncatewords:15}}
                       </span>
-                      <a class="anchor" href="#msg{{forloop.counter}}">&para;</a>
                     </td>
                   </tr>
                 </table>
@@ -137,6 +136,7 @@
               <td align="right"
                   style="white-space: nowrap; padding-right: 5px;">
                 {{message.date|timesince}} ago
+                <a href="#msg{{forloop.counter}}">#{{forloop.counter}}</a>
               </td>
             </tr>
           </table>
