@@ -1,5 +1,5 @@
-application: retreview
-version: 62
+application: codereview
+version: 61
 runtime: python
 api_version: 1
 
