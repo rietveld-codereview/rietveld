@@ -471,6 +471,12 @@ function M_toggleSectionForPS(issue, patchset) {
  * @param {String} issue The issue key
  */
 function M_editFlags(issue) {
+  if (document.getElementById("trynotgreen") && document.getElementById('commit').checked) {
+    document.getElementById('commit').checked = false;
+    if (!confirm("Trybot results are pending or failed. Are you sure these are flaky and you want to commit?"))
+      return;
+    document.getElementById('commit').checked = true;
+  }
   var httpreq = M_getXMLHttpRequest();
   if (!httpreq) {
     return true;
