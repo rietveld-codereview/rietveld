@@ -931,6 +931,12 @@ class SubversionVCS(VersionControlSystem):
       ErrorExit("Can't find URL in output from svn info")
     return None
 
+  def _EscapeFilename(self, filename):
+    """Escapes filename for SVN commands."""
+    if "@" in filename and not filename.endswith("@"):
+      filename = "%s@" % filename
+    return filename
+
   def GenerateDiff(self, args):
     cmd = ["svn", "diff"]
     if self.options.revision:
@@ -998,7 +1004,8 @@ class SubversionVCS(VersionControlSystem):
   def GetStatus(self, filename):
     """Returns the status of a file."""
     if not self.options.revision:
-      status = RunShell(["svn", "status", "--ignore-externals", filename])
+      status = RunShell(["svn", "status", "--ignore-externals",
+                         self._EscapeFilename(filename)])
       if not status:
         ErrorExit("svn status returned no output for %s" % filename)
       status_lines = status.splitlines()
@@ -1017,7 +1024,8 @@ class SubversionVCS(VersionControlSystem):
     else:
       dirname, relfilename = os.path.split(filename)
       if dirname not in self.svnls_cache:
-        cmd = ["svn", "list", "-r", self.rev_start, dirname or "."]
+        cmd = ["svn", "list", "-r", self.rev_start,
+               self._EscapeFilename(dirname) or "."]
         out, err, returncode = RunShellWithReturnCodeAndStderr(cmd)
         if returncode:
           # Directory might not yet exist at start revison
@@ -1031,7 +1039,7 @@ class SubversionVCS(VersionControlSystem):
         args = ["svn", "list"]
         if self.rev_end:
           args += ["-r", self.rev_end]
-        cmd = args + [dirname or "."]
+        cmd = args + [self._EscapeFilename(dirname) or "."]
         out, returncode = RunShellWithReturnCode(cmd)
         if returncode:
           ErrorExit("Failed to run command %s" % cmd)
@@ -1057,8 +1065,8 @@ class SubversionVCS(VersionControlSystem):
     if status[0] == "A" and status[3] != "+":
       # We'll need to upload the new content if we're adding a binary file
       # since diff's output won't contain it.
-      mimetype = RunShell(["svn", "propget", "svn:mime-type", filename],
-                          silent_ok=True)
+      mimetype = RunShell(["svn", "propget", "svn:mime-type",
+                           self._EscapeFilename(filename)], silent_ok=True)
       base_content = ""
       is_binary = bool(mimetype) and not mimetype.startswith("text/")
       if is_binary and self.IsImage(filename):
@@ -1068,6 +1076,7 @@ class SubversionVCS(VersionControlSystem):
           (status[0] == " " and status[1] == "M")):  # Property change.
       args = []
       if self.options.revision:
+        # filename must not be escaped. We already add an ampersand here.
         url = "%s/%s@%s" % (self.svn_base, filename, self.rev_start)
       else:
         # Don't change filename, it's needed later.
@@ -1120,7 +1129,8 @@ class SubversionVCS(VersionControlSystem):
                                   silent_ok=True)
         else:
           base_content, ret_code = RunShellWithReturnCode(
-            ["svn", "cat", filename], universal_newlines=universal_newlines)
+            ["svn", "cat", self._EscapeFilename(filename)],
+            universal_newlines=universal_newlines)
           if ret_code and status[0] == "R":
             # It's a replaced file without local history (see issue208).
             # The base file needs to be fetched from the server.
