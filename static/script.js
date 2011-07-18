@@ -470,13 +470,29 @@ function M_toggleSectionForPS(issue, patchset) {
  * Change the commit bit for the given issue by using edit_flags.
  * @param {String} issue The issue key
  */
-function M_editFlags(issue) {
-  if (document.getElementById("trynotgreen") && document.getElementById('commit').checked) {
+function M_editFlags(issue, build_results) {
+  if (document.getElementById('commit').checked) {
     document.getElementById('commit').checked = false;
-    if (!confirm("Trybot results are pending or failed. Are you sure these are flaky and you want to commit?"))
-      return;
+    if (!build_results.length) {
+      if (!confirm("There are no trybot runs for this change. The commit queue only runs a small subset of tests, so a green trybot run is needed first. Are you sure this change doesn't need a tryjob?"))
+        return;
+    } else {
+      var green = true;
+      for (var i = 0; i < build_results.length; i++) {
+        if (build_results[i] != "success") {
+          green = false;
+          break;
+        }
+      }
+      if (!green) {
+        if (!confirm("Trybot results are pending or failed. Are you sure these are flaky and you want to commit?"))
+          return;
+      }
+    }
+
     document.getElementById('commit').checked = true;
   }
+
   var httpreq = M_getXMLHttpRequest();
   if (!httpreq) {
     return true;

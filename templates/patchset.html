@@ -112,22 +112,13 @@
     </table>
   {%endif%}
   {%ifequal last_patchset.key.id patchset.key.id%}
-    {%for build_result in patchset.build_results_list%}
-      {%if build_result.status == "failure" or build_result.status == "pending"%}
-        <span id="trynotgreen"></span>
-      {%endif%}
-    {%endfor%}
     <form id="commitform" name="commitform" method="post">
       <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
       <input type="hidden" name="last_patchset" value="{{last_patchset.key.id}}">
       Commit: <input type="checkbox" id="commit" name="commit"
         {%if issue.commit%}checked{%endif%}
         {%if not request.user or issue.closed%}disabled{%endif%}
-        {%if not patchset.build_results_list%}
-        onchange="document.getElementById('commit').checked = false;alert('Run trybot before commit queue, since commit queue only runs a subset of tests!');" />
-        {%else%}
-        onchange="M_editFlags('{{issue.key.id}}')" />
-        {% endif %}
+        onchange="M_editFlags('{{issue.key.id}}', [{%for build_result in patchset.build_results_list%}'{{build_result.status}}',{%endfor%}])" />
     </form>
   {%endifequal%}
 </div>
