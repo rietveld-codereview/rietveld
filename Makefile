@@ -27,10 +27,9 @@ serve_remote_email:
 
 update:
 	@echo "Updating `cat app.yaml | sed -n 's/^application: *//p'`"
-	@echo "r`svn info | sed -n 's/^Revision: *//p'`" \
-		>templates/live_revision.html
+	@echo "revision `hg id -i`" >templates/live_revision.html
 	$(APPCFG) $(APPCFG_FLAGS) update .
-	@svn revert templates/live_revision.html
+	@hg revert --no-backup templates/live_revision.html
 
 upload: update
 
