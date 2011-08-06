@@ -7,6 +7,10 @@ DEV_APPSERVER_FLAGS=
 APPCFG=	appcfg.py
 APPCFG_FLAGS=
 
+PYTHON= python2.5
+COVERAGE= coverage
+SDK_PATH=
+
 default: help
 
 help:
@@ -40,3 +44,10 @@ update_indexes:
 
 vacuum_indexes:
 	$(APPCFG) $(APPCFG_FLAGS) vacuum_indexes .
+
+test:
+	$(PYTHON) tests/run_tests.py $(SDK_PATH)
+
+coverage:
+	$(COVERAGE) run --branch tests/run_tests.py $(SDK_PATH)
+	$(COVERAGE) html --include="codereview/*"
