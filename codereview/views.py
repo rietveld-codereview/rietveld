@@ -2818,11 +2818,12 @@ def _inline_draft(request):
                             context_instance=RequestContext(request))
 
 
-def _get_affected_files(issue):
+def _get_affected_files(issue, full_diff=False):
   """Helper to return a list of affected files from the latest patchset.
 
   Args:
     issue: Issue instance.
+    full_diff: If true, include the entire diff even if it exceeds 100 lines.
 
   Returns:
     2-tuple containing a list of affected files, and the diff contents if it
@@ -2841,16 +2842,16 @@ def _get_affected_files(issue):
       file_str += patch.filename
       files.append(file_str)
       # No point in loading patches if the patchset is too large for email.
-      if modified_count < 100:
+      if full_diff or modified_count < 100:
         modified_count += patch.num_added + patch.num_removed
 
-    if modified_count < 100:
+    if full_diff or modified_count < 100:
       diff = patchset.data
 
   return files, diff
 
 
-def _get_mail_template(request, issue):
+def _get_mail_template(request, issue, full_diff=False):
   """Helper to return the template and context for an email.
 
   If this is the first email sent by the owner, a template that lists the
@@ -2862,7 +2863,7 @@ def _get_mail_template(request, issue):
     if db.GqlQuery('SELECT * FROM Message WHERE ANCESTOR IS :1 AND sender = :2',
                    issue, db.Email(request.user.email())).count(1) == 0:
       template = 'mails/review.txt'
-      files, patch = _get_affected_files(issue)
+      files, patch = _get_affected_files(issue, full_diff)
       context.update({'files': files, 'patch': patch, 'base': issue.base})
   return template, context
 
@@ -3067,7 +3068,8 @@ def _get_draft_details(request, comments):
 def _make_message(request, issue, message, comments=None, send_mail=False,
                   draft=None):
   """Helper to create a Message instance and optionally send an email."""
-  template, context = _get_mail_template(request, issue)
+  attach_patch = request.POST.get("attach_patch") == "yes"
+  template, context = _get_mail_template(request, issue, full_diff=attach_patch)
   # Decide who should receive mail
   my_email = db.Email(request.user.email())
   to = [db.Email(issue.owner.email())] + issue.reviewers
@@ -3079,7 +3081,13 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     to.remove(my_email)
   if my_email in cc:
     cc.remove(my_email)
-  subject = '%s (issue%d)' % (issue.subject, issue.key().id())
+  subject = '%s (issue %d)' % (issue.subject, issue.key().id())
+  patch = None
+  if attach_patch:
+    subject = 'PATCH: ' + subject
+    if 'patch' in context:
+      patch = context['patch']
+      del context['patch']
   if issue.message_set.count(1) > 0:
     subject = 'Re: ' + subject
   if comments:
@@ -3104,6 +3112,11 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     msg.date = datetime.datetime.now()
 
   if send_mail:
+    # Limit the list of files in the email to approximately 200
+    if 'files' in context and len(context['files']) > 210:
+      num_trimmed = len(context['files']) - 200
+      del context['files'][200:]
+      context['files'].append('[[ %d additional files ]]' % num_trimmed)
     url = request.build_absolute_uri(reverse(show, args=[issue.key().id()]))
     reviewer_nicknames = ', '.join(library.get_nickname(rev_temp, True,
                                                         request)
@@ -3130,6 +3143,9 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
                  'reply_to': _encode_safely(reply_to)}
     if cc:
       send_args['cc'] = [_encode_safely(address) for address in cc]
+    if patch:
+      send_args['attachments'] = [('issue_%s_patch.diff' % issue.key().id(),
+                                   patch)]
 
     attempts = 0
     while True:
