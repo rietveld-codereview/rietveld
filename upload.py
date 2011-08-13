@@ -542,6 +542,12 @@ group.add_option("--rev", action="store", dest="revision",
 group.add_option("--send_mail", action="store_true",
                  dest="send_mail", default=False,
                  help="Send notification email to reviewers.")
+group.add_option("-p", "--send_patch", action="store_true",
+                 dest="send_patch", default=False,
+                 help="Send notification email to reviewers, with a diff of "
+                      "the changes included as an attachment instead of "
+                      "inline. Also prepends 'PATCH:' to the email subject. "
+                      "(implies --send_mail)")
 group.add_option("--vcs", action="store", dest="vcs",
                  metavar="VCS", default=None,
                  help=("Version control system (optional, usually upload.py "
@@ -2175,6 +2181,8 @@ def RealMain(argv, data=None):
       print "Warning: Private flag ignored when updating an existing issue."
     else:
       form_fields.append(("private", "1"))
+  if options.send_patch:
+    options.send_mail = True
   # If we're uploading base files, don't send the email before the uploads, so
   # that it contains the file status.
   if options.send_mail and options.download_base:
@@ -2214,7 +2222,10 @@ def RealMain(argv, data=None):
   if not options.download_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options, files)
     if options.send_mail:
-      rpc_server.Send("/" + issue + "/mail", payload="")
+      payload = ""
+      if options.send_patch:
+        payload=urllib.urlencode({"attach_patch": "yes"})
+      rpc_server.Send("/" + issue + "/mail", payload=payload)
   return issue, patchset
 
 
