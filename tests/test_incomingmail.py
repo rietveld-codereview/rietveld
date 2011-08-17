@@ -76,6 +76,7 @@ class TestIncomingMail(TestCase):
 
   def test_empty_message(self):
     msg = Message()
+    msg['From'] = 'sender@example.com'
     msg['Subject'] = 'subject (issue%s)\r\n\r\n' % self.issue.key().id()
     self.assertRaises(views.InvalidIncomingEmailError,
                       views._process_incoming_mail, msg.as_string(),
@@ -146,3 +147,16 @@ class TestIncomingMail(TestCase):
     self.assertRaises(views.InvalidIncomingEmailError,
                       views._process_incoming_mail, msg.as_string(),
                       'reply@exampe.com')
+
+  def test_charset(self):
+    # make sure that incoming mails with non-ascii chars are handled correctly
+    # see related http://code.google.com/p/googleappengine/issues/detail?id=2326
+    jtxt = '\x1b$B%O%m!<%o!<%k%I!*\x1b(B'
+    jcode = 'iso-2022-jp'
+    msg = Message()
+    msg.set_payload(jtxt, jcode)
+    msg['Subject'] = 'subject (issue%s)' % self.issue.key().id()
+    msg['From'] = 'sender@example.com'
+    views._process_incoming_mail(msg.as_string(), 'reply@example.com')
+    imsg = models.Message.all().ancestor(self.issue).get()
+    self.assertEqual(imsg.text.encode(jcode), jtxt)
