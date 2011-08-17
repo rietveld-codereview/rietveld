@@ -3623,16 +3623,12 @@ def _process_incoming_mail(raw_message, recipients):
   """Process an incoming email message."""
   recipients = [x[1] for x in email.utils.getaddresses([recipients])]
 
-  # We can't use mail.InboundEmailMessage(raw_message) here.
-  # See: http://code.google.com/p/googleappengine/issues/detail?id=2326
-  # msg = mail.InboundEmailMessage(raw_message)
-  # The code below needs to be adjusted when issue2326 is fixed.
-  incoming_msg = email.message_from_string(raw_message)
+  incoming_msg = mail.InboundEmailMessage(raw_message)
 
-  if 'X-Google-Appengine-App-Id' in incoming_msg:
+  if 'X-Google-Appengine-App-Id' in incoming_msg.original:
     raise InvalidIncomingEmailError('Mail sent by App Engine')
 
-  subject = incoming_msg.get('Subject', '')
+  subject = incoming_msg.subject or ''
   match = re.search(r'\(issue *(?P<id>\d+)\)$', subject)
   if match is None:
     raise InvalidIncomingEmailError('No issue id found: %s', subject)
@@ -3640,19 +3636,12 @@ def _process_incoming_mail(raw_message, recipients):
   issue = models.Issue.get_by_id(issue_id)
   if issue is None:
     raise InvalidIncomingEmailError('Unknown issue ID: %d' % issue_id)
-  sender = email.utils.parseaddr(incoming_msg.get('From', None))[1]
+  sender = email.utils.parseaddr(incoming_msg.sender)[1]
 
   body = None
-  charset = None
-  if incoming_msg.is_multipart():
-    for payload in incoming_msg.get_payload():
-      if payload.get_content_type() == 'text/plain':
-        body = payload.get_payload(decode=True)
-        charset = payload.get_content_charset()
-        break
-  else:
-    body = incoming_msg.get_payload(decode=True)
-    charset = incoming_msg.get_content_charset()
+  for content_type, payload in incoming_msg.bodies('text/plain'):
+    body = payload.decode()
+    break
   if body is None or not body.strip():
     raise InvalidIncomingEmailError('Ignoring empty message.')
 
@@ -3663,7 +3652,7 @@ def _process_incoming_mail(raw_message, recipients):
                        sender=db.Email(sender),
                        recipients=[db.Email(x) for x in recipients],
                        date=datetime.datetime.now(),
-                       text=db.Text(body, encoding=charset),
+                       text=db.Text(body),
                        draft=False)
   msg.put()
 
