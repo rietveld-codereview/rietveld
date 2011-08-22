@@ -561,15 +561,16 @@ function M_switchChangelistComment(cid) {
 }
 
 /**
- * Toggles a comment if the anchor is of the form '#msg-KEY'.
+ * Toggles a comment if the anchor is of the form '#msgNUMBER'.
  */
-function M_switchChangelistCommentByAnchor() {
+function M_toggleIssueMessageByAnchor() {
   var href = window.location.href;
   var idx_hash = href.lastIndexOf('#');
   if (idx_hash != -1) {
     var anchor = href.slice(idx_hash+1, href.length);
-    if (anchor.slice(0, 4) == 'msg-') {
+    if (anchor.slice(0, 3) == 'msg') {
       var elem = document.getElementById(anchor);
+      elem.className += ' referenced';
       var num = elem.getAttribute('name');
       M_switchChangelistComment(num);
     }
@@ -630,9 +631,8 @@ function M_switchMoveOut(start_line, end_line) {
  */
 function M_showAllComments(prefix, num_comments) {
   for (var i = 0; i < num_comments; i++) {
-    document.getElementById(prefix + "-preview-" + i).style.visibility =
-        "hidden";
-    document.getElementById(prefix + "-comment-" + i).style.display = "";
+    M_hideElement(prefix + "-preview-" + i);
+    M_showElement(prefix + "-comment-" + i);
   }
 }
 
@@ -644,9 +644,8 @@ function M_showAllComments(prefix, num_comments) {
  */
 function M_hideAllComments(prefix, num_comments) {
   for (var i = 0; i < num_comments; i++) {
-    document.getElementById(prefix + "-preview-" + i).style.visibility =
-        "visible";
-    document.getElementById(prefix + "-comment-" + i).style.display = "none";
+    M_showElement(prefix + "-preview-" + i);
+    M_hideElement(prefix + "-comment-" + i);
   }
 }
 
@@ -670,12 +669,12 @@ function M_switchCommentCommon_(prefix, suffix) {
           'this message with the URL to the app owner');
     return;
   }
-  if (previewSpan.style.visibility == 'hidden') {
-    previewSpan.style.visibility = 'visible';
-    commentDiv.style.display = 'none';
+  if (previewSpan.style.display == 'none') {
+    M_showElement(previewSpan);
+    M_hideElement(commentDiv);
   } else {
-    previewSpan.style.visibility = 'hidden';
-    commentDiv.style.display = '';
+    M_hideElement(previewSpan);
+    M_showElement(commentDiv);
   }
 }
 

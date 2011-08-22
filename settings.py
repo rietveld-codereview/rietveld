@@ -21,6 +21,8 @@ DISALLOWED_USER_AGENTS = (
     re.compile(r'^Googlebot'),
 )
 
+from google.appengine.api import app_identity
+
 APPEND_SLASH = False
 DEBUG = os.environ['SERVER_SOFTWARE'].startswith('Dev')
 INSTALLED_APPS = (
@@ -49,7 +51,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 1048576  # 1 MB
 
 MEDIA_URL = '/static/'
 
-RIETVELD_INCOMING_MAIL_ADDRESS = ('reply@%s.appspotmail.com'
-                                  % os.getenv('APPLICATION_ID'))
+appid = app_identity.get_application_id()
+RIETVELD_INCOMING_MAIL_ADDRESS = ('reply@%s.appspotmail.com' % appid)
 
 UPLOAD_PY_SOURCE = os.path.join(os.path.dirname(__file__), 'upload.py')

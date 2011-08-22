@@ -7,6 +7,10 @@ DEV_APPSERVER_FLAGS=
 APPCFG=	appcfg.py
 APPCFG_FLAGS=
 
+PYTHON= python2.5
+COVERAGE= coverage
+SDK_PATH=
+
 default: help
 
 help:
@@ -27,10 +31,9 @@ serve_remote_email:
 
 update:
 	@echo "Updating `cat app.yaml | sed -n 's/^application: *//p'`"
-	@echo "r`svn info | sed -n 's/^Revision: *//p'`" \
-		>templates/live_revision.html
+	@echo "revision `hg id -i`" >templates/live_revision.html
 	$(APPCFG) $(APPCFG_FLAGS) update .
-	@svn revert templates/live_revision.html
+	@hg revert --no-backup templates/live_revision.html
 
 upload: update
 
@@ -41,3 +44,10 @@ update_indexes:
 
 vacuum_indexes:
 	$(APPCFG) $(APPCFG_FLAGS) vacuum_indexes .
+
+test:
+	$(PYTHON) tests/run_tests.py $(SDK_PATH)
+
+coverage:
+	$(COVERAGE) run --branch tests/run_tests.py $(SDK_PATH)
+	$(COVERAGE) html --include="codereview/*"

@@ -3037,11 +3037,12 @@ def _inline_draft(request):
                             context_instance=RequestContext(request))
 
 
-def _get_affected_files(issue):
+def _get_affected_files(issue, full_diff=False):
   """Helper to return a list of affected files from the latest patchset.
 
   Args:
     issue: Issue instance.
+    full_diff: If true, include the entire diff even if it exceeds 100 lines.
 
   Returns:
     2-tuple containing a list of affected files, and the diff contents if it
@@ -3062,16 +3063,16 @@ def _get_affected_files(issue):
       file_str += patch.filename
       files.append(file_str)
       # No point in loading patches if the patchset is too large for email.
-      if modified_count < 100:
+      if full_diff or modified_count < 100:
         modified_count += patch.num_added + patch.num_removed
 
-    if modified_count < 100:
+    if full_diff or modified_count < 100:
       diff = patchset.data
 
   return files, diff
 
 
-def _get_mail_template(request, issue):
+def _get_mail_template(request, issue, full_diff=False):
   """Helper to return the template and context for an email.
 
   If this is the first email sent by the owner, a template that lists the
@@ -3083,7 +3084,7 @@ def _get_mail_template(request, issue):
     if db.GqlQuery('SELECT * FROM Message WHERE ANCESTOR IS :1 AND sender = :2',
                    issue, db.Email(request.user.email())).count(1) == 0:
       template = 'mails/review.txt'
-      files, patch = _get_affected_files(issue)
+      files, patch = _get_affected_files(issue, full_diff)
       context.update({'files': files, 'patch': patch, 'base': issue.base})
   return template, context
 
@@ -3240,17 +3241,17 @@ def _get_draft_details(request, comments):
   """Helper to display comments with context in the email message."""
   last_key = None
   output = []
-  linecache = {}  # Maps (c.patch.filename, c.left) to list of lines
+  linecache = {}  # Maps (c.patch.key(), c.left) to list of lines
   modified_patches = []
   for c in comments:
-    if (c.patch.filename, c.left) != last_key:
+    if (c.patch.key(), c.left) != last_key:
       url = request.build_absolute_uri(
         reverse(diff, args=[request.issue.key().id(),
                             c.patch.patchset.key().id(),
                             c.patch.filename]))
       output.append('\n%s\nFile %s (%s):' % (url, c.patch.filename,
                                              c.left and "left" or "right"))
-      last_key = (c.patch.filename, c.left)
+      last_key = (c.patch.key(), c.left)
       patch = c.patch
       if patch.no_base_file:
         linecache[last_key] = patching.ParsePatchToLines(patch.lines)
@@ -3261,7 +3262,7 @@ def _get_draft_details(request, comments):
         else:
           new_lines = patch.get_patched_content().text.splitlines(True)
           linecache[last_key] = new_lines
-    file_lines = linecache.get(last_key, ())
+    file_lines = linecache[last_key]
     context = ''
     if patch.no_base_file:
       for old_line_no, new_line_no, line_text in file_lines:
@@ -3288,7 +3289,8 @@ def _get_draft_details(request, comments):
 def _make_message(request, issue, message, comments=None, send_mail=False,
                   draft=None):
   """Helper to create a Message instance and optionally send an email."""
-  template, context = _get_mail_template(request, issue)
+  attach_patch = request.POST.get("attach_patch") == "yes"
+  template, context = _get_mail_template(request, issue, full_diff=attach_patch)
   # Decide who should receive mail
   my_email = db.Email(request.user.email())
   to = [db.Email(issue.owner.email())] + issue.reviewers
@@ -3303,7 +3305,13 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     to.remove(my_email)
   if my_email in cc:
     cc.remove(my_email)
-  subject = '%s (issue%d)' % (issue.subject, issue.key().id())
+  subject = '%s (issue %d)' % (issue.subject, issue.key().id())
+  patch = None
+  if attach_patch:
+    subject = 'PATCH: ' + subject
+    if 'patch' in context:
+      patch = context['patch']
+      del context['patch']
   if issue.message_set.count(1) > 0:
     subject = 'Re: ' + subject
   if comments:
@@ -3328,6 +3336,11 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     msg.date = datetime.datetime.now()
 
   if send_mail:
+    # Limit the list of files in the email to approximately 200
+    if 'files' in context and len(context['files']) > 210:
+      num_trimmed = len(context['files']) - 200
+      del context['files'][200:]
+      context['files'].append('[[ %d additional files ]]' % num_trimmed)
     url = request.build_absolute_uri(reverse(show, args=[issue.key().id()]))
     reviewer_nicknames = ', '.join(library.get_nickname(rev_temp, True,
                                                         request)
@@ -3354,6 +3367,9 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
                  'reply_to': _encode_safely(reply_to)}
     if cc:
       send_args['cc'] = [_encode_safely(address) for address in cc]
+    if patch:
+      send_args['attachments'] = [('issue_%s_patch.diff' % issue.key().id(),
+                                   patch)]
 
     attempts = 0
     while True:
@@ -3942,13 +3958,13 @@ def incoming_chat(request):
 
   Just reply saying we ignored the chat.
   """
-  sender = request.POST.get('from')
-  if not sender:
-    logging.warn('Incoming chat without "from" key ignored')
-  else:
-    sts = xmpp.send_message([sender],
-                            'Sorry, Rietveld does not support chat input')
-    logging.debug('XMPP status %r', sts)
+  try:
+    msg = xmpp.Message(request.POST)
+  except xmpp.InvalidMessageError, err:
+    logging.warn('Incoming invalid chat message: %s' % err)
+    return HttpResponse('')
+  sts = msg.reply('Sorry, Rietveld does not support chat input')
+  logging.debug('XMPP status %r', sts)
   return HttpResponse('')
 
 
@@ -3971,25 +3987,12 @@ def _process_incoming_mail(raw_message, recipients):
   """Process an incoming email message."""
   recipients = [x[1] for x in email.utils.getaddresses([recipients])]
 
-  # We can't use mail.InboundEmailMessage(raw_message) here.
-  # See: http://code.google.com/p/googleappengine/issues/detail?id=2326
-  # msg = mail.InboundEmailMessage(raw_message)
-  # The code below needs to be adjusted when issue2326 is fixed.
-  incoming_msg = email.message_from_string(raw_message)
+  incoming_msg = mail.InboundEmailMessage(raw_message)
 
-  if 'X-Google-Appengine-App-Id' in incoming_msg:
+  if 'X-Google-Appengine-App-Id' in incoming_msg.original:
     raise InvalidIncomingEmailError('Mail sent by App Engine')
 
-  # big hack until Groups lets X-Appengine-App-Id through.  Once that happens,
-  # we should use that header instead.  See http://b/issue?id=2257571.
-  receivedspf = incoming_msg.get_all('Received-SPF')
-  # Groups and AE both add this header, need to look for the AE one if it exists.
-  if receivedspf:
-    for header in receivedspf:
-      if header.find('@apphosting.bounces.google.com') != -1:
-        return  # message was sent by us, so don't add it again to the issue
-
-  subject = incoming_msg.get('Subject', '')
+  subject = incoming_msg.subject or ''
   match = re.search(r'\(issue *(?P<id>\d+)\)$', subject)
   if match is None:
     raise InvalidIncomingEmailError('No issue id found: %s', subject)
@@ -3997,19 +4000,12 @@ def _process_incoming_mail(raw_message, recipients):
   issue = models.Issue.get_by_id(issue_id)
   if issue is None:
     raise InvalidIncomingEmailError('Unknown issue ID: %d' % issue_id)
-  sender = email.utils.parseaddr(incoming_msg.get('From', None))[1]
+  sender = email.utils.parseaddr(incoming_msg.sender)[1]
 
   body = None
-  charset = None
-  if incoming_msg.is_multipart():
-    for payload in incoming_msg.get_payload():
-      if payload.get_content_type() == 'text/plain':
-        body = payload.get_payload(decode=True)
-        charset = payload.get_content_charset()
-        break
-  else:
-    body = incoming_msg.get_payload(decode=True)
-    charset = incoming_msg.get_content_charset()
+  for content_type, payload in incoming_msg.bodies('text/plain'):
+    body = payload.decode()
+    break
   if body is None or not body.strip():
     raise InvalidIncomingEmailError('Ignoring empty message.')
 
@@ -4020,7 +4016,7 @@ def _process_incoming_mail(raw_message, recipients):
                        sender=db.Email(sender),
                        recipients=[db.Email(x) for x in recipients],
                        date=datetime.datetime.now(),
-                       text=db.Text(body, encoding=charset),
+                       text=db.Text(body),
                        draft=False)
   msg.put()
 
