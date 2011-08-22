@@ -81,6 +81,7 @@ class Issue(db.Model):
   closed = db.BooleanProperty(default=False)
   private = db.BooleanProperty(default=False)
   n_comments = db.IntegerProperty()
+  commit = db.BooleanProperty(default=False)
 
   _is_starred = None
 
@@ -95,7 +96,9 @@ class Issue(db.Model):
 
   def user_can_edit(self, user):
     """Return true if the given user has permission to edit this issue."""
-    return user == self.owner
+    return user and (user == self.owner or
+                     user.email().endswith("@chromium.org") or
+                     user.email().endswith("@google.com"))
 
   @property
   def edit_allowed(self):
@@ -167,6 +170,7 @@ class PatchSet(db.Model):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty(default=0)
+  build_results = db.StringListProperty()
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n."""
@@ -207,8 +211,9 @@ class Message(db.Model):
       self._approval = any(
             True for line in self.text.lower().splitlines()
             if not line.strip().startswith('>') and 'lgtm' in line)
-      # Must not be issue owner.
-      self._approval &= self.issue.owner.email() != self.sender
+      # Must not be issue owner not commit-bot.
+      self._approval &= self.sender not in (
+            self.issue.owner.email(), 'commit-bot@chromium.org')
     return self._approval
 
 
@@ -251,6 +256,7 @@ class Patch(db.Model):
   # Ids of patchsets that have a different version of this file.
   delta = db.ListProperty(int)
   delta_calculated = db.BooleanProperty(default=False)
+  lint_error_count = db.IntegerProperty(default=-1)
 
   _lines = None
 
@@ -530,6 +536,13 @@ class Branch(db.Model):
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
   owner = db.UserProperty(auto_current_user_add=True)
+
+
+class UrlMap(db.Model):
+  """Mapping between base url and source code viewer url."""
+
+  base_url_template = db.StringProperty(required=True)
+  source_code_url_template = db.StringProperty(required=True)
 
 
 ### Accounts ###

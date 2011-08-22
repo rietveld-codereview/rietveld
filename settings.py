@@ -15,6 +15,11 @@
 """Minimal Django settings."""
 
 import os
+import re
+
+DISALLOWED_USER_AGENTS = (
+    re.compile(r'^Googlebot'),
+)
 
 from google.appengine.api import app_identity
 
