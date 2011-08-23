@@ -1,0 +1,5 @@
+{%if obj.owner%}
+  PatchSet : {{obj.message}}
+{%else%}
+  Message from {%if obj.sender%}{{obj.sender}}{%else%}unknown{%endif%}
+{%endif%}

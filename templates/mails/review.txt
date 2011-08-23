@@ -1,0 +1,18 @@
+{%autoescape off%}Reviewers: {{reviewer_nicknames}},
+
+{%if message%}Message:
+{{message|wordwrap:"72"}}
+
+{%endif%}{%if details%}{{details|wordwrap:"72"}}
+
+{%endif%}{%if description%}Description:
+{{description|wordwrap:"72"}}{%endif%}
+
+Please review this at {{url}}{%if files%}
+
+Affected files:
+{% for file in files %}  {{file}}
+{% endfor %}
+{%endif%}{%if patch%}
+{{patch}}
+{%endif%}{%endautoescape%}

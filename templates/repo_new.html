@@ -1,0 +1,14 @@
+{%extends "repos_base.html"%}
+{%block title1%}Add Repository -{%endblock%}
+{%block body%}
+<h2>Create New Repository</h2>
+
+<form action="{%url codereview.views.repo_new%}" method="post">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Create Repository"></td></tr>
+</table>
+</form>
+
+{%endblock%}
