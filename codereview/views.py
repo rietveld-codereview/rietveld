@@ -3644,6 +3644,11 @@ def _process_incoming_mail(raw_message, recipients):
     break
   if body is None or not body.strip():
     raise InvalidIncomingEmailError('Ignoring empty message.')
+  elif len(body) > django_settings.RIETVELD_INCOMING_MAIL_MAX_SIZE:
+    # see issue325, truncate huge bodies
+    trunc_msg = '... (message truncated)'
+    body = body[:django_settings.RIETVELD_INCOMING_MAIL_MAX_SIZE - len(trunc_msg)]
+    body += trunc_msg
 
   # If the subject is long, this might come wrapped into more than one line.
   subject = ' '.join([x.strip() for x in subject.splitlines()])

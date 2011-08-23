@@ -148,6 +148,16 @@ class TestIncomingMail(TestCase):
                       views._process_incoming_mail, msg.as_string(),
                       'reply@exampe.com')
 
+  def test_huge_body_is_truncated(self):  # see issue325
+    msg = Message()
+    msg['subject'] = 'subject (issue%s)' % self.issue.key().id()
+    msg['From'] = 'sender@example.com'
+    msg.set_payload('1' * 600 * 1024)
+    views._process_incoming_mail(msg.as_string(), 'reply@example.com')
+    imsg = models.Message.all().ancestor(self.issue).get()
+    self.assertEqual(len(imsg.text), 500 * 1024)
+    self.assert_(imsg.text.endswith('... (message truncated)'))
+
   def test_charset(self):
     # make sure that incoming mails with non-ascii chars are handled correctly
     # see related http://code.google.com/p/googleappengine/issues/detail?id=2326
