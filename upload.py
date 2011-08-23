@@ -612,12 +612,19 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
     """Prompts the user for a username and password."""
     # Create a local alias to the email variable to avoid Python's crazy
     # scoping rules.
+    global keyring
     local_email = email
     if local_email is None:
       local_email = GetEmail("Email (login for uploading to %s)" % server)
     password = None
     if keyring:
-      password = keyring.get_password(host, local_email)
+      try:
+        password = keyring.get_password(host, local_email)
+      except:
+        # Sadly, we have to trap all errors here as
+        # gnomekeyring.IOError inherits from object. :/
+        print "Failed to get password from keyring"
+        keyring = None
     if password is not None:
       print "Using password from system keyring."
     else:
