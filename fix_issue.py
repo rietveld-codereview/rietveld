@@ -1,7 +1,7 @@
 import datetime
 import logging
 from mapreduce import operation as op
-from codereview.models import Account
+from codereview.models import Account, Issue
 
 
 def FixIssue(issue):
@@ -21,3 +21,15 @@ def FixIssue(issue):
           iid, email, i_uid, a_uid))
       issue.owner = account.user
       yield op.db.Put(issue)
+
+
+def DeleteUnusedAccounts(account):
+  email = account.user.email()
+  if Issue.all().filter('owner_email =', email).get():
+    return
+  if Issue.all().filter('cc =', email).get():
+    return
+  if Issue.all().filter('reviewers =', email).get():
+    return
+  logging.warn('Deleting %s' % email)
+  yield op.db.Delete(account)

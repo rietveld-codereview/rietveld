@@ -6,3 +6,10 @@ mapreduce:
     params:
     - name: entity_kind
       default: codereview.models.Issue
+- name: Delete unused accounts
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: fix_issue.DeleteUnusedAccounts
+    params:
+    - name: entity_kind
+      default: codereview.models.Account
