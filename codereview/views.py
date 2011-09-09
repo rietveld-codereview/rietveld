@@ -142,7 +142,7 @@ class IssueBaseForm(forms.Form):
                               max_length=1000,
                               widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
-                       max_length=1000,
+                       max_length=2000,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   private = forms.BooleanField(required=False, initial=False)
@@ -545,6 +545,7 @@ def respond(request, template, params=None):
       params['xsrf_token'] = account.get_xsrf_token()
   params['must_choose_nickname'] = must_choose_nickname
   params['uploadpy_hint'] = uploadpy_hint
+  params['rietveld_revision'] = django_settings.RIETVELD_REVISION
   try:
     return render_to_response(template, params,
                               context_instance=RequestContext(request))

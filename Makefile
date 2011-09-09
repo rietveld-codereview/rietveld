@@ -1,15 +1,15 @@
 # Makefile to simplify some common AppEngine actions.
 # Use 'make help' for a list of commands.
 
-DEV_APPSERVER=	dev_appserver.py
-DEV_APPSERVER_FLAGS=
+DEV_APPSERVER?= dev_appserver.py
+DEV_APPSERVER_FLAGS?=
 
-APPCFG=	appcfg.py
-APPCFG_FLAGS=
+APPCFG?= appcfg.py
+APPCFG_FLAGS?=
 
-PYTHON= python2.5
-COVERAGE= coverage
-SDK_PATH=
+PYTHON?= python2.5
+COVERAGE?= coverage
+SDK_PATH?=
 
 default: help
 
@@ -31,9 +31,8 @@ serve_remote_email:
 
 update:
 	@echo "Updating `cat app.yaml | sed -n 's/^application: *//p'`"
-	@echo "revision `hg id -i`" >templates/live_revision.html
+	@echo "`hg id -n`:`hg id -i`" >REVISION
 	$(APPCFG) $(APPCFG_FLAGS) update .
-	@hg revert --no-backup templates/live_revision.html
 
 upload: update
 
