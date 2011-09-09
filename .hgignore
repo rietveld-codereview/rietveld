@@ -5,6 +5,7 @@
 .*\#.*$
 .*@.*$
 index\.yaml$
+REVISION$
 .coverage$
 htmlcov$
 .DS_Store$

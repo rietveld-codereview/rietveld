@@ -504,6 +504,7 @@ def respond(request, template, params=None):
       params['xsrf_token'] = account.get_xsrf_token()
   params['must_choose_nickname'] = must_choose_nickname
   params['uploadpy_hint'] = uploadpy_hint
+  params['rietveld_revision'] = django_settings.RIETVELD_REVISION
   try:
     return render_to_response(template, params,
                               context_instance=RequestContext(request))

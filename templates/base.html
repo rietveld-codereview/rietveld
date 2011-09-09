@@ -237,7 +237,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
   <a href="{%url django.contrib.syndication.views.feed url="issue"%}/{{issue.key.id}}">This issue</a>
   {%endif%} 
   </div>
-  <div style="margin-top: .3em;">This is Rietveld <a href='http://code.google.com/p/rietveld/updates/list'>{%include "live_revision.html"%}</a></div>
+  <div style="margin-top: .3em;">This is Rietveld <a href='http://code.google.com/p/rietveld/updates/list'>{{rietveld_revision}}</a></div>
 </div>
 
 {%if not is_dev%}
