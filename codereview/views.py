@@ -137,7 +137,7 @@ class IssueBaseForm(forms.Form):
                               max_length=1000,
                               widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
-                       max_length=1000,
+                       max_length=2000,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   private = forms.BooleanField(required=False, initial=False)
