@@ -3503,6 +3503,7 @@ def _lint_patch(patch):
 
   try:
     import cpplint
+    import cpplint_chromium
   except ImportError:
     return False
 
@@ -3533,7 +3534,9 @@ def _lint_patch(patch):
 
   file_extension = os.path.splitext(patch.filename)[1]
   lines = patch.get_patched_content().text.splitlines()
-  cpplint.ProcessFileData(patch.filename, file_extension, lines, Error)
+  extra_check_functions = [cpplint_chromium.CheckPointerDeclarationWhitespace]
+  cpplint.ProcessFileData(
+      patch.filename, file_extension, lines, Error, extra_check_functions)
 
   return True
 
