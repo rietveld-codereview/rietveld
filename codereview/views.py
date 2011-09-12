@@ -348,6 +348,7 @@ class PublishForm(forms.Form):
                                     widget=forms.HiddenInput())
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
+  commit = forms.BooleanField(required=False, widget=forms.HiddenInput())
 
 
 class MiniPublishForm(forms.Form):
@@ -367,6 +368,7 @@ class MiniPublishForm(forms.Form):
                                     widget=forms.HiddenInput())
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
+  commit = forms.BooleanField(required=False, widget=forms.HiddenInput())
 
 
 FORM_CONTEXT_VALUES = [(x, '%d lines' % x) for x in models.CONTEXT_CHOICES]
@@ -3158,6 +3160,8 @@ def publish(request):
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
   issue.reviewers = reviewers
   issue.cc = cc
+  if form.cleaned_data['commit'] and not issue.closed:
+    issue.commit = True
   if not form.cleaned_data.get('message_only', False):
     tbd, comments = _get_draft_comments(request, issue)
   else:
