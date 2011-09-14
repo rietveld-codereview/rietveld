@@ -461,9 +461,36 @@ class HttpRpcServer(AbstractRpcServer):
     return opener
 
 
+class CondensedHelpFormatter(optparse.IndentedHelpFormatter):
+   """Frees more horizontal space by removing indentation from group
+      options and collapsing arguments between short and long, e.g.
+      '-o ARG, --opt=ARG' to -o --opt ARG"""
+
+   def format_heading(self, heading):
+     return "%s:\n" % heading
+
+   def format_option(self, option):
+     self.dedent()
+     res = optparse.HelpFormatter.format_option(self, option)
+     self.indent()
+     return res
+
+   def format_option_strings(self, option):
+     self.set_long_opt_delimiter(" ")
+     optstr = optparse.HelpFormatter.format_option_strings(self, option)
+     optlist = optstr.split(", ")
+     if len(optlist) > 1:
+       if option.takes_value():
+         # strip METAVAR from all but the last option
+         optlist = [x.split()[0] for x in optlist[:-1]] + optlist[-1:]
+       optstr = " ".join(optlist)
+     return optstr
+
+
 parser = optparse.OptionParser(
     usage="%prog [options] [-- diff_options] [path...]",
-    add_help_option=False
+    add_help_option=False,
+    formatter=CondensedHelpFormatter()
 )
 parser.add_option("-h", "--help", action="store_true",
                   help="Show this help message and exit.")
@@ -548,10 +575,8 @@ group.add_option("--send_mail", action="store_true",
                  help="Send notification email to reviewers.")
 group.add_option("-p", "--send_patch", action="store_true",
                  dest="send_patch", default=False,
-                 help="Send notification email to reviewers, with a diff of "
-                      "the changes included as an attachment instead of "
-                      "inline. Also prepends 'PATCH:' to the email subject. "
-                      "(implies --send_mail)")
+                 help="Same as --send_mail, but include diff as an "
+                      "attachment, and prepend email subject with 'PATCH:'.")
 group.add_option("--vcs", action="store", dest="vcs",
                  metavar="VCS", default=None,
                  help=("Version control system (optional, usually upload.py "
