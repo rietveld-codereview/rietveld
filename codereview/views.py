@@ -3331,7 +3331,7 @@ def search(request):
   else:
     messages = form.cleaned_data['with_messages']
     data['results'] = [_issue_as_dict(i, messages, request)
-                      for i in filtered_results],
+                      for i in filtered_results]
   return data
 
 
