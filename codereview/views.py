@@ -411,6 +411,12 @@ class SearchForm(forms.Form):
                                                         'multiple': False}))
   base = forms.CharField(required=False, max_length=550)
   private = forms.NullBooleanField(required=False)
+  created_before = forms.DateTimeField(required=False, label='Created before')
+  created_after = forms.DateTimeField(
+      required=False, label='Created on or after')
+  modified_before = forms.DateTimeField(required=False, label='Modified before')
+  modified_after = forms.DateTimeField(
+      required=False, label='Modified on or after')
 
   def _clean_accounts(self, key):
     """Cleans up autocomplete field.
@@ -3275,7 +3281,10 @@ def _delete_draft_message(request, draft):
 
 @json_response
 def search(request):
-  """/search - Search for issues or patchset."""
+  """/search - Search for issues or patchset.
+
+  Returns HTTP 500 if the corresponding index is missing.
+  """
   if request.method == 'GET':
     form = SearchForm(request.GET)
     if not form.is_valid() or not request.GET:
@@ -3317,6 +3326,24 @@ def search(request):
     q.filter('private = ', form.cleaned_data['private'])
   if form.cleaned_data['base']:
     q.filter('base = ', form.cleaned_data['base'])
+
+  # Default sort by ascending key to save on indexes.
+  sorted_by = '__key__'
+  if form.cleaned_data['modified_before']:
+    q.filter('modified < ', form.cleaned_data['modified_before'])
+    sorted_by = 'modified'
+  if form.cleaned_data['modified_after']:
+    q.filter('modified >= ', form.cleaned_data['modified_after'])
+    sorted_by = 'modified'
+  if form.cleaned_data['created_before']:
+    q.filter('created < ', form.cleaned_data['created_before'])
+    sorted_by = 'created'
+  if form.cleaned_data['created_after']:
+    q.filter('created >= ', form.cleaned_data['created_after'])
+    sorted_by = 'created'
+
+  q.order(sorted_by)
+
   # Update the cursor value in the result.
   if format == 'html':
     nav_params = dict(
