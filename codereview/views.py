@@ -211,6 +211,7 @@ class UploadForm(forms.Form):
   private = forms.BooleanField(required=False, initial=False)
   send_mail = forms.BooleanField(required=False)
   base_hashes = forms.CharField(required=False)
+  repo_guid = forms.CharField(required=False)
 
   def clean_base(self):
     base = self.cleaned_data.get('base')
@@ -409,6 +410,8 @@ class SearchForm(forms.Form):
                              max_length=1000,
                              widget=AccountInput(attrs={'size': 60,
                                                         'multiple': False}))
+  repo_guid = forms.CharField(required=False, max_length=1000,
+                              label="Repository ID")
   base = forms.CharField(required=False, max_length=550)
   private = forms.NullBooleanField(required=False)
   created_before = forms.DateTimeField(required=False, label='Created before')
@@ -1451,7 +1454,8 @@ class EmptyPatchSet(Exception):
 
 
 def _make_new(request, form):
-  """Helper for new().
+  """Create new issue and fill relevant fields from given form data. Send
+  notification about created issue (if requested with send_mail param).
 
   Return a valid Issue, or None.
   """
@@ -1479,6 +1483,7 @@ def _make_new(request, form):
     issue = models.Issue(subject=form.cleaned_data['subject'],
                          description=form.cleaned_data['description'],
                          base=base,
+                         repo_guid=form.cleaned_data['repo_guid'],
                          reviewers=reviewers,
                          cc=cc,
                          private=form.cleaned_data.get('private', False),
@@ -3324,6 +3329,8 @@ def search(request):
     q.filter('reviewers = ', form.cleaned_data['reviewer'])
   if form.cleaned_data['private'] is not None:
     q.filter('private = ', form.cleaned_data['private'])
+  if form.cleaned_data['repo_guid']:
+    q.filter('repo_guid = ', form.cleaned_data['repo_guid'])
   if form.cleaned_data['base']:
     q.filter('base = ', form.cleaned_data['base'])
 
