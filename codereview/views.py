@@ -3287,21 +3287,35 @@ def search(request):
           content_type='text/plain')
   logging.info('%s' % form.cleaned_data)
   keys_only = form.cleaned_data['keys_only'] or False
-  format = form.cleaned_data.get('format') or 'html'
+  format = form.cleaned_data['format'] or 'html'
+  limit = form.cleaned_data['limit']
+  with_messages = form.cleaned_data['with_messages']
   if format == 'html':
     keys_only = False
+    limit = limit or DEFAULT_LIMIT
+  else:
+    if not limit:
+      if keys_only:
+        # It's a fast query.
+        limit = 1000
+      elif with_messages:
+        # It's an heavy query.
+        limit = 10
+      else:
+        limit = 100
+
   q = models.Issue.all(keys_only=keys_only)
-  if form.cleaned_data.get('cursor'):
+  if form.cleaned_data['cursor']:
     q.with_cursor(form.cleaned_data['cursor'])
-  if form.cleaned_data.get('closed') != None:
+  if form.cleaned_data['closed'] is not None:
     q.filter('closed = ', form.cleaned_data['closed'])
-  if form.cleaned_data.get('owner'):
+  if form.cleaned_data['owner']:
     q.filter('owner = ', form.cleaned_data['owner'])
-  if form.cleaned_data.get('reviewer'):
+  if form.cleaned_data['reviewer']:
     q.filter('reviewers = ', form.cleaned_data['reviewer'])
-  if form.cleaned_data.get('private') != None:
+  if form.cleaned_data['private'] is not None:
     q.filter('private = ', form.cleaned_data['private'])
-  if form.cleaned_data.get('base'):
+  if form.cleaned_data['base']:
     q.filter('base = ', form.cleaned_data['base'])
   # Update the cursor value in the result.
   if format == 'html':
@@ -3311,11 +3325,11 @@ def search(request):
         reverse(search),
         request,
         q,
-        form.cleaned_data['limit'] or DEFAULT_LIMIT,
+        limit,
         'search_results.html',
         extra_nav_parameters=nav_params)
 
-  results = q.fetch(form.cleaned_data['limit'] or 100)
+  results = q.fetch(limit)
   form.cleaned_data['cursor'] = q.cursor()
   if keys_only:
     # There's not enough information to filter. The only thing that is leaked is
@@ -3329,8 +3343,7 @@ def search(request):
   if keys_only:
     data['results'] = [i.id() for i in filtered_results]
   else:
-    messages = form.cleaned_data['with_messages']
-    data['results'] = [_issue_as_dict(i, messages, request)
+    data['results'] = [_issue_as_dict(i, with_messages, request)
                       for i in filtered_results]
   return data
 
