@@ -559,7 +559,7 @@ group.add_option("-i", "--issue", type="int", action="store",
                  metavar="ISSUE", default=None,
                  help="Issue number to which to add. Defaults to new issue.")
 group.add_option("--base_url", action="store", dest="base_url", default=None,
-                 help="Base repository URL (listed as \"Base URL\" when "
+                 help="Base URL path for files (listed as \"Base URL\" when "
                  "viewing issue).  If omitted, will be guessed automatically "
                  "for SVN repos and left blank for others.")
 group.add_option("--download_base", action="store_true",
@@ -785,6 +785,12 @@ class VersionControlSystem(object):
       options: Command line options.
     """
     self.options = options
+    
+  def GetGUID(self):
+    """Return string to distinguish the repository from others, for example to
+    query all opened review issues for it"""
+    raise NotImplementedError(
+        "abstract method -- subclass %s must override" % self.__class__)
 
   def PostProcessDiff(self, diff):
     """Return the diff with any special post processing this VCS needs, e.g.
@@ -939,6 +945,9 @@ class SubversionVCS(VersionControlSystem):
     # Result is cached to not guess it over and over again in GetBaseFile().
     required = self.options.download_base or self.options.revision is not None
     self.svn_base = self._GuessBase(required)
+    
+  def GetGUID(self):
+    return self._GetInfo("Repository UUID")
 
   def GuessBase(self, required):
     """Wrapper for _GuessBase."""
@@ -951,12 +960,11 @@ class SubversionVCS(VersionControlSystem):
       required: If true, exits if the url can't be guessed, otherwise None is
         returned.
     """
-    info = RunShell(["svn", "info"])
-    for line in info.splitlines():
-      if line.startswith("URL: "):
-        url = line.split()[1]
+    url = self._GetInfo("URL")
+    if url:
         scheme, netloc, path, params, query, fragment = urlparse.urlparse(url)
         guess = ""
+        # TODO(anatoli) - repository specific hacks should be handled by server
         if netloc == "svn.python.org" and scheme == "svn+ssh":
           path = "projects" + path
           scheme = "http"
@@ -972,6 +980,12 @@ class SubversionVCS(VersionControlSystem):
     if required:
       ErrorExit("Can't find URL in output from svn info")
     return None
+    
+  def _GetInfo(self, key):
+    """Parses 'svn info' for current dir. Returns value for key or None"""
+    for line in RunShell(["svn", "info"]).splitlines():
+      if line.startswith(key + ": "):
+        return line.split(":", 1)[1].strip()
 
   def _EscapeFilename(self, filename):
     """Escapes filename for SVN commands."""
@@ -1209,6 +1223,15 @@ class GitVCS(VersionControlSystem):
     self.hashes = {}
     # Map of new filename -> old filename for renames.
     self.renames = {}
+    
+  def GetGUID(self):
+    revlist = RunShell("git rev-list --parents HEAD".split()).splitlines()
+    # M-A: Return the 1st root hash, there could be multiple when a
+    # subtree is merged. In that case, more analysis would need to
+    # be done to figure out which HEAD is the 'most representative'.
+    for r in revlist:
+      if ' ' not in r:
+        return r
 
   def PostProcessDiff(self, gitdiff):
     """Converts the diff output to include an svn-style "Index:" line as well
@@ -1339,6 +1362,10 @@ class CVSVCS(VersionControlSystem):
   def __init__(self, options):
     super(CVSVCS, self).__init__(options)
 
+  def GetGUID(self):
+    """For now we don't know how to get repository ID for CVS"""
+    return
+
   def GetOriginalContent_(self, filename):
     RunShell(["cvs", "up", filename], silent_ok=True)
     # TODO need detect file content encoding
@@ -1413,6 +1440,12 @@ class MercurialVCS(VersionControlSystem):
       self.base_rev = self.options.revision
     else:
       self.base_rev = RunShell(["hg", "parent", "-q"]).split(':')[1].strip()
+
+  def GetGUID(self):
+    # See chapter "Uniquely identifying a repository"
+    # http://hgbook.red-bean.com/read/customizing-the-output-of-mercurial.html
+    info = RunShell("hg log -r0 --template {node}".split())
+    return info.strip()
 
   def _GetRelPath(self, filename):
     """Get relative path of a file according to the current directory,
@@ -1537,6 +1570,10 @@ class PerforceVCS(VersionControlSystem):
         lines = raw_message.splitlines()
         if len(lines):
           options.message = lines[0]
+
+  def GetGUID(self):
+    """For now we don't know how to get repository ID for Perforce"""
+    return
 
   def RunPerforceCommandWithReturnCode(self, extra_args, marshal_output=False,
                                        universal_newlines=True):
@@ -2181,6 +2218,10 @@ def RealMain(argv, data=None):
                             options.save_cookies,
                             options.account_type)
   form_fields = [("subject", message)]
+  
+  repo_guid = vcs.GetGUID()
+  if repo_guid:
+    form_fields.append(("repo_guid", repo_guid))
   if base:
     b = urlparse.urlparse(base)
     username, netloc = urllib.splituser(b.netloc)
