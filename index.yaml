@@ -45,6 +45,12 @@ indexes:
   properties:
   - name: closed
   - name: owner
+  - name: created
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: owner
   - name: modified
     direction: desc
 
@@ -75,6 +81,12 @@ indexes:
   properties:
   - name: closed
   - name: reviewers
+  - name: created
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: reviewers
   - name: modified
     direction: desc
 
@@ -95,6 +107,16 @@ indexes:
   - name: reviewers
   - name: modified
     direction: desc
+
+- kind: Issue
+  properties:
+  - name: owner
+  - name: created
+
+- kind: Issue
+  properties:
+  - name: reviewers
+  - name: created
 
 - kind: Message
   properties:
