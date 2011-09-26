@@ -1483,7 +1483,7 @@ def _make_new(request, form):
     issue = models.Issue(subject=form.cleaned_data['subject'],
                          description=form.cleaned_data['description'],
                          base=base,
-                         repo_guid=form.cleaned_data['repo_guid'],
+                         repo_guid=form.cleaned_data.get('repo_guid', None),
                          reviewers=reviewers,
                          cc=cc,
                          private=form.cleaned_data.get('private', False),
