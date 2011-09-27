@@ -118,7 +118,7 @@
       Commit: <input type="checkbox" id="commit" name="commit"
         {%if issue.commit%}checked{%endif%}
         {%if not request.user or issue.closed%}disabled{%endif%}
-        onchange="M_editFlags('{{issue.key.id}}', [{%for build_result in patchset.build_results_list%}'{{build_result.status}}',{%endfor%}])" />
+        onchange="M_editFlags('{{issue.key.id}}')" />
     </form>
   {%endifequal%}
 </div>
