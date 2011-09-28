@@ -17,21 +17,25 @@ help:
 	@echo "Available commands:"
 	@sed -n '/^[a-zA-Z0-9_.]*:/s/:.*//p' <Makefile | sort
 
-serve:
+serve: update_revision
+	@echo "---[Starting SDK AppEngine Server]---"
 	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) .
 
-serve_remote:
+serve_remote: update_revision
 	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) --address 0.0.0.0 .
 
-serve_email:
+serve_email: update_revision
 	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) --enable_sendmail .
 
-serve_remote_email:
+serve_remote_email: update_revision
 	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) --enable_sendmail --address 0.0.0.0 .
 
-update:
-	@echo "Updating `cat app.yaml | sed -n 's/^application: *//p'`"
+update_revision:
+	@echo "---[Updating REVISION]---"
 	@echo "`hg id -n`:`hg id -i`" >REVISION
+
+update: update_revision
+	@echo "---[Updating `cat app.yaml | sed -n 's/^application: *//p'`]---"
 	$(APPCFG) $(APPCFG_FLAGS) update .
 
 upload: update
