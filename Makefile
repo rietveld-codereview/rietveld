@@ -36,7 +36,7 @@ update_revision:
 
 update: update_revision
 	@echo "---[Updating `cat app.yaml | sed -n 's/^application: *//p'`]---"
-	$(APPCFG) $(APPCFG_FLAGS) update .
+	$(APPCFG) $(APPCFG_FLAGS) update . --version $(VERSION)
 
 upload: update
 
