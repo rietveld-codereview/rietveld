@@ -94,9 +94,12 @@
           <div><b>Reviewers:</b><br/>
             {{issue.reviewers|show_users}}
           </div>
+          {%if issue.cc%}
           <div><b>CC:</b><br/>
             {%nicknames issue.cc%}
           </div>
+          {%endif%}
+          {%if issue.base%}
           <div><b>Base URL:</b><br/>
             {%if src_url%}
               <a href="{{src_url}}" target="blank">
@@ -106,6 +109,7 @@
               </a>
             {%endif%}
           </div>
+          {%endif%}
           <div><b>Visibility:</b><br/>
             {%if issue.private%}
                 Private. Only viewable by reviewers and CCs.
@@ -113,6 +117,12 @@
                 Public.
             {%endif%}
           </div>
+          {%if issue.repo_guid%}
+          <div><a title="Find reviews for the same repository ID - {{issue.repo_guid}}"
+               href="{%url codereview.views.search%}?repo_guid={{issue.repo_guid}}">
+            <b>More Reviews</b></a>
+          </div>
+          {%endif%}
         </div>
       </td>
 
