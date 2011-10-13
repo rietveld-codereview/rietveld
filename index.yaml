@@ -93,6 +93,11 @@ indexes:
 - kind: Issue
   properties:
   - name: owner
+  - name: created
+
+- kind: Issue
+  properties:
+  - name: owner
   - name: modified
     direction: desc
 
@@ -105,18 +110,13 @@ indexes:
 - kind: Issue
   properties:
   - name: reviewers
-  - name: modified
-    direction: desc
-
-- kind: Issue
-  properties:
-  - name: owner
   - name: created
 
 - kind: Issue
   properties:
   - name: reviewers
-  - name: created
+  - name: modified
+    direction: desc
 
 - kind: Message
   properties:

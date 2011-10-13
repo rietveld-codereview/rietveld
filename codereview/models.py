@@ -71,8 +71,12 @@ class Issue(db.Model):
 
   subject = db.StringProperty(required=True)
   description = db.TextProperty()
+  #: in Subversion - repository path (URL) for files in patch set
   base = db.StringProperty()
+  #: if True then base files for patches were uploaded with upload.py
+  #: (if False - then Rietveld attempts to download them from server)
   local_base = db.BooleanProperty(default=False)
+  repo_guid = db.StringProperty()
   owner = db.UserProperty(auto_current_user_add=True, required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
@@ -519,6 +523,7 @@ class Repository(db.Model):
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
   owner = db.UserProperty(auto_current_user_add=True)
+  guid = db.StringProperty()  # global unique repository id
 
   def __str__(self):
     return self.name

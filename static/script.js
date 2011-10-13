@@ -539,9 +539,12 @@ function M_switchChangelistComment(cid) {
 }
 
 /**
- * Toggles a comment if the anchor is of the form '#msgNUMBER'.
+ * Toggles a comment or patchset.
+ *
+ * If the anchor has the form "#msgNUMBER" a message is toggled.
+ * If the anchor has the form "#psNUMBER" a patchset is toggled.
  */
-function M_toggleIssueMessageByAnchor() {
+function M_toggleIssueOverviewByAnchor() {
   var href = window.location.href;
   var idx_hash = href.lastIndexOf('#');
   if (idx_hash != -1) {
@@ -551,6 +554,10 @@ function M_toggleIssueMessageByAnchor() {
       elem.className += ' referenced';
       var num = elem.getAttribute('name');
       M_switchChangelistComment(num);
+    } else if (anchor.slice(0, 2) == 'ps') {
+      // hide last patchset which is visible by default.
+      M_toggleSectionForPS(issueId, lastPSId);
+      M_toggleSectionForPS(issueId, anchor.slice(2, anchor.length));
     }
   }
 }
@@ -3234,4 +3241,3 @@ M_draftMessage.prototype.discard = function(cb) {
 M_draftMessage.prototype.get_dialog_ = function() {
   return document.getElementById(this.id_dlg_container);
 }
-

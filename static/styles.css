@@ -74,12 +74,18 @@ a.redlink {
   font-weight: bold;
 }
 
-a.anchor {
+.anchor {
   visibility: hidden;
 }
 
-div.header:hover a.anchor {
+div.header:hover a.anchor,
+h3:hover .anchor {
   visibility: visible;
+}
+
+h3:hover .anchor {
+  color: #2a55a3;
+  text-decoration: underline;
 }
 
 a.noul, a.noulv {
