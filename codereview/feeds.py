@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import md5
 
 from django.contrib.syndication.feeds import Feed
