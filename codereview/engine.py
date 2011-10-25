@@ -314,7 +314,8 @@ def _ShortenBuffer(buffer, context):
            'style="background:lightblue">'
            '(...skipping <span id="skipcount-%d">%d</span> matching lines...) '
            '<span id="skiplinks-%d">%s</span>  '
-           '<span id="skiploading-%d" style="visibility:hidden;">Loading...</span>'
+           '<span id="skiploading-%d" style="visibility:hidden;">Loading...'
+           '</span>'
            '</td></tr>\n' % (last_id, last_id, skip,
                              last_id, expand_link, last_id))
     for t in buffer[-context:]:
