@@ -2435,7 +2435,9 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
 
 # there's no easy way to put a control character into a regex, so brute-force it
 # this is all control characters except \r, \n, and \t
-_badchars_re = re.compile(r'[\000\001\002\003\004\005\006\007\010\013\014\016\017\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037]')
+_badchars_re = re.compile(
+    r'[\000\001\002\003\004\005\006\007\010\013\014\016\017'
+    r'\020\021\022\023\024\025\026\027\030\031\032\033\034\035\036\037]')
 
 
 def _strip_invalid_xml(s):
@@ -3695,7 +3697,8 @@ def _process_incoming_mail(raw_message, recipients):
   elif len(body) > django_settings.RIETVELD_INCOMING_MAIL_MAX_SIZE:
     # see issue325, truncate huge bodies
     trunc_msg = '... (message truncated)'
-    body = body[:django_settings.RIETVELD_INCOMING_MAIL_MAX_SIZE - len(trunc_msg)]
+    end = django_settings.RIETVELD_INCOMING_MAIL_MAX_SIZE - len(trunc_msg)
+    body = body[:end]
     body += trunc_msg
 
   # If the subject is long, this might come wrapped into more than one line.
