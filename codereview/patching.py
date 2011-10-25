@@ -165,7 +165,7 @@ def ParsePatchToChunks(lines, name="<patch>"):
         new_i = new_ln
       else:
         new_i = new_ln - 1
-      new_j =new_i + new_n
+      new_j = new_i + new_n
       new_range = new_i, new_j
       # Check header consistency with previous header
       if old_i < old_last or new_i < new_last:
@@ -208,8 +208,8 @@ def ParsePatchToChunks(lines, name="<patch>"):
     old_i, old_j = old_range
     new_i, new_j = new_range
     if len(old_chunk) != old_j - old_i or len(new_chunk) != new_j - new_i:
-      print >>sys.stderr, ("%s:%s: last chunk has incorrect length" %
-                           (name, lineno))
+      print >> sys.stderr, ("%s:%s: last chunk has incorrect length" %
+                            (name, lineno))
       return None
     chunks.append((old_range, new_range, old_chunk, new_chunk))
     raw_chunk = []
