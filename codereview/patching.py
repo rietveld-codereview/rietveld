@@ -68,7 +68,7 @@ def PatchChunks(old_lines, chunks):
     return
 
   old_pos = 0
-  for (old_i, old_j), (new_i, new_j), old_chunk, new_chunk in chunks:
+  for (old_i, old_j), _, old_chunk, new_chunk in chunks:
     eq = old_lines[old_pos:old_i]
     if eq:
       yield "equal", eq, eq

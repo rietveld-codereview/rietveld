@@ -56,10 +56,10 @@ def SplitPatch(data):
   for line in data.splitlines(True):
     new_filename = None
     if line.startswith('Index:'):
-      unused, new_filename = line.split(':', 1)
+      _, new_filename = line.split(':', 1)
       new_filename = new_filename.strip()
     elif line.startswith('Property changes on:'):
-      unused, temp_filename = line.split(':', 1)
+      _, temp_filename = line.split(':', 1)
       # When a file is modified, paths use '/' between directories, however
       # when a property is modified '\' is used on Windows.  Make them the same
       # otherwise the file shows up twice.
@@ -152,7 +152,7 @@ def _MakeUrl(base, filename, rev):
   Returns:
     A URL referring to the given revision of the file.
   """
-  scheme, netloc, path, params, query, fragment = urlparse.urlparse(base)
+  scheme, netloc, path, _, _, _ = urlparse.urlparse(base)
   if netloc.endswith(".googlecode.com"):
     # Handle Google code repositories
     if rev is None:
@@ -797,7 +797,7 @@ def _ComputeLineCounts(old_lines, chunks):
   old_len = len(old_lines)
   new_len = old_len
   if chunks:
-    (old_a, old_b), (new_a, new_b), old_lines, new_lines = chunks[-1]
+    (_, old_b), (_, new_b), old_lines, _ = chunks[-1]
     new_len += new_b - old_b
   return old_len, new_len
 
