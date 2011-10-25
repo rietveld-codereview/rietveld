@@ -555,7 +555,7 @@ def _clean_int(value, default, min_value=None, max_value=None):
   if not isinstance(value, (int, long)):
     try:
       value = int(value)
-    except (TypeError, ValueError), err:
+    except (TypeError, ValueError):
       value = default
   if min_value is not None:
     value = max(min_value, value)
@@ -1644,7 +1644,7 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
         elif email.count('@') != 1:
           raise db.BadValueError('Invalid email address: %s' % email)
         else:
-          head, tail = email.split('@')
+          _, tail = email.split('@')
           if '.' not in tail:
             raise db.BadValueError('Invalid email address: %s' % email)
           db_email = db.Email(email.lower())
@@ -2416,7 +2416,6 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
     't' - move marker line to top and expand below
     'a' - expand all skipped lines
   """
-  patchset = request.patchset
   patch = request.patch
   if where == 'a':
     context = None
@@ -3689,7 +3688,7 @@ def _process_incoming_mail(raw_message, recipients):
   sender = email.utils.parseaddr(incoming_msg.sender)[1]
 
   body = None
-  for content_type, payload in incoming_msg.bodies('text/plain'):
+  for _, payload in incoming_msg.bodies('text/plain'):
     body = payload.decode()
     break
   if body is None or not body.strip():
