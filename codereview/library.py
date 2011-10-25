@@ -15,7 +15,6 @@
 """Django template library for Rietveld."""
 
 import cgi
-import logging
 
 from google.appengine.api import memcache
 from google.appengine.api import users

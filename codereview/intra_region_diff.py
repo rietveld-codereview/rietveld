@@ -448,7 +448,8 @@ def FoldBlock(src, start, end, limit, indent, tag, btype, tabsize=8,
   # offset.  Use len(_ExpandTabs()) to find out how many
   # columns the starting prefix occupies.
   offset_from_bol = len(_ExpandTabs(src[0:start], 0, tabsize)) % limit
-  text = Break(text, offset_from_bol, limit, lend + nl_plus_indent + fbegin, tabsize, mark_tabs)
+  brk = lend + nl_plus_indent + fbegin
+  text = Break(text, offset_from_bol, limit, brk, tabsize, mark_tabs)
   if text:
     text = fbegin + text + lend
   # If this is the first block of the line and this is not the first line then
