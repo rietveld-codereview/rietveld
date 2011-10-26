@@ -67,7 +67,6 @@ load-plugins=
 # E1101: Class 'FOO' has no 'BAR' member
 # E1103: Instance of 'FOO' has no 'BAR' member (but some types could not be inferred)
 # E1120: No value passed for parameter 'FOO' in function call
-# E1121: Too many positional arguments for function call
 # R0401: Cyclic import (FOO -> BAR)
 # W0104: Statement seems to have no effect
 # W0201: Attribute 'FOO' defined outside __init__
@@ -79,7 +78,7 @@ load-plugins=
 # W0622: Redefining built-in 'FOO'
 # W0702: No exception type(s) specified
 #
-disable=C0103,C0111,C0302,C0324,E0102,E0602,E1002,E1101,E1103,E1120,E1121,R0201,R0401,R0801,R0902,R0903,R0904,R0911,R0912,R0913,R0914,R0915,W0104,W0141,W0142,W0201,W0212,W0231,W0232,W0401,W0403,W0511,W0603,W0613,W0614,W0621,W0622,W0702,W0703,W1201
+disable=C0103,C0111,C0302,C0324,E0102,E0602,E1002,E1101,E1103,E1120,R0201,R0401,R0801,R0902,R0903,R0904,R0911,R0912,R0913,R0914,R0915,W0104,W0141,W0142,W0201,W0212,W0231,W0232,W0401,W0403,W0511,W0603,W0613,W0614,W0621,W0622,W0702,W0703,W1201
 
 
 [REPORTS]
