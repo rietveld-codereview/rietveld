@@ -2657,25 +2657,25 @@ def _add_next_prev(patchset, patch):
 
   found_patch = False
   for p in patches:
-      if p.filename == patch.filename:
-        found_patch = True
-        continue
+    if p.filename == patch.filename:
+      found_patch = True
+      continue
 
-      p._num_comments = comments_by_patch.get(p.key(), 0)
-      p._num_drafts = drafts_by_patch.get(p.key(), 0)
+    p._num_comments = comments_by_patch.get(p.key(), 0)
+    p._num_drafts = drafts_by_patch.get(p.key(), 0)
 
-      if not found_patch:
-          last_patch = p
-          if p.num_comments > 0 or p.num_drafts > 0:
-            last_patch_with_comment = p
-      else:
-          if next_patch is None:
-            next_patch = p
-          if p.num_comments > 0 or p.num_drafts > 0:
-            next_patch_with_comment = p
-            # safe to stop scanning now because the next with out a comment
-            # will already have been filled in by some earlier patch
-            break
+    if not found_patch:
+      last_patch = p
+      if p.num_comments > 0 or p.num_drafts > 0:
+        last_patch_with_comment = p
+    else:
+      if next_patch is None:
+        next_patch = p
+      if p.num_comments > 0 or p.num_drafts > 0:
+        next_patch_with_comment = p
+        # safe to stop scanning now because the next with out a comment
+        # will already have been filled in by some earlier patch
+        break
 
   patch.prev = last_patch
   patch.next = next_patch
@@ -2700,27 +2700,27 @@ def _add_next_prev2(ps_left, ps_right, patch_right):
 
   found_patch = False
   for p in patches:
-      if p.filename == patch_right.filename:
-        found_patch = True
-        continue
+    if p.filename == patch_right.filename:
+      found_patch = True
+      continue
 
-      p._num_comments = n_comments.get(p.key(), 0)
-      p._num_drafts = n_drafts.get(p.key(), 0)
+    p._num_comments = n_comments.get(p.key(), 0)
+    p._num_drafts = n_drafts.get(p.key(), 0)
 
-      if not found_patch:
-          last_patch = p
-          if ((p.num_comments > 0 or p.num_drafts > 0) and
-              ps_left.key().id() in p.delta):
-            last_patch_with_comment = p
-      else:
-          if next_patch is None:
-            next_patch = p
-          if ((p.num_comments > 0 or p.num_drafts > 0) and
-              ps_left.key().id() in p.delta):
-            next_patch_with_comment = p
-            # safe to stop scanning now because the next with out a comment
-            # will already have been filled in by some earlier patch
-            break
+    if not found_patch:
+      last_patch = p
+      if ((p.num_comments > 0 or p.num_drafts > 0) and
+          ps_left.key().id() in p.delta):
+        last_patch_with_comment = p
+    else:
+      if next_patch is None:
+        next_patch = p
+      if ((p.num_comments > 0 or p.num_drafts > 0) and
+          ps_left.key().id() in p.delta):
+        next_patch_with_comment = p
+        # safe to stop scanning now because the next with out a comment
+        # will already have been filled in by some earlier patch
+        break
 
   patch_right.prev = last_patch
   patch_right.next = next_patch
