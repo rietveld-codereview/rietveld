@@ -763,9 +763,6 @@ function M_replyToMessage(message_id, written_time, author) {
     container.innerHTML = "";
   }
 
-  form.send_mail.id = 'message-reply-send-mail-'+message_id;
-  var lbl = document.getElementById(form.send_mail.id).nextSibling.nextSibling;
-  lbl.setAttribute('for', form.send_mail.id);
   if (!form.message.value) {
     form.message.value = "On " + written_time + ", " + author + " wrote:\n";
     var divs = document.getElementsByName("cl-message-" + message_id);
