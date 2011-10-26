@@ -342,6 +342,7 @@ class PublishForm(forms.Form):
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
+  add_as_reviewer = forms.BooleanField(required=False, initial=True)
   message = forms.CharField(required=False,
                             max_length=10000,
                             widget=forms.Textarea(attrs={'cols': 60}))
@@ -362,6 +363,7 @@ class MiniPublishForm(forms.Form):
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
+  add_as_reviewer = forms.BooleanField(required=False, initial=True)
   message = forms.CharField(required=False,
                             max_length=10000,
                             widget=forms.Textarea(attrs={'cols': 60}))
@@ -3123,11 +3125,6 @@ def publish(request):
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
     cc = issue.cc[:]
-    if request.user != issue.owner and (request.user.email()
-                                        not in issue.reviewers):
-      reviewers.append(request.user.email())
-      if request.user.email() in cc:
-        cc.remove(request.user.email())
     reviewers = [models.Account.get_nickname_for_email(reviewer,
                                                        default=reviewer)
                  for reviewer in reviewers]
@@ -3159,8 +3156,10 @@ def publish(request):
     reviewers = _get_emails(form, 'reviewers')
   else:
     reviewers = issue.reviewers
-    if request.user != issue.owner and request.user.email() not in reviewers:
-      reviewers.append(db.Email(request.user.email()))
+  if (request.user != issue.owner and
+     request.user.email() not in reviewers and
+     form.cleaned_data.get('add_as_reviewer')):
+    reviewers.append(db.Email(request.user.email()))
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
   else:

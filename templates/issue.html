@@ -206,8 +206,13 @@
       <input type="submit" value="Send Message" />
       <input type="button" value="Discard" name="discard" />
       <input type="checkbox" name="send_mail" value="1" 
-             id="message-reply-send-mail" checked="checked" />
-      <label>Send mail to reviewers</label>
+        id="message-reply-send-mail" checked="checked" />
+      <label for="message-reply-send-mail">Send mail to reviewers</label>
+      <input type="hidden" name="add_as_reviewer" value="0" />
+      <input type="checkbox" name="add_as_reviewer" value="1"
+        id="message-reply-add-as-reviewer" />
+        <label for="message-reply-add-as-reviewer">
+          Add yourself as a reviewer</label>
     </form>
   </div>
   <a id="resizer" class="resizer" style="display:none;cursor:pointer">
