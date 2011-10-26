@@ -158,7 +158,7 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
     while len(text) > limit:
       parts.append(text[0:limit])
       text = text[limit:]
-    parts.append(text);
+    parts.append(text)
     text = brk.join([cgi.escape(p) for p in parts])
   else:
     text = cgi.escape(text)
@@ -277,7 +277,7 @@ def WordDiff(line1, line2, diff_params):
               and the last block is always (len(line1), len(line2), 0)
       ratio: a float giving the diff ratio computed by SequenceMatcher.
   """
-  match_expr, min_match_ratio, min_match_size, dbg = diff_params
+  match_expr, min_match_ratio, min_match_size, _ = diff_params
   exp = EXPRS[match_expr]
   # Strings may have been left undecoded up to now. Assume UTF-8.
   try:
