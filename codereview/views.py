@@ -1878,7 +1878,7 @@ def account(request):
     accounts = models.Account.all()
     accounts.filter("lower_%s >= " % property, query)
     accounts.filter("lower_%s < " % property, query + u"\ufffd")
-    accounts.order("lower_%s" % property);
+    accounts.order("lower_%s" % property)
     for account in accounts:
       if account.key() in added:
         continue
