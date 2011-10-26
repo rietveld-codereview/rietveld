@@ -158,7 +158,7 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
     while len(text) > limit:
       parts.append(text[0:limit])
       text = text[limit:]
-    parts.append(text);
+    parts.append(text)
     text = brk.join([cgi.escape(p) for p in parts])
   else:
     text = cgi.escape(text)
