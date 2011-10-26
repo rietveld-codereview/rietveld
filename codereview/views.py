@@ -598,7 +598,7 @@ def _clean_int(value, default, min_value=None, max_value=None):
   if not isinstance(value, (int, long)):
     try:
       value = int(value)
-    except (TypeError, ValueError), err:
+    except (TypeError, ValueError):
       value = default
   if min_value is not None:
     value = max(min_value, value)
@@ -1682,7 +1682,7 @@ def add(request):
   issue = request.issue
   form = AddForm(request.POST, request.FILES)
   if not _add_patchset_from_form(request, issue, form):
-    return show(request, issue.key().id(), form)
+    return show(request, form)
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
@@ -1756,7 +1756,7 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
         elif email.count('@') != 1:
           raise db.BadValueError('Invalid email address: %s' % email)
         else:
-          head, tail = email.split('@')
+          _, tail = email.split('@')
           if '.' not in tail:
             raise db.BadValueError('Invalid email address: %s' % email)
           db_email = db.Email(email.lower())
@@ -2061,7 +2061,7 @@ def account(request):
     accounts = models.Account.all()
     accounts.filter("lower_%s >= " % property, query)
     accounts.filter("lower_%s < " % property, query + u"\ufffd")
-    accounts.order("lower_%s" % property);
+    accounts.order("lower_%s" % property)
     for account in accounts:
       if account.key() in added:
         continue
@@ -2636,7 +2636,6 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
     't' - move marker line to top and expand below
     'a' - expand all skipped lines
   """
-  patchset = request.patchset
   patch = request.patch
   if where == 'a':
     context = None
@@ -2879,25 +2878,25 @@ def _add_next_prev(patchset, patch):
 
   found_patch = False
   for p in patches:
-      if p.filename == patch.filename:
-        found_patch = True
-        continue
+    if p.filename == patch.filename:
+      found_patch = True
+      continue
 
-      p._num_comments = comments_by_patch.get(p.key(), 0)
-      p._num_drafts = drafts_by_patch.get(p.key(), 0)
+    p._num_comments = comments_by_patch.get(p.key(), 0)
+    p._num_drafts = drafts_by_patch.get(p.key(), 0)
 
-      if not found_patch:
-          last_patch = p
-          if p.num_comments > 0 or p.num_drafts > 0:
-            last_patch_with_comment = p
-      else:
-          if next_patch is None:
-            next_patch = p
-          if p.num_comments > 0 or p.num_drafts > 0:
-            next_patch_with_comment = p
-            # safe to stop scanning now because the next with out a comment
-            # will already have been filled in by some earlier patch
-            break
+    if not found_patch:
+      last_patch = p
+      if p.num_comments > 0 or p.num_drafts > 0:
+        last_patch_with_comment = p
+    else:
+      if next_patch is None:
+        next_patch = p
+      if p.num_comments > 0 or p.num_drafts > 0:
+        next_patch_with_comment = p
+        # safe to stop scanning now because the next with out a comment
+        # will already have been filled in by some earlier patch
+        break
 
   patch.prev = last_patch
   patch.next = next_patch
@@ -2922,27 +2921,27 @@ def _add_next_prev2(ps_left, ps_right, patch_right):
 
   found_patch = False
   for p in patches:
-      if p.filename == patch_right.filename:
-        found_patch = True
-        continue
+    if p.filename == patch_right.filename:
+      found_patch = True
+      continue
 
-      p._num_comments = n_comments.get(p.key(), 0)
-      p._num_drafts = n_drafts.get(p.key(), 0)
+    p._num_comments = n_comments.get(p.key(), 0)
+    p._num_drafts = n_drafts.get(p.key(), 0)
 
-      if not found_patch:
-          last_patch = p
-          if ((p.num_comments > 0 or p.num_drafts > 0) and
-              ps_left.key().id() in p.delta):
-            last_patch_with_comment = p
-      else:
-          if next_patch is None:
-            next_patch = p
-          if ((p.num_comments > 0 or p.num_drafts > 0) and
-              ps_left.key().id() in p.delta):
-            next_patch_with_comment = p
-            # safe to stop scanning now because the next with out a comment
-            # will already have been filled in by some earlier patch
-            break
+    if not found_patch:
+      last_patch = p
+      if ((p.num_comments > 0 or p.num_drafts > 0) and
+          ps_left.key().id() in p.delta):
+        last_patch_with_comment = p
+    else:
+      if next_patch is None:
+        next_patch = p
+      if ((p.num_comments > 0 or p.num_drafts > 0) and
+          ps_left.key().id() in p.delta):
+        next_patch_with_comment = p
+        # safe to stop scanning now because the next with out a comment
+        # will already have been filled in by some earlier patch
+        break
 
   patch_right.prev = last_patch
   patch_right.next = next_patch
@@ -4057,7 +4056,7 @@ def _process_incoming_mail(raw_message, recipients):
   sender = email.utils.parseaddr(incoming_msg.sender)[1]
 
   body = None
-  for content_type, payload in incoming_msg.bodies('text/plain'):
+  for _, payload in incoming_msg.bodies('text/plain'):
     body = payload.decode()
     break
   if body is None or not body.strip():

@@ -237,10 +237,10 @@ class NicknameNode(django.template.Node):
 def nickname(parser, token):
   """Almost the same as nickname filter but the result is cached."""
   try:
-    tag_name, email_address, never_me = token.split_contents()
+    _, email_address, never_me = token.split_contents()
   except ValueError:
     try:
-      tag_name, email_address = token.split_contents()
+      _, email_address = token.split_contents()
       never_me = ''
     except ValueError:
       raise django.template.TemplateSyntaxError(

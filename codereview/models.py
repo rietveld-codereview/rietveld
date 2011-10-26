@@ -426,7 +426,7 @@ class Patch(db.Model):
     logging.info('Creating patched_content for %s', self.filename)
     chunks = patching.ParsePatchToChunks(self.lines, self.filename)
     new_lines = []
-    for tag, old, new in patching.PatchChunks(old_lines, chunks):
+    for _, _, new in patching.PatchChunks(old_lines, chunks):
       new_lines.extend(new)
     text = db.Text(''.join(new_lines))
     patched_content = Content(text=text, parent=self)
