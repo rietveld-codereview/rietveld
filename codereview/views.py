@@ -1789,6 +1789,8 @@ def _get_patchset_info(request, patchset_id):
           # response.  Each Patch entity is using a lot of memory if the files
           # are large, since it holds the entire contents.  Call num_chunks and
           # num_drafts first though since they depend on text.
+          # These are 'active' properties and have side-effects when looked up.
+          # pylint: disable=W0104
           patch.num_chunks
           patch.num_drafts
           patch.num_added
