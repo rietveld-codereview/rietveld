@@ -1,0 +1,31 @@
+{%extends "repos_base.html"%}
+{%block title1%}Repositories -{%endblock%}
+{%block body%}
+<h2>Repositories and Branches</h2>
+
+<div id="repoview">
+{%regroup branches by repository as repo_list%}
+{%for repo in repo_list%}
+  <div class="header"><span>{{repo.grouper.name}}</span>
+    {%if user%}
+    (<a href="{%url codereview.views.branch_new repo.grouper.key.id%}">add branch</a>)
+    {%endif%}
+    <a name="{{repo.grouper.name|slugify}}" class="anchor" href="#{{repo.grouper.name|slugify}}">&para;</a>
+  </div>
+  <table>
+  {%for br in repo.list%}
+    <tr><td style="{{br.category|slugify}}">{{br.category}}</td><td>{{br.name}}</td><td>{{br.url}}</td>
+<td>
+{%ifequal br.owner user%}
+  (<a href="{%url codereview.views.branch_edit br.key.id%}">edit</a>)
+{%endifequal%}
+</td>
+<td>(<a title="search for issues"
+        href="{%url codereview.views.search%}?base={{br.url}}">search</a>)</td>
+    </tr>
+  {%endfor%}
+  </table>
+{%endfor%}
+</div>
+
+{%endblock%}
