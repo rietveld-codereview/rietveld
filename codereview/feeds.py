@@ -126,8 +126,6 @@ class AllFeed(BaseFeed):
 
 
 class OneIssueFeed(BaseFeed):
-  title = 'Code Review'
-
   def link(self):
     return reverse('codereview.views.index')
 
