@@ -26,9 +26,9 @@ from google.appengine.ext import db
 
 from django.template import loader, RequestContext
 
-from codereview import intra_region_diff
-from codereview import models
-from codereview import patching
+import intra_region_diff
+import models
+import patching
 
 
 class FetchError(Exception):

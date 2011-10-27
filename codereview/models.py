@@ -24,8 +24,8 @@ from google.appengine.ext import db
 from google.appengine.api import memcache
 from google.appengine.api import users
 
-from codereview import engine
-from codereview import patching
+import engine
+import patching
 
 
 CONTEXT_CHOICES = (3, 10, 25, 50, 75, 100)
