@@ -562,34 +562,6 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
       new_buff = []
 
 
-def _CleanupTableRows(rows):
-  """Cleanup rows returned by _TableRowGenerator.
-
-  Args:
-    rows: Sequence of (tag, text) tuples.
-
-  Yields:
-    Rows marked as 'equal' are possibly contracted using _ShortenBuffer().
-    Stops on rows marked as 'error'.
-  """
-  buffer = []
-  for tag, text in rows:
-    if tag == 'equal':
-      buffer.append(text)
-      continue
-    else:
-      for t in _ShortenBuffer(buffer):
-        yield t
-      buffer = []
-    yield text
-    if tag == 'error':
-      yield None
-      break
-  if buffer:
-    for t in _ShortenBuffer(buffer):
-      yield t
-
-
 def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
                         do_ir_diff, old_dict, new_dict,
                         old_patch, new_patch,
