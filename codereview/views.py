@@ -1215,7 +1215,7 @@ def new(request):
 
   form = NewForm(request.POST, request.FILES)
   form.set_branch_choices()
-  issue = _make_new(request, form)
+  issue, _ = _make_new(request, form)
   if issue is None:
     return respond(request, 'new.html', {'form': form})
   else:
@@ -1280,9 +1280,7 @@ def upload(request):
             issue = None
     else:
       action = 'created'
-      issue = _make_new(request, form)
-      if issue is not None:
-        patchset = issue.patchset
+      issue, patchset = _make_new(request, form)
   if issue is None:
     msg = 'Issue creation errors: %s' % repr(form.errors)
   else:
@@ -1448,30 +1446,31 @@ class EmptyPatchSet(Exception):
 
 
 def _make_new(request, form):
-  """Create new issue and fill relevant fields from given form data. Send
-  notification about created issue (if requested with send_mail param).
+  """Creates new issue and fill relevant fields from given form data.
 
-  Return a valid Issue, or None.
+  Sends notification about created issue (if requested with send_mail param).
+
+  Returns (Issue, PatchSet) or (None, None).
   """
   if not form.is_valid():
-    return None
+    return (None, None)
 
   data_url = _get_data_url(form)
   if data_url is None:
-    return None
+    return (None, None)
   data, url, separate_patches = data_url
 
   reviewers = _get_emails(form, 'reviewers')
   if not form.is_valid() or reviewers is None:
-    return None
+    return (None, None)
 
   cc = _get_emails(form, 'cc')
   if not form.is_valid():
-    return None
+    return (None, None)
 
   base = form.get_base()
   if base is None:
-    return None
+    return (None, None)
 
   def txn():
     issue = models.Issue(subject=form.cleaned_data['subject'],
@@ -1486,27 +1485,26 @@ def _make_new(request, form):
 
     patchset = models.PatchSet(issue=issue, data=data, url=url, parent=issue)
     patchset.put()
-    issue.patchset = patchset
 
     if not separate_patches:
       patches = engine.ParsePatchSet(patchset)
       if not patches:
         raise EmptyPatchSet  # Abort the transaction
       db.put(patches)
-    return issue
+    return issue, patchset
 
   try:
-    issue = db.run_in_transaction(txn)
+    issue, patchset = db.run_in_transaction(txn)
   except EmptyPatchSet:
     errkey = url and 'url' or 'data'
     form.errors[errkey] = ['Patch set contains no recognizable patches']
-    return None
+    return (None, None)
 
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, '', '', True)
     msg.put()
     _notify_issue(request, issue, 'Created')
-  return issue
+  return (issue, patchset)
 
 
 def _get_data_url(form):
