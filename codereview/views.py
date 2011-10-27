@@ -2817,7 +2817,7 @@ def _inline_draft(request):
   if not comments:
     return HttpResponse(' ')
   for c in comments:
-    c.complete(patch)
+    c.complete()
   return render_to_response('inline_comment.html',
                             {'user': request.user,
                              'patch': patch,
@@ -3231,20 +3231,19 @@ def draft_message(request):
   else:
     draft_message = query.get()
   if request.method == 'GET':
-    return _get_draft_message(request, draft_message)
+    return _get_draft_message(draft_message)
   elif request.method == 'POST':
     return _post_draft_message(request, draft_message)
   elif request.method == 'DELETE':
-    return _delete_draft_message(request, draft_message)
+    return _delete_draft_message(draft_message)
   return HttpResponse('An error occurred.', content_type='text/plain',
                       status=500)
 
 
-def _get_draft_message(request, draft):
+def _get_draft_message(draft):
   """Handles GET requests to /<issue>/draft_message.
 
   Arguments:
-    request: The current request.
     draft: A Message instance or None.
 
   Returns the content of a draft message or an empty string if draft is None.
@@ -3271,13 +3270,12 @@ def _post_draft_message(request, draft):
   return HttpResponse(draft.text, content_type='text/plain')
 
 
-def _delete_draft_message(request, draft):
+def _delete_draft_message(draft):
   """Handles DELETE requests to /<issue>/draft_message.
 
   Deletes a draft message.
 
   Arguments:
-    request: The current request.
     draft: A Message instance or None.
   """
   if draft is not None:
@@ -3443,7 +3441,7 @@ BRANCHES = [
 
 # TODO: Make this a POST request to avoid XSRF attacks.
 @admin_required
-def repo_init(request):
+def repo_init(_request):
   """/repo_init - Initialze the list of known Subversion repositories."""
   python = models.Repository.gql("WHERE name = 'Python'").get()
   if python is None:
@@ -3592,7 +3590,7 @@ def settings(request):
 @post_required
 @login_required
 @xsrf_required
-def account_delete(request):
+def account_delete(_request):
   account = models.Account.current_user_account
   account.delete()
   return HttpResponseRedirect(users.create_logout_url(reverse(index)))

@@ -83,7 +83,7 @@ def get_link_for_user(email):
 
 
 @register.filter
-def show_user(email, arg=None, autoescape=None, memcache_results=None):
+def show_user(email, arg=None, _autoescape=None, _memcache_results=None):
   """Render a link to the user's dashboard, with text being the nickname."""
   if isinstance(email, users.User):
     email = email.email()
@@ -163,7 +163,7 @@ class UrlAppendViewSettingsNode(django.template.Node):
     return ''
 
 @register.tag
-def urlappend_view_settings(parser, token):
+def urlappend_view_settings(_parser, _token):
   """The actual template tag."""
   return UrlAppendViewSettingsNode()
 
@@ -234,7 +234,7 @@ class NicknameNode(django.template.Node):
 
 
 @register.tag
-def nickname(parser, token):
+def nickname(_parser, token):
   """Almost the same as nickname filter but the result is cached."""
   try:
     _, email_address, never_me = token.split_contents()

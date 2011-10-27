@@ -340,7 +340,7 @@ def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
         'WHERE patch = :1 AND left = FALSE ORDER BY date', patch):
       if comment.draft and comment.author != request.user:
         continue  # Only show your own drafts
-      comment.complete(patch)
+      comment.complete()
       lst = dct.setdefault(comment.lineno, [])
       lst.append(comment)
   return _TableRowGenerator(old_patch, old_dict, len(old_lines)+1, 'new',
@@ -385,7 +385,7 @@ def _GetComments(request):
                                     request.patch):
     if comment.draft and comment.author != request.user:
       continue  # Only show your own drafts
-    comment.complete(request.patch)
+    comment.complete()
     if comment.left:
       dct = old_dict
     else:
@@ -526,7 +526,7 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                                             old_dict, new_dict,
                                             old_patch, new_patch,
                                             old_snapshot, new_snapshot,
-                                            colwidth, debug, request):
+                                            debug, request):
           yield tg, frag
         frag_list = []
 
@@ -560,7 +560,7 @@ def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                                           old_dict, new_dict,
                                           old_patch, new_patch,
                                           old_snapshot, new_snapshot,
-                                          colwidth, debug, request):
+                                          debug, request):
         yield tg, frag
       old_buff = []
       new_buff = []
@@ -598,7 +598,7 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
                         do_ir_diff, old_dict, new_dict,
                         old_patch, new_patch,
                         old_snapshot, new_snapshot,
-                        colwidth, debug, request):
+                        debug, request):
   """Helper for _TableRowGenerator()."""
   obegin = (intra_region_diff.BEGIN_TAG %
             intra_region_diff.COLOR_SCHEME['old']['match'])
@@ -617,12 +617,12 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
 
     frags = frag_list[i]
     # Render left text column
-    frags.append(_RenderDiffColumn(old_patch, old_valid, tag, ndigits,
+    frags.append(_RenderDiffColumn(old_valid, tag, ndigits,
                                    old_lineno, obegin, oend, old_intra_diff,
                                    do_ir_diff, old_has_newline, 'old'))
 
     # Render right text column
-    frags.append(_RenderDiffColumn(new_patch, new_valid, tag, ndigits,
+    frags.append(_RenderDiffColumn(new_valid, tag, ndigits,
                                    new_lineno, nbegin, nend, new_intra_diff,
                                    do_ir_diff, new_has_newline, 'new'))
 
@@ -669,7 +669,7 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
     yield tg, ''.join(frags)
 
 
-def _RenderDiffColumn(patch, line_valid, tag, ndigits, lineno, begin, end,
+def _RenderDiffColumn(line_valid, tag, ndigits, lineno, begin, end,
                       intra_diff, do_ir_diff, has_newline, prefix):
   """Helper function for _RenderDiffInternal().
 

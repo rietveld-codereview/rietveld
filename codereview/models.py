@@ -450,7 +450,7 @@ class Comment(db.Model):
   left = db.BooleanProperty()
   draft = db.BooleanProperty(required=True, default=True)
 
-  def complete(self, patch):
+  def complete(self):
     """Set the shorttext and buckets attributes."""
     # TODO(guido): Turn these into caching proprties instead.
 
