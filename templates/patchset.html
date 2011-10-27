@@ -80,7 +80,7 @@
         {%ifequal patch.lint_error_count 0%}
         0 errors
         {%else%}
-        <a href="{%url codereview.views.lint_patch issue.key.id,patchset.key.id,patch.key.id%}"
+        <a href="{%url codereview.views_chromium.lint_patch issue.key.id,patchset.key.id,patch.key.id%}"
            title="Lint results for {{patch.filename}}">
           {%ifequal patch.lint_error_count -1%}?{%else%}{{patch.lint_error_count}}{%endifequal%} errors
         </a>

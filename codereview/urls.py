@@ -32,7 +32,6 @@ urlpatterns = patterns(
     (r'^(\d+)/(show)?$', 'show'),
     (r'^(\d+)/add$', 'add'),
     (r'^(\d+)/edit$', 'edit'),
-    (r'^(\d+)/edit_flags$', 'edit_flags'),
     (r'^(\d+)/delete$', 'delete'),
     (r'^(\d+)/close$', 'close'),
     (r'^(\d+)/mail$', 'mailissue'),
@@ -53,8 +52,6 @@ urlpatterns = patterns(
      django.views.defaults.page_not_found, {}, 'diff2_skipped_lines_prefix'),
     (r'^(\d+)/upload_content/(\d+)/(\d+)$', 'upload_content'),
     (r'^(\d+)/upload_patch/(\d+)$', 'upload_patch'),
-    (r'^(\d+)/upload_build_result/(\d+)$', 'upload_build_result'),
-    (r'^(\d+)/get_build_results/(\d+)$', 'get_build_results'),
     (r'^(\d+)/description$', 'description'),
     (r'^(\d+)/fields', 'fields'),
     (r'^(\d+)/star$', 'star'),
@@ -82,10 +79,7 @@ urlpatterns = patterns(
     (r'^xsrf_token$', 'xsrf_token'),
     # patching upload.py on the fly
     (r'^static/upload.py$', 'customized_upload_py'),
-    (r'^lint/issue(\d+)_(\d+)', 'lint'),
-    (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
     (r'^search$', 'search'),
-    (r'^conversions$', 'conversions'),
     )
 
 feed_dict = {
@@ -100,4 +94,15 @@ urlpatterns += patterns(
     '',
     (r'^rss/(?P<url>.*)$', 'django.contrib.syndication.views.feed',
      {'feed_dict': feed_dict}),
+    )
+
+# Chromium urls
+urlpatterns += patterns(
+    'codereview.views_chromium',
+    (r'^(\d+)/edit_flags$', 'edit_flags'),
+    (r'^(\d+)/upload_build_result/(\d+)$', 'upload_build_result'),
+    (r'^(\d+)/get_build_results/(\d+)$', 'get_build_results'),
+    (r'^conversions$', 'conversions'),
+    (r'^lint/issue(\d+)_(\d+)', 'lint'),
+    (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
     )
