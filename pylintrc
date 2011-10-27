@@ -65,12 +65,11 @@ load-plugins=
 # R0401: Cyclic import (FOO -> BAR)
 # W0104: Statement seems to have no effect
 # W0201: Attribute 'FOO' defined outside __init__
-# W0212: Access to a protected member FOO of a client class
 # W0621: Redefining name 'FOO' from outer scope (line NN)
 # W0622: Redefining built-in 'FOO'
 # W0702: No exception type(s) specified
 #
-disable=C0103,C0111,C0302,E1103,I0011,R0201,R0401,R0801,R0902,R0903,R0904,R0911,R0912,R0913,R0914,R0915,W0104,W0141,W0142,W0201,W0212,W0232,W0401,W0511,W0603,W0614,W0621,W0622,W0702,W0703,W1201
+disable=C0103,C0111,C0302,E1103,I0011,R0201,R0401,R0801,R0902,R0903,R0904,R0911,R0912,R0913,R0914,R0915,W0104,W0141,W0142,W0201,W0232,W0401,W0511,W0603,W0614,W0621,W0622,W0702,W0703,W1201
 
 
 [REPORTS]

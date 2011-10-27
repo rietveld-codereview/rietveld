@@ -3389,6 +3389,9 @@ def repos(request):
     repo_map[str(repo.key())] = repo
   branches = []
   for branch in models.Branch.all():
+    # Using ._repo instead of .repo returns the db.Key of the referenced entity.
+    # Access to a protected member FOO of a client class
+    # pylint: disable=W0212
     branch.repository = repo_map[str(branch._repo)]
     branches.append(branch)
   branches.sort(key=lambda b: map(

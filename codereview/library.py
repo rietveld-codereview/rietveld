@@ -187,13 +187,17 @@ def get_nickname(email, never_me=False, request=None):
 
   if request is None:
     return models.Account.get_nickname_for_email(email)
-  else:
-    if getattr(request, '_nicknames', None) is None:
-      request._nicknames = {}
-    if email in request._nicknames:
-      return request._nicknames[email]
-    result = models.Account.get_nickname_for_email(email)
-    request._nicknames[email] = result
+
+  # _nicknames is injected into request as a cache.
+  # TODO(maruel): Use memcache instead.
+  # Access to a protected member _nicknames of a client class
+  # pylint: disable=W0212
+  if getattr(request, '_nicknames', None) is None:
+    request._nicknames = {}
+  if email in request._nicknames:
+    return request._nicknames[email]
+  result = models.Account.get_nickname_for_email(email)
+  request._nicknames[email] = result
   return result
 
 
