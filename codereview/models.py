@@ -14,21 +14,18 @@
 
 """App Engine data model (schema) definition for Rietveld."""
 
-# Python imports
 import logging
 import md5
 import os
 import re
 import time
 
-# AppEngine imports
 from google.appengine.ext import db
 from google.appengine.api import memcache
 from google.appengine.api import users
 
-# Local imports
-import engine
-import patching
+from codereview import engine
+from codereview import patching
 
 
 CONTEXT_CHOICES = (3, 10, 25, 50, 75, 100)
