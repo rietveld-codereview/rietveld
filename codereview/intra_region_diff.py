@@ -382,8 +382,8 @@ def RenderIntraLineDiff(blocks, line, tag, dbg_info=None, limit=80, indent=5,
     tag: 'new' or 'old' to control the color scheme.
     dbg_info: a string that holds debugging informaion header. Debug
               information is rendered only if dbg_info is not None.
-    limit: folding limit to be passed to the Fold function.
-    indent: indentation size to be passed to the Fold function.
+    limit: folding limit to be passed to the Break function.
+    indent: indentation size to be passed to the Break function.
     tabsize: tab stops occur at columns that are multiples of tabsize
     mark_tabs: if True, mark the first character of each expanded tab visually
 
@@ -400,10 +400,10 @@ def RenderIntraLineDiff(blocks, line, tag, dbg_info=None, limit=80, indent=5,
     debug_info += "\nBlock Count: %d\nBlocks: " % (len(blocks) - 1)
   for curr_start, curr_len in blocks:
     if dbg_info and curr_len > 0:
-      debug_info += Fold("\n(%d, %d):|%s|" %
-                         (curr_start, curr_len,
-                          line[curr_start:curr_start+curr_len]),
-                         limit, indent, tabsize, mark_tabs)
+      debug_info += Break(
+          "\n(%d, %d):|%s|" %
+          (curr_start, curr_len, line[curr_start:curr_start+curr_len]),
+           limit, indent, tabsize, mark_tabs)
     res += FoldBlock(line, prev_start + prev_len, curr_start, limit, indent,
                      tag, 'diff', tabsize, mark_tabs)
     res += FoldBlock(line, curr_start, curr_start + curr_len, limit, indent,
@@ -437,7 +437,7 @@ def FoldBlock(src, start, end, limit, indent, tag, btype, tabsize=8,
   """
   text = src[start:end]
   # We ignore newlines because we do newline management ourselves.
-  # Any other new lines with at the end will be stripped off by the Fold
+  # Any other new lines with at the end will be stripped off by the Break
   # method.
   if start >= end or text == '\n':
     return ""
