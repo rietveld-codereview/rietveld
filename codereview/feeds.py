@@ -19,8 +19,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.utils.feedgenerator import Atom1Feed
 
-import library
-import models
+from codereview import library
+from codereview import models
 
 
 class BaseFeed(Feed):
@@ -112,7 +112,7 @@ class ClosedFeed(BaseUserFeed):
 class MineFeed(BaseUserFeed):
   title = 'Code Review - My issues'
 
-  def items(self,obj):
+  def items(self, obj):
     return _rss_helper(obj.email, 'closed = FALSE AND owner = :1')
 
 
@@ -126,8 +126,6 @@ class AllFeed(BaseFeed):
 
 
 class OneIssueFeed(BaseFeed):
-  title = 'Code Review'
-
   def link(self):
     return reverse('codereview.views.index')
 
@@ -140,7 +138,7 @@ class OneIssueFeed(BaseFeed):
     raise ObjectDoesNotExist
 
   def title(self, obj):
-    return 'Code review - Issue %d: %s' % (obj.key().id(),obj.subject)
+    return 'Code review - Issue %d: %s' % (obj.key().id(), obj.subject)
 
   def items(self, obj):
     all = list(obj.patchset_set) + list(obj.message_set)

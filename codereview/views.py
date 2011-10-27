@@ -15,10 +15,6 @@
 """Views for Rietveld."""
 
 
-### Imports ###
-
-
-# Python imports
 import binascii
 import cgi
 import datetime
@@ -35,7 +31,6 @@ import sha
 from cStringIO import StringIO
 from xml.etree import ElementTree
 
-# AppEngine imports
 from google.appengine.api import mail
 from google.appengine.api import memcache
 from google.appengine.api import users
@@ -46,7 +41,6 @@ from google.appengine.ext.db import djangoforms
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.runtime import apiproxy_errors
 
-# Django imports
 # TODO(guido): Don't import classes/functions directly.
 from django import forms
 # Import settings as django_settings to avoid name conflict with settings().
@@ -63,11 +57,11 @@ from django.utils.html import urlize
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 
-# Local imports
-import models
-import engine
-import library
-import patching
+from codereview import engine
+from codereview import library
+from codereview import models
+from codereview import patching
+
 
 # Add our own template library.
 _library_name = __name__.rsplit('.', 1)[0] + '.library'
@@ -1268,7 +1262,7 @@ def new(request):
 
   form = NewForm(request.POST, request.FILES)
   form.set_branch_choices()
-  issue = _make_new(request, form)
+  issue, _ = _make_new(request, form)
   if issue is None:
     return respond(request, 'new.html', {'form': form})
   else:
@@ -1333,9 +1327,7 @@ def upload(request):
             issue = None
     else:
       action = 'created'
-      issue = _make_new(request, form)
-      if issue is not None:
-        patchset = issue.patchset
+      issue, patchset = _make_new(request, form)
   if issue is None:
     msg = 'Issue creation errors: %s' % repr(form.errors)
   else:
@@ -1567,30 +1559,31 @@ class EmptyPatchSet(Exception):
 
 
 def _make_new(request, form):
-  """Create new issue and fill relevant fields from given form data. Send
-  notification about created issue (if requested with send_mail param).
+  """Creates new issue and fill relevant fields from given form data.
 
-  Return a valid Issue, or None.
+  Sends notification about created issue (if requested with send_mail param).
+
+  Returns (Issue, PatchSet) or (None, None).
   """
   if not form.is_valid():
-    return None
+    return (None, None)
 
   data_url = _get_data_url(form)
   if data_url is None:
-    return None
+    return (None, None)
   data, url, separate_patches = data_url
 
   reviewers = _get_emails(form, 'reviewers')
   if not form.is_valid() or reviewers is None:
-    return None
+    return (None, None)
 
   cc = _get_emails(form, 'cc')
   if not form.is_valid():
-    return None
+    return (None, None)
 
   base = form.get_base()
   if base is None:
-    return None
+    return (None, None)
 
   def txn():
     issue = models.Issue(subject=form.cleaned_data['subject'],
@@ -1605,27 +1598,26 @@ def _make_new(request, form):
 
     patchset = models.PatchSet(issue=issue, data=data, url=url, parent=issue)
     patchset.put()
-    issue.patchset = patchset
 
     if not separate_patches:
       patches = engine.ParsePatchSet(patchset)
       if not patches:
         raise EmptyPatchSet  # Abort the transaction
       db.put(patches)
-    return issue
+    return issue, patchset
 
   try:
-    issue = db.run_in_transaction(txn)
+    issue, patchset = db.run_in_transaction(txn)
   except EmptyPatchSet:
     errkey = url and 'url' or 'data'
     form.errors[errkey] = ['Patch set contains no recognizable patches']
-    return None
+    return (None, None)
 
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, '', '', True)
     msg.put()
     _notify_issue(request, issue, 'Created')
-  return issue
+  return (issue, patchset)
 
 
 def _get_data_url(form):
@@ -1923,6 +1915,8 @@ def _get_patchset_info(request, patchset_id):
           # response.  Each Patch entity is using a lot of memory if the files
           # are large, since it holds the entire contents.  Call num_chunks and
           # num_drafts first though since they depend on text.
+          # These are 'active' properties and have side-effects when looked up.
+          # pylint: disable=W0104
           patch.num_chunks
           patch.num_drafts
           patch.num_added
@@ -3040,7 +3034,7 @@ def _inline_draft(request):
   if not comments:
     return HttpResponse(' ')
   for c in comments:
-    c.complete(patch)
+    c.complete()
   return render_to_response('inline_comment.html',
                             {'user': request.user,
                              'patch': patch,
@@ -3458,20 +3452,19 @@ def draft_message(request):
   else:
     draft_message = query.get()
   if request.method == 'GET':
-    return _get_draft_message(request, draft_message)
+    return _get_draft_message(draft_message)
   elif request.method == 'POST':
     return _post_draft_message(request, draft_message)
   elif request.method == 'DELETE':
-    return _delete_draft_message(request, draft_message)
+    return _delete_draft_message(draft_message)
   return HttpResponse('An error occurred.', content_type='text/plain',
                       status=500)
 
 
-def _get_draft_message(request, draft):
+def _get_draft_message(draft):
   """Handles GET requests to /<issue>/draft_message.
 
   Arguments:
-    request: The current request.
     draft: A Message instance or None.
 
   Returns the content of a draft message or an empty string if draft is None.
@@ -3498,13 +3491,12 @@ def _post_draft_message(request, draft):
   return HttpResponse(draft.text, content_type='text/plain')
 
 
-def _delete_draft_message(request, draft):
+def _delete_draft_message(draft):
   """Handles DELETE requests to /<issue>/draft_message.
 
   Deletes a draft message.
 
   Arguments:
-    request: The current request.
     draft: A Message instance or None.
   """
   if draft is not None:
@@ -3710,6 +3702,9 @@ def repos(request):
     repo_map[str(repo.key())] = repo
   branches = []
   for branch in models.Branch.all():
+    # Using ._repo instead of .repo returns the db.Key of the referenced entity.
+    # Access to a protected member FOO of a client class
+    # pylint: disable=W0212
     branch.repository = repo_map[str(branch._repo)]
     branches.append(branch)
   branches.sort(key=lambda b: map(
@@ -3810,7 +3805,7 @@ BRANCHES = [
 
 # TODO: Make this a POST request to avoid XSRF attacks.
 @admin_required
-def repo_init(request):
+def repo_init(_request):
   """/repo_init - Initialze the list of known Subversion repositories."""
   python = models.Repository.gql("WHERE name = 'Python'").get()
   if python is None:
@@ -3959,7 +3954,7 @@ def settings(request):
 @post_required
 @login_required
 @xsrf_required
-def account_delete(request):
+def account_delete(_request):
   account = models.Account.current_user_account
   account.delete()
   return HttpResponseRedirect(users.create_logout_url(reverse(index)))

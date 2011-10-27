@@ -23,7 +23,7 @@ import django.template
 import django.utils.safestring
 from django.core.urlresolvers import reverse
 
-import models
+from codereview import models
 
 register = django.template.Library()
 
@@ -83,7 +83,7 @@ def get_link_for_user(email):
 
 
 @register.filter
-def show_user(email, arg=None, autoescape=None, memcache_results=None):
+def show_user(email, arg=None, _autoescape=None, _memcache_results=None):
   """Render a link to the user's dashboard, with text being the nickname."""
   if isinstance(email, users.User):
     email = email.email()
@@ -132,7 +132,7 @@ class UrlAppendViewSettingsNode(django.template.Node):
   """
 
   def __init__(self):
-    """Constructor."""
+    super(UrlAppendViewSettingsNode, self).__init__()
     self.view_context = django.template.Variable('context')
     self.view_colwidth = django.template.Variable('column_width')
 
@@ -163,7 +163,7 @@ class UrlAppendViewSettingsNode(django.template.Node):
     return ''
 
 @register.tag
-def urlappend_view_settings(parser, token):
+def urlappend_view_settings(_parser, _token):
   """The actual template tag."""
   return UrlAppendViewSettingsNode()
 
@@ -187,13 +187,17 @@ def get_nickname(email, never_me=False, request=None):
 
   if request is None:
     return models.Account.get_nickname_for_email(email)
-  else:
-    if getattr(request, '_nicknames', None) is None:
-      request._nicknames = {}
-    if email in request._nicknames:
-      return request._nicknames[email]
-    result = models.Account.get_nickname_for_email(email)
-    request._nicknames[email] = result
+
+  # _nicknames is injected into request as a cache.
+  # TODO(maruel): Use memcache instead.
+  # Access to a protected member _nicknames of a client class
+  # pylint: disable=W0212
+  if getattr(request, '_nicknames', None) is None:
+    request._nicknames = {}
+  if email in request._nicknames:
+    return request._nicknames[email]
+  result = models.Account.get_nickname_for_email(email)
+  request._nicknames[email] = result
   return result
 
 
@@ -218,6 +222,7 @@ class NicknameNode(django.template.Node):
     'email_address' is the name of the template variable that holds an
     email address. If 'never_me' evaluates to True, 'me' won't be returned.
     """
+    super(NicknameNode, self).__init__()
     self.email_address = django.template.Variable(email_address)
     self.never_me = bool(never_me.strip())
     self.is_multi = False
@@ -234,7 +239,7 @@ class NicknameNode(django.template.Node):
 
 
 @register.tag
-def nickname(parser, token):
+def nickname(_parser, token):
   """Almost the same as nickname filter but the result is cached."""
   try:
     _, email_address, never_me = token.split_contents()
