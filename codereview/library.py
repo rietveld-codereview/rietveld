@@ -132,7 +132,7 @@ class UrlAppendViewSettingsNode(django.template.Node):
   """
 
   def __init__(self):
-    """Constructor."""
+    super(UrlAppendViewSettingsNode, self).__init__()
     self.view_context = django.template.Variable('context')
     self.view_colwidth = django.template.Variable('column_width')
 
@@ -218,6 +218,7 @@ class NicknameNode(django.template.Node):
     'email_address' is the name of the template variable that holds an
     email address. If 'never_me' evaluates to True, 'me' won't be returned.
     """
+    super(NicknameNode, self).__init__()
     self.email_address = django.template.Variable(email_address)
     self.never_me = bool(never_me.strip())
     self.is_multi = False
