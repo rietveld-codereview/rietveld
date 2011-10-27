@@ -259,6 +259,9 @@ ignore-iface-methods=isImplementedBy,deferred,extends,names,namesAndDescriptions
 # List of method names used to declare (i.e. assign) instance attributes.
 defining-attr-methods=__init__,__new__,setUp
 
+# List of valid names for the first argument in a class method.
+valid-classmethod-first-arg=cls
+
 
 [IMPORTS]
 
@@ -276,3 +279,10 @@ ext-import-graph=
 # Create a graph of internal dependencies in the given file (report RP0402 must
 # not be disabled)
 int-import-graph=
+
+
+[EXCEPTIONS]
+
+# Exceptions that will emit a warning when being caught. Defaults to
+# "Exception"
+overgeneral-exceptions=Exception
