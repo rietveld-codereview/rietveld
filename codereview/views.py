@@ -15,10 +15,6 @@
 """Views for Rietveld."""
 
 
-### Imports ###
-
-
-# Python imports
 import binascii
 import datetime
 import email  # see incoming_mail()
@@ -32,7 +28,6 @@ import urllib
 from cStringIO import StringIO
 from xml.etree import ElementTree
 
-# AppEngine imports
 from google.appengine.api import mail
 from google.appengine.api import memcache
 from google.appengine.api import users
@@ -43,7 +38,6 @@ from google.appengine.ext.db import djangoforms
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.runtime import apiproxy_errors
 
-# Django imports
 # TODO(guido): Don't import classes/functions directly.
 from django import forms
 # Import settings as django_settings to avoid name conflict with settings().
@@ -58,11 +52,11 @@ from django.utils import simplejson
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 
-# Local imports
-import models
-import engine
-import library
-import patching
+from codereview import engine
+from codereview import library
+from codereview import models
+from codereview import patching
+
 
 # Add our own template library.
 _library_name = __name__.rsplit('.', 1)[0] + '.library'

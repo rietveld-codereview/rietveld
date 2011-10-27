@@ -14,25 +14,21 @@
 
 """Diff rendering in HTML for Rietveld."""
 
-# Python imports
-import re
 import cgi
 import difflib
 import logging
+import re
 import urlparse
 
-# AppEngine imports
 from google.appengine.api import urlfetch
 from google.appengine.api import users
 from google.appengine.ext import db
 
-# Django imports
 from django.template import loader, RequestContext
 
-# Local imports
-import models
-import patching
-import intra_region_diff
+from codereview import intra_region_diff
+from codereview import models
+from codereview import patching
 
 
 class FetchError(Exception):

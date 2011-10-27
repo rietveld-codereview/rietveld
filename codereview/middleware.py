@@ -16,7 +16,7 @@
 
 from google.appengine.api import users
 
-import models
+from codereview import models
 
 
 class AddUserToRequestMiddleware(object):
