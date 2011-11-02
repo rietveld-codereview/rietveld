@@ -466,15 +466,6 @@ function M_toggleSectionForPS(issue, patchset) {
   http_request.send(null);
 }
 
-/**
- * Toggle the visibility of the "Quick LGTM" link on the changelist page.
- * @param {String} id The id of the target element
- */
-function M_toggleQuickLGTM(id) {
-  M_toggleSection(id);
-  window.scrollTo(0, document.body.offsetHeight);
-}
-
 // Comment expand/collapse
 
 /**
@@ -510,14 +501,6 @@ function M_toggleIssueOverviewByAnchor() {
 }
 
 /**
- * Toggles whether the specified file comment is expanded/collapsed.
- * @param {Integer} cid The comment id, 0-indexed
- */
-function M_switchFileComment(cid) {
-  M_switchCommentCommon_('file', String(cid));
-}
-
-/**
  * Toggles whether the specified inline comment is expanded/collapsed.
  * @param {Integer} cid The comment id, 0-indexed
  * @param {Integer} lineno The lineno associated with the comment
@@ -525,34 +508,6 @@ function M_switchFileComment(cid) {
  */
 function M_switchInlineComment(cid, lineno, side) {
   M_switchCommentCommon_('inline', String(cid) + "-" + lineno + "-" + side);
-}
-
-/**
- * Toggles whether the specified comment is expanded/collapsed on
- * comment_form.html.
- * @param {Integer} cid The comment id, 0-indexed
- */
-function M_switchReviewComment(cid) {
-  M_switchCommentCommon_('cl', String(cid));
-}
-
-/**
- * Toggle whether a moved_out region is expanded/collapsed.
- * @param {Integer} start_line the line number of the first line to toggle
- * @param {Integer} end_line the line number of the first line not to toggle
- * We toggle all lines in [first_line, end_line).
- */
-function M_switchMoveOut(start_line, end_line) {
-  for (var x = start_line; x < end_line; x++) {
-    var regionname = "move_out-" + x;
-    var region = document.getElementById(regionname);
-    if (region.style.display == "none") {
-      region.style.display = "";
-    } else {
-      region.style.display = "none";
-    }
-  }
-  hookState.gotoHook(0);
 }
 
 /**
