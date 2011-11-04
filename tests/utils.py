@@ -21,6 +21,9 @@ from google.appengine.ext import testbed
 from django.test import TestCase as _TestCase
 
 
+FILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'files')
+
+
 class TestCase(_TestCase):
   """Customized Django TestCase.
 
@@ -53,3 +56,8 @@ class TestCase(_TestCase):
   def logout(self):
     """Logs the user out."""
     os.environ['USER_EMAIL'] = ''
+
+
+def load_file(fname):
+  """Read file and return it's content."""
+  return open(os.path.join(FILES_DIR, fname)).read()
