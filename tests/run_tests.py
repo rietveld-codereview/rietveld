@@ -47,6 +47,10 @@ def setup_test_env(sdk_path):
   os.environ['SERVER_SOFTWARE'] = 'DevTestrunner'  # used in settings.py
   os.environ['APPLICATION_ID'] = 'test-codereview'  # used in settings.py
   os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
+  # Provide a dummy value for REQUEST_ID_HASH in environment. This is
+  # needed for now to make appstats happy (see comments on
+  # http://codereview.appspot.com/5305060/).
+  os.environ['REQUEST_ID_HASH'] = 'testing'
   from google.appengine.dist import use_library
   use_library('django', '1.2')
 
