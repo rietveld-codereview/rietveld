@@ -164,6 +164,8 @@ doesn't work.  Go figure.  Bleah.  So use absolute URLs.
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch_right.next%}
+<link rel="prerender"
+   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.next.filename%}{%urlappend_view_settings%}"></link>
 <a id="nextFile"
    href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.next.filename%}{%urlappend_view_settings%}">
 {{patch_right.next.filename}} &raquo;</a> ('j'){%else%}
@@ -231,6 +233,8 @@ Toggle Intra-line Diffs</a> ('i')
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch_right.next%}
+<link rel="prerender"
+   href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.next.filename%}{%urlappend_view_settings%}"></link>
 <a id="nextFile"
    href="{%url codereview.views.diff2 issue.key.id,ps_left.key.id,ps_right.key.id,patch_right.next.filename%}{%urlappend_view_settings%}">
 {{patch_right.next.filename}} &raquo;</a> ('j'){%else%}
