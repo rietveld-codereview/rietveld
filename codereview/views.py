@@ -3160,6 +3160,7 @@ def _get_draft_details(request, comments):
   output = []
   linecache = {}  # Maps (c.patch.key(), c.left) to list of lines
   modified_patches = []
+  fetch_base_failed = False
   for c in comments:
     if (c.patch.key(), c.left) != last_key:
       url = request.build_absolute_uri(
@@ -3173,15 +3174,19 @@ def _get_draft_details(request, comments):
       if patch.no_base_file:
         linecache[last_key] = patching.ParsePatchToLines(patch.lines)
       else:
-        if c.left:
-          old_lines = patch.get_content().text.splitlines(True)
-          linecache[last_key] = old_lines
-        else:
-          new_lines = patch.get_patched_content().text.splitlines(True)
-          linecache[last_key] = new_lines
+        try:
+          if c.left:
+            old_lines = patch.get_content().text.splitlines(True)
+            linecache[last_key] = old_lines
+          else:
+            new_lines = patch.get_patched_content().text.splitlines(True)
+            linecache[last_key] = new_lines
+        except engine.FetchError:
+          linecache[last_key] = patching.ParsePatchToLines(patch.lines)
+          fetch_base_failed = True
     file_lines = linecache[last_key]
     context = ''
-    if patch.no_base_file:
+    if patch.no_base_file or fetch_base_failed:
       for old_line_no, new_line_no, line_text in file_lines:
         if ((c.lineno == old_line_no and c.left) or
             (c.lineno == new_line_no and not c.left)):

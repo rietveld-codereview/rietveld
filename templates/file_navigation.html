@@ -11,6 +11,8 @@
 <span class="disabled">&laquo; no previous file</span>{%endif%}
 |
 {%if patch.next%}
+<link rel="prerender"
+   href="{%ifequal view_style 'patch'%}{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}{%else%}{%url codereview.views.diff issue.key.id,patchset.key.id,patch.next.filename%}{%endifequal%}{%urlappend_view_settings%}"></link>
 <a id="nextFile"
    href="{%ifequal view_style 'patch'%}{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}{%else%}{%url codereview.views.diff issue.key.id,patchset.key.id,patch.next.filename%}{%endifequal%}{%urlappend_view_settings%}">
 {{patch.next.filename}} &raquo;</a> ('j'){%else%}
