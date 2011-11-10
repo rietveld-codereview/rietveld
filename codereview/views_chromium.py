@@ -162,22 +162,6 @@ def upload_build_result(request):
   return HttpResponse(message, content_type='text/plain')
 
 
-@patchset_required
-def get_build_results(request):
-  """/<issue>/get_build_results/<patchset> - Get build results for a patchset.
-
-  Used to retrieve the build results for a given patchset. The format of the
-  returned data is as follows:
-    <platform_id>|<status>|<details_url>
-    <platform_id>|<status>|<details_url>
-    etc...
-  """
-  response = ""
-  for build_result in request.patchset.build_results:
-    response = "%s%s\n" % (response, str(build_result))
-  return HttpResponse(response, content_type='text/plain')
-
-
 @login_required
 @xsrf_required
 def conversions(request):
