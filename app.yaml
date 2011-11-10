@@ -35,9 +35,10 @@ admin_console:
     url: /_ah/stats
 
 inbound_services:
-- xmpp_message
 - mail
+- xmpp_message
+- warmup
 
 builtins:
-- remote_api: on
 - appstats: on
+- remote_api: on
