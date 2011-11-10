@@ -1343,7 +1343,8 @@ class GitVCS(VersionControlSystem):
       status = "A +"  # Match svn attribute name for renames.
       if filename not in self.hashes:
         # If a rename doesn't change the content, we never get a hash.
-        base_content = RunShell(["git", "show", "HEAD:" + filename])
+        base_content = RunShell(
+            ["git", "show", "HEAD:" + filename], silent_ok=True)
     elif not hash_before:
       status = "A"
       base_content = ""
