@@ -170,3 +170,18 @@ class TestIncomingMail(TestCase):
     views._process_incoming_mail(msg.as_string(), 'reply@example.com')
     imsg = models.Message.all().ancestor(self.issue).get()
     self.assertEqual(imsg.text.encode(jcode), jtxt)
+
+  def test_encoding(self):
+    # make sure that incoming mails with 8bit encoding are handled correctly.
+    # see realted http://code.google.com/p/googleappengine/issues/detail?id=2383
+    jtxt = '\x1b$B%O%m!<%o!<%k%I!*\x1b(B'
+    jcode = 'iso-2022-jp'
+    msg = Message()
+    msg.set_payload(jtxt, jcode)
+    msg['Subject'] = 'subject (issue%s)' % self.issue.key().id()
+    msg['From'] = 'sender@example.com'
+    del msg['Content-Transfer-Encoding']  # replace 7bit encoding
+    msg['Content-Transfer-Encoding'] = '8bit'
+    views._process_incoming_mail(msg.as_string(), 'reply@example.com')
+    imsg = models.Message.all().ancestor(self.issue).get()
+    self.assertEqual(imsg.text.encode(jcode), jtxt)
