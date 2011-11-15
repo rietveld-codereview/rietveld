@@ -1,5 +1,5 @@
-application: codereview-hr
-version: 69
+application: codereview
+version: 79
 runtime: python
 api_version: 1
 
