@@ -3689,7 +3689,14 @@ def _process_incoming_mail(raw_message, recipients):
 
   body = None
   for _, payload in incoming_msg.bodies('text/plain'):
-    body = payload.decode()
+    # FIXME(andi): Remove this when issue 2383 is fixed.
+    # 8bit encoding results in UnknownEncodingError, see
+    # http://code.google.com/p/googleappengine/issues/detail?id=2383
+    # As a workaround we try to decode the payload ourselves.
+    if payload.encoding == '8bit' and payload.charset:
+      body = payload.payload.decode(payload.charset)
+    else:
+      body = payload.decode()
     break
   if body is None or not body.strip():
     raise InvalidIncomingEmailError('Ignoring empty message.')
