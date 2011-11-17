@@ -14,7 +14,14 @@
 
 """Custom middleware.  Some of this may be generally useful."""
 
+import logging
+
 from google.appengine.api import users
+from google.appengine.runtime import apiproxy_errors
+from google.appengine.runtime import DeadlineExceededError
+
+from django.http import HttpResponse
+from django.template import Context, loader
 
 import models
 
@@ -31,3 +38,28 @@ class AddUserToRequestMiddleware(object):
     if request.user is not None:
       account = models.Account.get_account_for_user(request.user)
     models.Account.current_user_account = account
+
+
+class PropagateExceptionMiddleware(object):
+  """Catch exceptions, log them and return a friendly error message."""
+
+  def process_exception(self, request, exception):
+    if isinstance(exception, apiproxy_errors.CapabilityDisabledError):
+      msg = ('Rietveld: App Engine is undergoing maintenance. '
+             'Please try again in a while.')
+      status = 503
+    elif isinstance(exception, (DeadlineExceededError, MemoryError)):
+      msg = ('Rietveld is too hungry at the moment.'
+             'Please try again in a while.')
+      status = 503
+    else:
+      msg = 'Unhandled exception.'
+      status = 500
+    logging.exception(msg)
+    tpl = loader.get_template('exception.html')
+    ctx = Context(
+      {'msg': msg,
+       'technical': '%s [%s]' % (exception,
+                                 exception.__class__.__name__),
+      })
+    return HttpResponse(tpl.render(ctx), status=status)
