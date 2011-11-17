@@ -18,6 +18,16 @@ import os
 
 from google.appengine.api import app_identity
 
+# Banner for e.g. planned downtime announcements
+## SPECIAL_BANNER = """\
+## Rietveld will be down for maintenance on
+## Thursday November 17
+## from
+## <a href="http://www.timeanddate.com/worldclock/fixedtime.html?iso=20111117T17&ah=6">
+## 17:00 - 23:00 UTC
+## </a>
+## """
+
 APPEND_SLASH = False
 DEBUG = os.environ['SERVER_SOFTWARE'].startswith('Dev')
 INSTALLED_APPS = (

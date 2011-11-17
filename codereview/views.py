@@ -497,7 +497,7 @@ def respond(request, template, params=None):
   params['is_admin'] = request.user_is_admin
   params['is_dev'] = IS_DEV
   params['media_url'] = django_settings.MEDIA_URL
-  params['special_banner'] = 'Rietveld will be down for maintenance on Thursday November 17 from <a href="http://www.timeanddate.com/worldclock/fixedtime.html?iso=20111117T17&ah=3">17:00 - 20:00 GMT</a>'
+  params['special_banner'] = getattr(django_settings, 'SPECIAL_BANNER', None)
   full_path = request.get_full_path().encode('utf-8')
   if request.user is None:
     params['sign_in'] = users.create_login_url(full_path)
