@@ -1451,8 +1451,8 @@ class MercurialVCS(VersionControlSystem):
   def _GetRelPath(self, filename):
     """Get relative path of a file according to the current directory,
     given its logical path in the repo."""
-    assert filename.startswith(self.subdir), (filename, self.subdir)
-    return filename[len(self.subdir):].lstrip(r"\/")
+    absname = os.path.join(self.repo_dir, filename)
+    return os.path.relpath(absname)
 
   def GenerateDiff(self, extra_args):
     cmd = ["hg", "diff", "--git", "-r", self.base_rev] + extra_args
@@ -1491,9 +1491,8 @@ class MercurialVCS(VersionControlSystem):
     return unknown_files
 
   def GetBaseFile(self, filename):
-    # "hg status" and "hg cat" both take a path relative to the current subdir
-    # rather than to the repo root, but "hg diff" has given us the full path
-    # to the repo root.
+    # "hg status" and "hg cat" both take a path relative to the current subdir,
+    # but "hg diff" has given us the path relative to the repo root.
     base_content = ""
     new_content = None
     is_binary = False
