@@ -512,20 +512,6 @@ def respond(request, template, params=None):
   try:
     return render_to_response(template, params,
                               context_instance=RequestContext(request))
-  except DeadlineExceededError:
-    logging.exception('DeadlineExceededError')
-    return HttpResponse('DeadlineExceededError', status=503)
-  except apiproxy_errors.CapabilityDisabledError, err:
-    logging.exception('CapabilityDisabledError: %s', err)
-    return HttpResponse('Rietveld: App Engine is undergoing maintenance. '
-                        'Please try again in a while. ' + str(err),
-                        status=503)
-  except MemoryError:
-    logging.exception('MemoryError')
-    return HttpResponse('MemoryError', status=503)
-  except AssertionError:
-    logging.exception('AssertionError')
-    return HttpResponse('AssertionError')
   finally:
     library.user_cache.clear() # don't want this sticking around
 

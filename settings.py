@@ -27,6 +27,7 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.common.CommonMiddleware',
     'django.middleware.http.ConditionalGetMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',
+    'codereview.middleware.PropagateExceptionMiddleware',
 )
 ROOT_URLCONF = 'urls'
 TEMPLATE_CONTEXT_PROCESSORS = (
