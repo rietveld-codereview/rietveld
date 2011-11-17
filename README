@@ -56,11 +56,19 @@ not been hardened for security and may contain vulnerabilities."
 To deploy your own instance of the app to Google App Engine:
 
   1. Register your own application ID on the App Engine admin site.
-  2. Edit app.yaml to use this app ID instead of 'codereview'.
+  2. Edit app.yaml to use this app ID instead of 'codereview-hr'.
   3. Upload using
 
-    make update
+    make update VERSION=123
 
 *** Don't forget step 2!  If you forget to change the application ID,
 you'll get a error message from "appcfg.py update" (called by "make
 update") complaining you don't have the right to administer this app.
+
+The VERSION=xxx argument sets the version; the version from the
+app.yaml is not used.  This is to support a convention used for the
+main Rietveld instance (codereview.appspot.com) whereby we never
+deploy to the same version twice; the version must be manually picked
+by the developer doing the deployment.  If you don't like this, just
+edit the Makefile to remove "--version $(VERSION)" and edit app.yaml
+to hardcode a version number.
