@@ -43,6 +43,16 @@ class AddUserToRequestMiddleware(object):
 class PropagateExceptionMiddleware(object):
   """Catch exceptions, log them and return a friendly error message."""
 
+  def _text_requested(self, request):
+    """Returns True if a text/plain response is requested."""
+    # We could use a better heuristics that takes multiple
+    # media_ranges and quality factors into account. For now we return
+    # True iff 'text/plain' is the only media range the request
+    # accepts.
+    media_ranges = request.META.get('HTTP_ACCEPT', '').split(',')
+    return len(media_ranges) == 1 and media_ranges[0] == 'text/plain'
+
+
   def process_exception(self, request, exception):
     if isinstance(exception, apiproxy_errors.CapabilityDisabledError):
       msg = ('Rietveld: App Engine is undergoing maintenance. '
@@ -56,10 +66,13 @@ class PropagateExceptionMiddleware(object):
       msg = 'Unhandled exception.'
       status = 500
     logging.exception(msg)
-    tpl = loader.get_template('exception.html')
-    ctx = Context(
-      {'msg': msg,
-       'technical': '%s [%s]' % (exception,
-                                 exception.__class__.__name__),
-      })
-    return HttpResponse(tpl.render(ctx), status=status)
+    technical = '%s [%s]' % (exception, exception.__class__.__name__)
+    if self._text_requested(request):
+        content = '%s\n\n%s\n' % (msg, technical)
+        content_type = 'text/plain'
+    else:
+        tpl = loader.get_template('exception.html')
+        ctx = Context({'msg': msg, 'technical': technical})
+        content = tpl.render(ctx)
+        content_type = 'text/html'
+    return HttpResponse(content, status=status, content_type=content_type)

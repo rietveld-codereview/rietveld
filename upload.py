@@ -215,7 +215,7 @@ class AbstractRpcServer(object):
   def _CreateRequest(self, url, data=None):
     """Creates a new urllib request."""
     logging.debug("Creating request for: '%s' with payload:\n%s", url, data)
-    req = urllib2.Request(url, data=data)
+    req = urllib2.Request(url, data=data, headers={"Accept": "text/plain"})
     if self.host_override:
       req.add_header("Host", self.host_override)
     for key, value in self.extra_headers.iteritems():
@@ -399,14 +399,13 @@ class AbstractRpcServer(object):
             raise
           elif e.code == 401 or e.code == 302:
             self._Authenticate()
-##           elif e.code >= 500 and e.code < 600:
-##             # Server Error - try again.
-##             continue
           elif e.code == 301:
             # Handle permanent redirect manually.
             url = e.info()["location"]
             url_loc = urlparse.urlparse(url)
             self.host = '%s://%s' % (url_loc[0], url_loc[1])
+          elif e.code >= 500:
+            ErrorExit(e.read())
           else:
             raise
     finally:
