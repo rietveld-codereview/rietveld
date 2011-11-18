@@ -65,7 +65,7 @@ class PropagateExceptionMiddleware(object):
     else:
       msg = 'Unhandled exception.'
       status = 500
-    logging.exception(msg)
+    logging.exception('%s: ' % exception.__class__.__name__)
     technical = '%s [%s]' % (exception, exception.__class__.__name__)
     if self._text_requested(request):
         content = '%s\n\n%s\n' % (msg, technical)
