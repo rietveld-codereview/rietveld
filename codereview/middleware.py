@@ -14,7 +14,14 @@
 
 """Custom middleware.  Some of this may be generally useful."""
 
+import logging
+
 from google.appengine.api import users
+from google.appengine.runtime import apiproxy_errors
+from google.appengine.runtime import DeadlineExceededError
+
+from django.http import HttpResponse
+from django.template import Context, loader
 
 import models
 
@@ -31,3 +38,41 @@ class AddUserToRequestMiddleware(object):
     if request.user is not None:
       account = models.Account.get_account_for_user(request.user)
     models.Account.current_user_account = account
+
+
+class PropagateExceptionMiddleware(object):
+  """Catch exceptions, log them and return a friendly error message."""
+
+  def _text_requested(self, request):
+    """Returns True if a text/plain response is requested."""
+    # We could use a better heuristics that takes multiple
+    # media_ranges and quality factors into account. For now we return
+    # True iff 'text/plain' is the only media range the request
+    # accepts.
+    media_ranges = request.META.get('HTTP_ACCEPT', '').split(',')
+    return len(media_ranges) == 1 and media_ranges[0] == 'text/plain'
+
+
+  def process_exception(self, request, exception):
+    if isinstance(exception, apiproxy_errors.CapabilityDisabledError):
+      msg = ('Rietveld: App Engine is undergoing maintenance. '
+             'Please try again in a while.')
+      status = 503
+    elif isinstance(exception, (DeadlineExceededError, MemoryError)):
+      msg = ('Rietveld is too hungry at the moment.'
+             'Please try again in a while.')
+      status = 503
+    else:
+      msg = 'Unhandled exception.'
+      status = 500
+    logging.exception('%s: ' % exception.__class__.__name__)
+    technical = '%s [%s]' % (exception, exception.__class__.__name__)
+    if self._text_requested(request):
+      content = '%s\n\n%s\n' % (msg, technical)
+      content_type = 'text/plain'
+    else:
+      tpl = loader.get_template('exception.html')
+      ctx = Context({'msg': msg, 'technical': technical})
+      content = tpl.render(ctx)
+      content_type = 'text/html'
+    return HttpResponse(content, status=status, content_type=content_type)

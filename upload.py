@@ -215,7 +215,7 @@ class AbstractRpcServer(object):
   def _CreateRequest(self, url, data=None):
     """Creates a new urllib request."""
     logging.debug("Creating request for: '%s' with payload:\n%s", url, data)
-    req = urllib2.Request(url, data=data)
+    req = urllib2.Request(url, data=data, headers={"Accept": "text/plain"})
     if self.host_override:
       req.add_header("Host", self.host_override)
     for key, value in self.extra_headers.iteritems():
@@ -399,14 +399,13 @@ class AbstractRpcServer(object):
             raise
           elif e.code == 401 or e.code == 302:
             self._Authenticate()
-##           elif e.code >= 500 and e.code < 600:
-##             # Server Error - try again.
-##             continue
           elif e.code == 301:
             # Handle permanent redirect manually.
             url = e.info()["location"]
             url_loc = urlparse.urlparse(url)
             self.host = '%s://%s' % (url_loc[0], url_loc[1])
+          elif e.code >= 500:
+            ErrorExit(e.read())
           else:
             raise
     finally:
@@ -1464,8 +1463,8 @@ class MercurialVCS(VersionControlSystem):
   def _GetRelPath(self, filename):
     """Get relative path of a file according to the current directory,
     given its logical path in the repo."""
-    assert filename.startswith(self.subdir), (filename, self.subdir)
-    return filename[len(self.subdir):].lstrip(r"\/")
+    absname = os.path.join(self.repo_dir, filename)
+    return os.path.relpath(absname)
 
   def GenerateDiff(self, extra_args):
     cmd = ["hg", "diff", "--git", "-r", self.base_rev] + extra_args
@@ -1504,9 +1503,8 @@ class MercurialVCS(VersionControlSystem):
     return unknown_files
 
   def GetBaseFile(self, filename):
-    # "hg status" and "hg cat" both take a path relative to the current subdir
-    # rather than to the repo root, but "hg diff" has given us the full path
-    # to the repo root.
+    # "hg status" and "hg cat" both take a path relative to the current subdir,
+    # but "hg diff" has given us the path relative to the repo root.
     base_content = ""
     new_content = None
     is_binary = False

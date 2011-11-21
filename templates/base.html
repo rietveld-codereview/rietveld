@@ -164,6 +164,16 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 {%else%}
 <div style="float:left; font-size:x-large"><img style="vertical-align:middle" src="/static/chromium-24.png" /> Chromium Code Reviews</div>
 {%endif%}
+{%if special_banner%}
+<div style="float:left;
+            border:solid; border-width:1px; border-color: black;
+            font-weight:bold; font-size:111%; color:red;
+            background-color:yellow;
+            margin-left:5px; padding:2px">
+  {{special_banner|safe}}
+</div>
+{%endif%}
+
 {%if user%}
 <b>{{user.email}} ({%nickname user True%})</b>
 |

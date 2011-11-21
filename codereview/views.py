@@ -535,6 +535,7 @@ def respond(request, template, params=None):
   params['is_admin'] = request.user_is_admin
   params['is_dev'] = IS_DEV
   params['media_url'] = django_settings.MEDIA_URL
+  params['special_banner'] = getattr(django_settings, 'SPECIAL_BANNER', None)
   full_path = request.get_full_path().encode('utf-8')
   if request.user is None:
     params['sign_in'] = users.create_login_url(full_path)
@@ -549,20 +550,6 @@ def respond(request, template, params=None):
   try:
     return render_to_response(template, params,
                               context_instance=RequestContext(request))
-  except DeadlineExceededError:
-    logging.exception('DeadlineExceededError')
-    return HttpResponse('DeadlineExceededError', status=503)
-  except apiproxy_errors.CapabilityDisabledError, err:
-    logging.exception('CapabilityDisabledError: %s', err)
-    return HttpResponse('Rietveld: App Engine is undergoing maintenance. '
-                        'Please try again in a while. ' + str(err),
-                        status=503)
-  except MemoryError:
-    logging.exception('MemoryError')
-    return HttpResponse('MemoryError', status=503)
-  except AssertionError:
-    logging.exception('AssertionError')
-    return HttpResponse('AssertionError')
   finally:
     library.user_cache.clear() # don't want this sticking around
 
@@ -3825,7 +3812,14 @@ def _process_incoming_mail(raw_message, recipients):
 
   body = None
   for _, payload in incoming_msg.bodies('text/plain'):
-    body = payload.decode()
+    # FIXME(andi): Remove this when issue 2383 is fixed.
+    # 8bit encoding results in UnknownEncodingError, see
+    # http://code.google.com/p/googleappengine/issues/detail?id=2383
+    # As a workaround we try to decode the payload ourselves.
+    if payload.encoding == '8bit' and payload.charset:
+      body = payload.payload.decode(payload.charset)
+    else:
+      body = payload.decode()
     break
   if body is None or not body.strip():
     raise InvalidIncomingEmailError('Ignoring empty message.')
