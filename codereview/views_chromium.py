@@ -15,28 +15,31 @@
 """Views for Chromium port of Rietveld."""
 
 import cgi
+import datetime
 import logging
 import os
 import re
 import sha
 
-from google.appengine.api import users
+from google.appengine.api import memcache
 from google.appengine.ext import db
 
 from django import forms
 from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
 from django.http import HttpResponseBadRequest, HttpResponseForbidden
 from django.utils.html import strip_tags
+from django.utils import simplejson as json
 
 import cpplint
 import cpplint_chromium
 import engine
+import models
 import models_chromium
 import patching
 import views
 from views import issue_editor_required, login_required
 from views import patch_required, patchset_required, post_required
-from views import respond, reverse, xsrf_required, IS_DEV
+from views import respond, reverse, xsrf_required
 
 
 ### Forms ###
@@ -49,6 +52,41 @@ class EditFlagsForm(forms.Form):
 
 
 ### Utility functions ###
+
+
+def key_required(func):
+  """Decorator that insists that you are using a specific key."""
+
+  @post_required
+  def key_wrapper(request, *args, **kwds):
+    key = request.POST.get('password')
+    if request.user or not key:
+      return HttpResponseForbidden('You must be admin in for this function')
+    value = memcache.get('key_required')
+    if not value:
+      obj = models_chromium.Key.all().get()
+      if not obj:
+        # Create a dummy value so it can be edited from the datastore admin.
+        obj = models_chromium.Key(hash='invalid hash')
+        obj.put()
+      value = obj.hash
+      memcache.add('key_required', value, 60)
+    if sha.new(key).hexdigest() != value:
+      return HttpResponseForbidden('You must be admin in for this function')
+    return func(request, *args, **kwds)
+  return key_wrapper
+
+
+def string_to_datetime(text):
+  """Parses a string into datetime including microseconds.
+
+  It parses the standard str(datetime.datetime()) format.
+  """
+  items = text.split('.', 1)
+  result = datetime.datetime.strptime(items[0], '%Y-%m-%d %H:%M:%S')
+  if len(items) > 1:
+    result = result.replace(microsecond=int(items[1]))
+  return result
 
 
 def _lint_patch(patch):
@@ -88,6 +126,111 @@ def _lint_patch(patch):
   return True
 
 
+def handle_build_started_or_finished(timestamp, packet, payload):
+  build = payload['build']
+  result = build.get('results', [-1])
+  return inner_handle(timestamp, packet, result, build['properties'])
+
+
+def handle_step_finished(timestamp, packet, payload):
+  return inner_handle(
+      timestamp, packet, payload['step']['results'], payload['properties'])
+
+
+def inner_handle(timestamp, packet, result, properties):
+  """Handles one event coming from HttpStatusPush and update the relevant
+  TryJobResult object.
+  """
+  issue = None
+  patchset = None
+  try:
+    properties = dict((name, value) for name, value, _ in properties)
+    revision = properties['revision']
+    buildername = properties['buildername']
+    buildnumber = int(properties['buildnumber'])
+    slavename = properties['slavename']
+    # Keep them last.
+    issue = int(properties['issue'])
+    patchset = int(properties['patchset'])
+  except (KeyError, TypeError, ValueError), e:
+    logging.error('Failure when parsing properties: %s' % e)
+  if not issue or not patchset:
+    logging.error('Bad packet, no issue or patchset: %r' % properties)
+    return
+
+  # 'Unpack' results.
+  while isinstance(result, (list, tuple)):
+    result = result[0]
+  issue_key = db.Key.from_path('Issue', issue)
+  patchset_key = db.Key.from_path('PatchSet', patchset, parent=issue_key)
+  # Verify the key validity by getting the instance.
+  if db.get(patchset_key) == None:
+    logging.warn('Bad issue/patch id: %s/%s' % (issue, patchset))
+    return
+
+  keyname = '%s-%s' % (buildername, buildnumber)
+  try_key = db.Key.from_path('TryJobResult', keyname, parent=patchset_key)
+
+  def tx_try_job_result():
+    try_obj = models.TryJobResult.get(try_key)
+    if try_obj is None:
+      url = (
+          'http://build.chromium.org/p/tryserver.chromium/buildstatus'
+          '?builder=%s&number=%s') % (buildername, buildnumber)
+      try_obj = models.TryJobResult(
+          parent=patchset_key,
+          url=url,
+          result=result,
+          builder=buildername,
+          slave=slavename,
+          buildnumber=buildnumber,
+          revision=revision,
+          # TODO(maruel): Missing data.
+          reason='',
+          project=packet['project'],
+          timestamp=timestamp,
+          )
+      logging.info('Creating instance %s %s/%s' % (keyname, issue, patchset))
+    else:
+      try_obj.timestamp = timestamp
+      # Update result only if relevant.
+      if (models.TryJobResult.result_priority(result) >
+          models.TryJobResult.result_priority(try_obj.result)):
+        try_obj.result = result
+    try_obj.put()
+    return True
+  return db.run_in_transaction(tx_try_job_result)
+
+
+HANDLER_MAP = {
+  'buildStarted': handle_build_started_or_finished,
+  'buildFinished': handle_build_started_or_finished,
+  'stepFinished': handle_step_finished,
+}
+
+
+def process_status_push(packets_json):
+  """Processes all the packets coming from HttpStatusPush."""
+  packets = sorted(json.loads(packets_json),
+                   key=lambda packet: string_to_datetime(packet['timestamp']))
+  for packet in packets:
+    timestamp = string_to_datetime(packet['timestamp'])
+    event = packet.get('event', '')
+    if event not in HANDLER_MAP:
+      logging.warn('Stop sending events of type %s' % event)
+      continue
+    if 'payload' in packet:
+      # 0.8.x
+      payload = packet.pop('payload')
+    elif 'payload_json' in packet:
+      # 0.7.12
+      payload = json.loads(packet.pop('payload_json'))
+    else:
+      logging.warn('Invalid packet %r' % packet)
+      continue
+    HANDLER_MAP[event](timestamp, packet, payload)
+
+
 ### View handlers ###
 
 @post_required
@@ -111,7 +254,7 @@ def edit_flags(request):
   return HttpResponse('OK', content_type='text/plain')
 
 
-@post_required
+@key_required
 @patchset_required
 def upload_build_result(request):
   """/<issue>/upload_build_result/<patchset> - Set build result for a patchset.
@@ -123,17 +266,6 @@ def upload_build_result(request):
   if not form.is_valid():
     return HttpResponse('ERROR: Upload build result errors:\n%s' %
                         repr(form.errors), content_type='text/plain')
-  # Use a backdoor password for automated builds to be able to push data here.
-  if sha.new(form.cleaned_data.get('password', '')).hexdigest() != \
-      '980954318b0845754d89cd5410edbace13487356':
-    if request.user is None:
-      if False and IS_DEV:
-        request.user = users.User(request.POST.get('user', 'test@example.com'))
-      else:
-        return HttpResponse('Error: Login required', status=401)
-    if request.user != request.issue.owner:
-      return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
-                          (request.user, request.issue.key().id()))
   # Do we already have build results for this patchset on this platform?
   platform_id = strip_tags(form.cleaned_data['platform_id'])
   patchset = request.patchset
@@ -264,3 +396,20 @@ def lint_patch(request):
     request.patch.put()
 
   return HttpResponse(''.join(result))
+
+
+@key_required
+def status_listener(request):
+  """Receives Buildbot events and keeps the try jobs results.
+
+  Defer the actual work to a defer to keep this handler very fast.
+  """
+  packets = request.POST.get('packets')
+  if not packets:
+    return HttpResponseBadRequest('No packets given')
+  # Using deferred means that we could lose some packets if processing fails.
+  # Until a good solution is found for this problem, process the packets
+  # synchronously.
+  #deferred.defer(process_status_push, packets)
+  process_status_push(packets)
+  return HttpResponse('OK')

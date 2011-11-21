@@ -48,5 +48,6 @@ inbound_services:
 
 builtins:
 - appstats: on
+- deferred: on
 - mapreduce: on
 - remote_api: on
