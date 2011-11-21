@@ -68,11 +68,11 @@ class PropagateExceptionMiddleware(object):
     logging.exception('%s: ' % exception.__class__.__name__)
     technical = '%s [%s]' % (exception, exception.__class__.__name__)
     if self._text_requested(request):
-        content = '%s\n\n%s\n' % (msg, technical)
-        content_type = 'text/plain'
+      content = '%s\n\n%s\n' % (msg, technical)
+      content_type = 'text/plain'
     else:
-        tpl = loader.get_template('exception.html')
-        ctx = Context({'msg': msg, 'technical': technical})
-        content = tpl.render(ctx)
-        content_type = 'text/html'
+      tpl = loader.get_template('exception.html')
+      ctx = Context({'msg': msg, 'technical': technical})
+      content = tpl.render(ctx)
+      content_type = 'text/html'
     return HttpResponse(content, status=status, content_type=content_type)
