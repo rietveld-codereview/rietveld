@@ -32,10 +32,6 @@ handlers:
   static_dir: static
 #  secure: always
 
-- url: /mapreduce(/.*)?
-  script: mapreduce/main.py
-  login: admin
-
 - url: .*
   script: main.py
 #  secure: always
@@ -52,4 +48,5 @@ inbound_services:
 
 builtins:
 - appstats: on
+- mapreduce: on
 - remote_api: on
