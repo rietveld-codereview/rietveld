@@ -22,3 +22,24 @@ class UrlMap(db.Model):
 
   base_url_template = db.StringProperty(required=True)
   source_code_url_template = db.StringProperty(required=True)
+
+
+class Key(db.Model):
+  """Hash to be able to push data from a server."""
+  hash = db.StringProperty()
+
+
+def to_dict(self):
+  """Converts a db.Model instance into a dict.
+
+  Useful for json serialization.
+  """
+  result = dict([(p, unicode(getattr(self, p))) for p in self.properties()])
+  try:
+    result['key'] = str(self.key())
+  except db.NotSavedError:
+    pass
+  return result
+
+# Monkey-patch db.Model to make it easier to JSON-serialize it.
+db.Model.to_dict = to_dict

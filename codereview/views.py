@@ -252,8 +252,6 @@ class UploadPatchForm(forms.Form):
 
 class UploadBuildResult(forms.Form):
   platform_id = forms.CharField(max_length=255)
-  # If password is not specified, we use user authetication INSTEAD.
-  password = forms.CharField(max_length=255, required=False)
   # Not specifying a status removes this build result
   status = forms.CharField(max_length=255, required=False)
   details_url = forms.URLField(max_length=2083, required=False)
@@ -1849,13 +1847,6 @@ def _get_patchset_info(request, patchset_id):
           response = HttpResponseRedirect('%s?attempt=%d' %
                                           (request.path, attempt + 1))
         break
-      patchset.build_results_list = []
-      for build_result in patchset.build_results:
-        (platform_id, status, details_url) = build_result.split(
-            UploadBuildResult.SEPARATOR, 2)
-        patchset.build_results_list.append({'platform_id': platform_id,
-                                            'status': status,
-                                            'details_url': details_url})
   # Reduce memory usage (see above comment).
   for patchset in patchsets:
     patchset.parsed_patches = None
@@ -2360,18 +2351,9 @@ def _patchset_as_dict(patchset, request=None):
     'created': str(patchset.created),
     'modified': str(patchset.modified),
     'num_comments': patchset.num_comments,
-    'build_results': [],
+    'try_job_results': [t.to_dict() for t in patchset.try_job_results],
     'files': {},
   }
-  for build_result in patchset.build_results:
-    platform_id, status, details_url = build_result.split(
-        UploadBuildResult.SEPARATOR, 2)
-    values['build_results'].append(
-        {
-          'platform_id': platform_id,
-          'status': status,
-          'details_url': details_url,
-        })
   for patch in models.Patch.gql("WHERE patchset = :1", patchset):
     # num_comments and num_drafts are left out for performance reason:
     # they cause a datastore query on first access. They could be added

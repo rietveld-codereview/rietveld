@@ -96,15 +96,15 @@
     {%endfor%}
 
   </table>
-  {%if patchset.build_results_list%}
+  {%if patchset.try_job_results%}
     <table style="background: transparent">
       <tr>
         <td><i>Trybot&nbsp;results:</i></td>
-        {%for build_result in patchset.build_results_list%}
-          <td><a class="build-result build-status-color-{{build_result.status}}"
-                 href="{{build_result.details_url}}"
-                 title="{{build_result.status}}"
-                 target="_blank">&nbsp;{{build_result.platform_id}}&nbsp;</a>
+        {%for try_job in patchset.try_job_results%}
+          <td><a class="build-result build-status-color-{{try_job.status}}"
+                 href="{{try_job.url}}"
+                 title="{{try_job.status}}"
+                 target="_blank">&nbsp;{{try_job.builder}}&nbsp;</a>
           </td>
         {%endfor%}
         <td width="100%"></td>

@@ -104,4 +104,5 @@ urlpatterns += patterns(
     (r'^conversions$', 'conversions'),
     (r'^lint/issue(\d+)_(\d+)', 'lint'),
     (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
+    (r'^status_listener$', 'status_listener'),
     )
