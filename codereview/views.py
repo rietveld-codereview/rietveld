@@ -72,6 +72,14 @@ if not django.template.libraries.get(_library_name, None):
 
 
 IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
+# Maximum forms fields length
+MAX_SUBJECT = 100
+MAX_DESCRIPTION = 10000
+MAX_URL = 2083
+MAX_REVIEWERS = 1000
+MAX_CC = 2000
+MAX_MESSAGE = 10000
+MAX_FILENAME = 255
 
 
 ### Form classes ###
@@ -122,20 +130,20 @@ class AccountInput(forms.TextInput):
 
 class IssueBaseForm(forms.Form):
 
-  subject = forms.CharField(max_length=100,
+  subject = forms.CharField(max_length=MAX_SUBJECT,
                             widget=forms.TextInput(attrs={'size': 60}))
   description = forms.CharField(required=False,
-                                max_length=10000,
+                                max_length=MAX_DESCRIPTION,
                                 widget=forms.Textarea(attrs={'cols': 60}))
   branch = forms.ChoiceField(required=False, label='Base URL')
   base = forms.CharField(required=False,
-                         max_length=1000,
+                         max_length=MAX_URL,
                          widget=forms.TextInput(attrs={'size': 60}))
   reviewers = forms.CharField(required=False,
-                              max_length=1000,
+                              max_length=MAX_REVIEWERS,
                               widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
-                       max_length=2000,
+                       max_length=MAX_CC,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   private = forms.BooleanField(required=False, initial=False)
@@ -176,41 +184,40 @@ class NewForm(IssueBaseForm):
 
   data = forms.FileField(required=False)
   url = forms.URLField(required=False,
-                       max_length=2083,
+                       max_length=MAX_URL,
                        widget=forms.TextInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False, initial=True)
 
 
 class AddForm(forms.Form):
 
-  message = forms.CharField(max_length=100,
+  message = forms.CharField(max_length=MAX_SUBJECT,
                             widget=forms.TextInput(attrs={'size': 60}))
   data = forms.FileField(required=False)
   url = forms.URLField(required=False,
-                       max_length=2083,
+                       max_length=MAX_URL,
                        widget=forms.TextInput(attrs={'size': 60}))
-  reviewers = forms.CharField(max_length=1000, required=False,
+  reviewers = forms.CharField(max_length=MAX_REVIEWERS, required=False,
                               widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False, initial=True)
 
 
 class UploadForm(forms.Form):
 
-  subject = forms.CharField(max_length=100)
-  description = forms.CharField(max_length=10000, required=False)
+  subject = forms.CharField(max_length=MAX_SUBJECT)
+  description = forms.CharField(max_length=MAX_DESCRIPTION, required=False)
   content_upload = forms.BooleanField(required=False)
   separate_patches = forms.BooleanField(required=False)
-  base = forms.CharField(max_length=2000, required=False)
+  base = forms.CharField(max_length=MAX_URL, required=False)
   data = forms.FileField(required=False)
   issue = forms.IntegerField(required=False)
-  description = forms.CharField(max_length=10000, required=False)
-  reviewers = forms.CharField(max_length=1000, required=False)
-  cc = forms.CharField(max_length=1000, required=False)
+  reviewers = forms.CharField(max_length=MAX_REVIEWERS, required=False)
+  cc = forms.CharField(max_length=MAX_CC, required=False)
   private = forms.BooleanField(required=False, initial=False)
   send_mail = forms.BooleanField(required=False)
   base_hashes = forms.CharField(required=False)
   commit = forms.BooleanField(required=False)
-  repo_guid = forms.CharField(required=False)
+  repo_guid = forms.CharField(required=False, max_length=MAX_URL)
 
   def clean_base(self):
     base = self.cleaned_data.get('base')
@@ -223,7 +230,7 @@ class UploadForm(forms.Form):
 
 
 class UploadContentForm(forms.Form):
-  filename = forms.CharField(max_length=255)
+  filename = forms.CharField(max_length=MAX_FILENAME)
   status = forms.CharField(required=False, max_length=20)
   checksum = forms.CharField(max_length=32)
   file_too_large = forms.BooleanField(required=False)
@@ -243,7 +250,7 @@ class UploadContentForm(forms.Form):
 
 
 class UploadPatchForm(forms.Form):
-  filename = forms.CharField(max_length=255)
+  filename = forms.CharField(max_length=MAX_FILENAME)
   content_upload = forms.BooleanField(required=False)
 
   def get_uploaded_patch(self):
@@ -282,16 +289,16 @@ class EditForm(IssueBaseForm):
 
 
 class EditLocalBaseForm(forms.Form):
-  subject = forms.CharField(max_length=100,
+  subject = forms.CharField(max_length=MAX_SUBJECT,
                             widget=forms.TextInput(attrs={'size': 60}))
   description = forms.CharField(required=False,
-                                max_length=10000,
+                                max_length=MAX_DESCRIPTION,
                                 widget=forms.Textarea(attrs={'cols': 60}))
   reviewers = forms.CharField(required=False,
-                              max_length=1000,
+                              max_length=MAX_REVIEWERS,
                               widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
-                       max_length=1000,
+                       max_length=MAX_CC,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   private = forms.BooleanField(required=False, initial=False)
@@ -317,19 +324,19 @@ class BranchForm(djangoforms.ModelForm):
 
 class PublishForm(forms.Form):
 
-  subject = forms.CharField(max_length=100,
+  subject = forms.CharField(max_length=MAX_SUBJECT,
                             widget=forms.TextInput(attrs={'size': 60}))
   reviewers = forms.CharField(required=False,
-                              max_length=1000,
+                              max_length=MAX_REVIEWERS,
                               widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
-                       max_length=1000,
+                       max_length=MAX_CC,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
   add_as_reviewer = forms.BooleanField(required=False, initial=True)
   message = forms.CharField(required=False,
-                            max_length=10000,
+                            max_length=MAX_MESSAGE,
                             widget=forms.Textarea(attrs={'cols': 60}))
   message_only = forms.BooleanField(required=False,
                                     widget=forms.HiddenInput())
@@ -341,16 +348,16 @@ class PublishForm(forms.Form):
 class MiniPublishForm(forms.Form):
 
   reviewers = forms.CharField(required=False,
-                              max_length=1000,
+                              max_length=MAX_REVIEWERS,
                               widget=AccountInput(attrs={'size': 60}))
   cc = forms.CharField(required=False,
-                       max_length=1000,
+                       max_length=MAX_CC,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
   add_as_reviewer = forms.BooleanField(required=False, initial=True)
   message = forms.CharField(required=False,
-                            max_length=10000,
+                            max_length=MAX_MESSAGE,
                             widget=forms.Textarea(attrs={'cols': 60}))
   message_only = forms.BooleanField(required=False,
                                     widget=forms.HiddenInput())
@@ -432,16 +439,16 @@ class SearchForm(forms.Form):
       widget=forms.HiddenInput(attrs={'value': '10'}))
   closed = forms.NullBooleanField(required=False)
   owner = forms.CharField(required=False,
-                          max_length=1000,
+                          max_length=MAX_REVIEWERS,
                           widget=AccountInput(attrs={'size': 60,
                                                      'multiple': False}))
   reviewer = forms.CharField(required=False,
-                             max_length=1000,
+                             max_length=MAX_REVIEWERS,
                              widget=AccountInput(attrs={'size': 60,
                                                         'multiple': False}))
-  repo_guid = forms.CharField(required=False, max_length=1000,
+  repo_guid = forms.CharField(required=False, max_length=MAX_URL,
                               label="Repository ID")
-  base = forms.CharField(required=False, max_length=550)
+  base = forms.CharField(required=False, max_length=MAX_URL)
   private = forms.NullBooleanField(required=False)
   commit = forms.NullBooleanField(required=False)
   created_before = forms.DateTimeField(required=False, label='Created before')
