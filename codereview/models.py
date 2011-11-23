@@ -82,6 +82,7 @@ class Issue(db.Model):
   closed = db.BooleanProperty(default=False)
   private = db.BooleanProperty(default=False)
   n_comments = db.IntegerProperty()
+  commit = db.BooleanProperty(default=False)
 
   _is_starred = None
 
@@ -96,7 +97,9 @@ class Issue(db.Model):
 
   def user_can_edit(self, user):
     """Return true if the given user has permission to edit this issue."""
-    return user == self.owner
+    return user and (user == self.owner or
+                     user.email().endswith("@chromium.org") or
+                     user.email().endswith("@google.com"))
 
   @property
   def edit_allowed(self):
@@ -155,6 +158,53 @@ class Issue(db.Model):
     return self._num_drafts
 
 
+class TryJobResult(db.Model):
+  """Try jobs are associated to a patchset.
+
+  Multiple try jobs can be associated to a single patchset.
+  """
+  # From buildbot/status/results.py
+  SUCCESS, WARNINGS, FAILURE, SKIPPED, EXCEPTION, RETRY = range(6)
+  OK = (SUCCESS, WARNINGS, SKIPPED)
+  FAIL = (FAILURE, EXCEPTION)
+  # Define the priority level of result value when updating it.
+  PRIORITIES = (
+      (-1, None),
+      (RETRY,),
+      OK,
+      FAIL,
+  )
+
+  # Parent is PatchSet
+  url = db.StringProperty()
+  result = db.IntegerProperty()
+  builder = db.StringProperty()
+  slave = db.StringProperty()
+  buildnumber = db.IntegerProperty()
+  reason = db.StringProperty()
+  revision = db.StringProperty()
+  timestamp = db.DateTimeProperty()
+  # Should be an entity.
+  project = db.StringProperty()
+
+  @property
+  def status(self):
+    """Returns a string equivalent so it can be used in CSS styles."""
+    if self.result in self.OK:
+      return 'success'
+    elif self.result in self.FAIL:
+      return 'failure'
+    else:
+      return 'pending'
+
+  @classmethod
+  def result_priority(cls, result):
+    for index, possible_values in cls.PRIORITIES:
+      if result in possible_values:
+        return index
+    return None
+
+
 class PatchSet(db.Model):
   """A set of patchset uploaded together.
 
@@ -168,6 +218,9 @@ class PatchSet(db.Model):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty(default=0)
+  # TODO(maruel): Deprecated, remove once the live instance has all its data
+  # converted to TryJobResult instances.
+  build_results = db.StringListProperty()
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n."""
@@ -182,6 +235,41 @@ class PatchSet(db.Model):
     """
     # For older patchsets n_comments is None.
     return self.n_comments or 0
+
+  _try_job_results = None
+
+  @property
+  def try_job_results(self):
+    """Lazy load all the TryJobResult objects associated to this PatchSet.
+
+    Note the value is cached and doesn't expose a method to be refreshed.
+    """
+    if self._try_job_results is None:
+      self._try_job_results = list(
+          TryJobResult.gql('WHERE ANCESTOR IS :1', self))
+
+      # Append fake object for all build_results properties.
+      # TODO(maruel): Deprecated. Delete this code as soon as the live
+      # instance migrated to TryJobResult objects.
+      SEPARATOR = '|'
+      for build_result in self.build_results:
+        (platform_id, status, details_url) = build_result.split(SEPARATOR, 2)
+        if status == 'success':
+          result = TryJobResult.SUCCESS
+        elif status == 'failure':
+          result = TryJobResult.FAILURE
+        else:
+          result = -1
+        self._try_job_results.append(
+            TryJobResult(
+              patchset=self,
+              url=details_url,
+              result=result,
+              builder=platform_id,
+              timestamp=self.modified))
+    logging.warn('FOUND TRY JOB RESULTS: %s' % '\n'.join(str(a.to_dict()) for a
+      in self._try_job_results))
+    return self._try_job_results
 
 
 class Message(db.Model):
@@ -208,8 +296,9 @@ class Message(db.Model):
       self._approval = any(
             True for line in self.text.lower().splitlines()
             if not line.strip().startswith('>') and 'lgtm' in line)
-      # Must not be issue owner.
-      self._approval &= self.issue.owner.email() != self.sender
+      # Must not be issue owner not commit-bot.
+      self._approval &= self.sender not in (
+            self.issue.owner.email(), 'commit-bot@chromium.org')
     return self._approval
 
 
@@ -252,6 +341,7 @@ class Patch(db.Model):
   # Ids of patchsets that have a different version of this file.
   delta = db.ListProperty(int)
   delta_calculated = db.BooleanProperty(default=False)
+  lint_error_count = db.IntegerProperty(default=-1)
 
   _lines = None
 

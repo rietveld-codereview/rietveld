@@ -9,12 +9,14 @@
 
 {%block mainmenu2%}
   {%if user%}
+    {%comment%}
     {%if uploadpy_hint%}
       <a href="{%url codereview.views.use_uploadpy%}">Create Issue</a>
     {%else%}
       <a href="{%url codereview.views.new%}">Create Issue</a>
     {%endif%}
     |
+    {%endcomment%}
     <a href="{%url codereview.views.mine%}">My Issues</a>
     |
     <a href="{%url codereview.views.starred%}">Starred</a>
@@ -99,7 +101,13 @@
           {%endif%}
           {%if issue.base%}
           <div><b>Base URL:</b><br/>
+            {%if src_url%}
+              <a href="{{src_url}}" target="blank">
+            {%endif%}
             {{issue.base}}
+            {%if src_url%}
+              </a>
+            {%endif%}
           </div>
           {%endif%}
           <div><b>Visibility:</b><br/>
