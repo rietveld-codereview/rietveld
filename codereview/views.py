@@ -2742,8 +2742,8 @@ def _get_comment_counts(account, patchset):
 def _add_next_prev(patchset, patch):
   """Helper to add .next and .prev attributes to a patch object."""
   patch.prev = patch.next = None
-  patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
-                                  patchset))
+  patches = models.Patch.all().filter('patchset =', patchset.key()).order(
+      'filename').fetch(1000)
   _reorder_patches_by_filename(patches)
   patchset.patches = patches  # Required to render the jump to select.
 
