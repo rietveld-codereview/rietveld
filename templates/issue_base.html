@@ -14,18 +14,22 @@
     {%else%}
       <a href="{%url codereview.views.new%}">Create Issue</a>
     {%endif%}
-    |
+    &nbsp;&nbsp;&nbsp;
     <a href="{%url codereview.views.mine%}">My Issues</a>
     |
     <a href="{%url codereview.views.starred%}">Starred</a>
+    &nbsp;&nbsp;&nbsp;
+    <a href="{%url codereview.views.all%}?closed=0">Open</a>
     |
-    <a href="{%url codereview.views.all%}">Open</a>
+    <a href="{%url codereview.views.all%}?closed=1">Closed</a>
     |
-    <a href="{%url codereview.views.all%}?closed=1">All</a>
+    <a href="{%url codereview.views.all%}">All</a>
   {%else%}
-    <a class="novisit" href="{%url codereview.views.index%}">Open Issues</a>
+    <a class="novisit" href="{%url codereview.views.index%}?closed=0">Open Issues</a>
     |
-    <a class="novisit" href="{%url codereview.views.index%}?closed=1">All Issues</a>
+    <a class="novisit" href="{%url codereview.views.index%}?closed=1">Closed Issues</a>
+    |
+    <a class="novisit" href="{%url codereview.views.all%}">All Issues</a>
     |
     <a class="novisit" href="{{sign_in}}">Sign in</a>
     with your <a href="https://www.google.com/accounts/NewAccount">Google
