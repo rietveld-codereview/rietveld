@@ -892,9 +892,9 @@ def json_response(func):
 
 
 def index(request):
-  """/ - Show a list of patches."""
+  """/ - Show a list of review issues"""
   if request.user is None:
-    return all(request)
+    return all(request, index_call=True)
   else:
     return mine(request)
 
@@ -1055,21 +1055,29 @@ def _paginate_issues_with_cursor(page_url,
   return _inner_paginate(request, issues, template, params)
 
 
-def all(request):
+def all(request, index_call=False):
   """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
-  closed = request.GET.get('closed') or ''
-  nav_parameters = {}
-  if closed:
-    nav_parameters['closed'] = '1'
-
-  if closed:
-    query = db.GqlQuery('SELECT * FROM Issue '
-                        'WHERE private = FALSE '
-                        'ORDER BY modified DESC')
+  closed = request.GET.get('closed', '')
+  if closed in ('0', 'false'):
+    closed = False
+  elif closed in ('1', 'true'):
+    closed = True
+  elif index_call:
+    # for index we display only open issues by default
+    closed = False
   else:
-    query = db.GqlQuery('SELECT * FROM Issue '
-                        'WHERE closed = FALSE AND private = FALSE '
-                        'ORDER BY modified DESC')
+    closed = None
+        
+
+  nav_parameters = {}
+  if closed is not None:
+    nav_parameters['closed'] = closed
+
+  query = models.Issue.all().filter('private =', False)
+  if closed is not None:
+    # return only opened or closed issues
+    query.filter('closed =', closed)
+  query.order('-modified')
 
   return _paginate_issues(reverse(all),
                           request,
