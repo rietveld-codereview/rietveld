@@ -30,6 +30,7 @@ from xml.etree import ElementTree
 
 from google.appengine.api import mail
 from google.appengine.api import memcache
+from google.appengine.api import taskqueue
 from google.appengine.api import users
 from google.appengine.api import urlfetch
 from google.appengine.api import xmpp
@@ -1290,6 +1291,9 @@ def upload(request):
            (action,
             request.build_absolute_uri(
               reverse('show_bare_issue_number', args=[issue.key().id()]))))
+    taskqueue.add(url=reverse(calculate_delta),
+                  params={'key': str(patchset.key())},
+                  queue_name='deltacalculation')
     if (form.cleaned_data.get('content_upload') or
         form.cleaned_data.get('separate_patches')):
       # Extend the response message: 2nd line is patchset id.
@@ -1668,6 +1672,8 @@ def _calculate_delta(patch, patchset_id, patchsets):
   for other in patchsets:
     if patchset_id == other.key().id():
       break
+    if not hasattr(other, 'parsed_patches'):
+      other.parsed_patches = None  # cache variable for already parsed patches
     if other.data or other.parsed_patches:
       # Loading all the Patch entities in every PatchSet takes too long
       # (DeadLineExceeded) and consumes a lot of memory (MemoryError) so instead
@@ -3778,3 +3784,39 @@ def customized_upload_py(request):
                             'DEFAULT_REVIEW_SERVER = "%s"' % review_server)
 
   return HttpResponse(source, content_type='text/x-python')
+
+
+@post_required
+def calculate_delta(request):
+  """/calculate_delta - Calculate deltas for a patchset.
+
+  This URL is called by taskqueue to calculate deltas behind the
+  scenes. Returning a HttpResponse with any 2xx status means that the
+  task was finished successfully. Raising an exception means that the
+  taskqueue will retry to run the task.
+
+  This code is similar to the code in _get_patchset_info() which is
+  run when a patchset should be displayed in the UI.
+  """
+  key = request.POST.get('key')
+  if not key:
+    logging.debug('No key given.')
+    return HttpResponse()
+  try:
+    patchset = models.PatchSet.get(key)
+  except (db.KindError, db.BadKeyError), err:
+    logging.debug('Invalid PatchSet key %r: %s' % (key, err))
+    return HttpResponse()
+  if patchset is None:  # e.g. PatchSet was deleted inbetween
+    return HttpResponse()
+  patchset_id = patchset.key().id()
+  patchsets = None
+  for patch in patchset.patch_set.filter('delta_calculated =', False):
+    if patchsets is None:
+      # patchsets is retrieved on first iteration because patchsets
+      # isn't needed outside the loop at all.
+      patchsets = list(patchset.issue.patchset_set.order('created'))
+    patch.delta = _calculate_delta(patch, patchset_id, patchsets)
+    patch.delta_calculated = True
+    patch.put()
+  return HttpResponse()
