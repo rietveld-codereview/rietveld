@@ -1291,9 +1291,10 @@ def upload(request):
            (action,
             request.build_absolute_uri(
               reverse('show_bare_issue_number', args=[issue.key().id()]))))
-    taskqueue.add(url=reverse(calculate_delta),
-                  params={'key': str(patchset.key())},
-                  queue_name='deltacalculation')
+    # FIXME(andi): Disabled delta calculation in taskqueue for now, it
+    # conflicts with base file uploads that could happen in parallel.
+    # taskqueue.add(url=reverse(calculate_delta), params={'key':
+    # str(patchset.key())}, queue_name='deltacalculation')
     if (form.cleaned_data.get('content_upload') or
         form.cleaned_data.get('separate_patches')):
       # Extend the response message: 2nd line is patchset id.
