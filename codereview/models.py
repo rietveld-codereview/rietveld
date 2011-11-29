@@ -197,6 +197,7 @@ class Message(db.Model):
   date = db.DateTimeProperty(auto_now_add=True)
   text = db.TextProperty()
   draft = db.BooleanProperty(default=False)
+  in_reply_to = db.SelfReferenceProperty()
 
   _approval = None
 

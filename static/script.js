@@ -646,7 +646,8 @@ function M_replyToComment(author, written_time, ccs, cid, prefix, opt_lineno,
 /**
 /* TODO(andi): docstring
  */
-function M_replyToMessage(message_id, written_time, author) {
+function M_replyToMessage(message_id, written_time, author,
+                          db_message_object_key) {
   var form = document.getElementById('message-reply-form');
   form = form.cloneNode(true);
   var container = document.getElementById('message-reply-'+message_id);
@@ -656,6 +657,7 @@ function M_replyToMessage(message_id, written_time, author) {
   M_showElement(msgTextarea);
   container.appendChild(form);
   M_showElement(container);
+  form.in_reply_to.value = db_message_object_key;
 
   form.discard.onclick = function () {
     form.message.value = "";

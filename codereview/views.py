@@ -77,6 +77,7 @@ MAX_REVIEWERS = 1000
 MAX_CC = 2000
 MAX_MESSAGE = 10000
 MAX_FILENAME = 255
+MAX_DB_KEY_LENGTH = 1000
 
 
 ### Form classes ###
@@ -311,6 +312,9 @@ class PublishForm(forms.Form):
                                     widget=forms.HiddenInput())
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
+  in_reply_to = forms.CharField(required=False,
+                                max_length=MAX_DB_KEY_LENGTH,
+                                widget=forms.HiddenInput())
 
 
 class MiniPublishForm(forms.Form):
@@ -2966,7 +2970,8 @@ def publish(request):
                       form.cleaned_data['message'],
                       comments,
                       form.cleaned_data['send_mail'],
-                      draft=draft_message)
+                      draft=draft_message,
+                      in_reply_to=form.cleaned_data.get('in_reply_to'))
   tbd.append(msg)
 
   for obj in tbd:
@@ -3087,7 +3092,7 @@ def _get_draft_details(request, comments):
 
 
 def _make_message(request, issue, message, comments=None, send_mail=False,
-                  draft=None):
+                  draft=None, in_reply_to=None):
   """Helper to create a Message instance and optionally send an email."""
   attach_patch = request.POST.get("attach_patch") == "yes"
   template, context = _get_mail_template(request, issue, full_diff=attach_patch)
@@ -3102,7 +3107,8 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     to.remove(my_email)
   if my_email in cc:
     cc.remove(my_email)
-  subject = '%s (issue %d)' % (issue.subject, issue.key().id())
+  issue_id = issue.key().id()
+  subject = '%s (issue %d)' % (issue.subject, issue_id)
   patch = None
   if attach_patch:
     subject = 'PATCH: ' + subject
@@ -3131,6 +3137,17 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     msg.text = db.Text(text)
     msg.draft = False
     msg.date = datetime.datetime.now()
+
+  if in_reply_to:
+    try:
+      msg.in_reply_to = models.Message.get(in_reply_to)
+      replied_issue_id = msg.in_reply_to.issue.key().id()
+      if replied_issue_id != issue_id:
+        logging.warn('In-reply-to Message is for a different issue: '
+                     '%s instead of %s', replied_issue_id, issue_id)
+        msg.in_reply_to = None
+    except (db.KindError, db.BadKeyError):
+      logging.warn('Invalid in-reply-to Message or key given: %s', in_reply_to)
 
   if send_mail:
     # Limit the list of files in the email to approximately 200
