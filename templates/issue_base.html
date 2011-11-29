@@ -1,0 +1,147 @@
+{%extends "base.html"%}
+
+{%block mainmenu%}
+  <a href="{%url codereview.views.index%}" class="active">Issues</a>
+  <a href="{%url codereview.views.repos%}">Repositories</a>
+  <a href="{%url codereview.views.search%}">Search</a>
+{%endblock%}
+
+
+{%block mainmenu2%}
+  {%if user%}
+    {%if uploadpy_hint%}
+      <a href="{%url codereview.views.use_uploadpy%}">Create Issue</a>
+    {%else%}
+      <a href="{%url codereview.views.new%}">Create Issue</a>
+    {%endif%}
+    &nbsp;&nbsp;&nbsp;
+    <a href="{%url codereview.views.mine%}">My Issues</a>
+    |
+    <a href="{%url codereview.views.starred%}">Starred</a>
+    &nbsp;&nbsp;&nbsp;
+    <a href="{%url codereview.views.all%}?closed=0">Open</a>
+    |
+    <a href="{%url codereview.views.all%}?closed=1">Closed</a>
+    |
+    <a href="{%url codereview.views.all%}">All</a>
+  {%else%}
+    <a class="novisit" href="{%url codereview.views.index%}?closed=0">Open Issues</a>
+    |
+    <a class="novisit" href="{%url codereview.views.index%}?closed=1">Closed Issues</a>
+    |
+    <a class="novisit" href="{%url codereview.views.all%}">All Issues</a>
+    |
+    <a class="novisit" href="{{sign_in}}">Sign in</a>
+    with your <a href="https://www.google.com/accounts/NewAccount">Google
+    Account</a> to create issues and add comments
+  {%endif%}
+{%endblock%}
+
+
+{%block body%}
+  <h2>
+    {%include "issue_star.html"%}
+{%if issue.edit_allowed and not issue.closed%}
+<span class="issue-close" id="issue-close-{{issue.key.id}}">
+    <a href="javascript:M_closeIssue({{issue.key.id}})">
+      <img src="{{media_url}}close.gif" title="Close This Issue" width="15"
+	   height="15" border="0"></a>
+</span>
+{%endif%}
+    Issue <a href="{%url codereview.views.show issue.key.id%}"
+               onmouseover="M_showPopUp(this, 'popup-issue');">
+            {{issue.key.id}}</a>:
+    {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}
+  </h2>
+
+  <table class="issue-details" border="0" width="100%">
+    <tr valign="top">
+
+      <td class="meta" width="20%">
+        {%block issue_actions%}
+          <div>
+            {%if issue.edit_allowed%}
+              <a class="novisit"
+                 href="{%url codereview.views.edit issue.key.id%}">
+                Edit Issue
+              </a>
+            {%else%}
+              <span class="disabled">Can't Edit</span>
+            {%endif%}
+            <br/>
+            {%if user%}
+              <a class="novisit"
+                 href="{%url codereview.views.publish issue.key.id%}">
+                Publish+Mail Comments
+              </a> ('m')
+            {%else%}
+              <span class="disabled">Can't Publish+Mail</span>
+            {%endif%}
+            {%if last_patchset and first_patch%}
+              <br/>
+              <a class="novisit"
+                 href="{%url codereview.views.diff issue.key.id,last_patchset.key.id,first_patch.filename%}">
+                <b>Start Review</b>
+              </a>
+            {%endif%}
+          </div>
+        {%endblock%}
+        <div class="issue_details_sidebar">
+          <div><b>Created:</b><br/>
+            {{issue.created|timesince}} ago by {{issue.owner|show_user}}
+          </div>
+          <div><b>Modified:</b><br/>
+            {{issue.modified|timesince}} ago
+          </div>
+          <div><b>Reviewers:</b><br/>
+            {{issue.reviewers|show_users}}
+          </div>
+          {%if issue.cc%}
+          <div><b>CC:</b><br/>
+            {%nicknames issue.cc%}
+          </div>
+          {%endif%}
+          {%if issue.base%}
+          <div><b>Base URL:</b><br/>
+            {{issue.base}}
+          </div>
+          {%endif%}
+          <div><b>Visibility:</b><br/>
+            {%if issue.private%}
+                Private. Only viewable by reviewers and CCs.
+            {% else %}
+                Public.
+            {%endif%}
+          </div>
+          {%if issue.repo_guid%}
+          <div><a title="Find reviews for the same repository ID - {{issue.repo_guid}}"
+               href="{%url codereview.views.search%}?repo_guid={{issue.repo_guid}}">
+            <b>More Reviews</b></a>
+          </div>
+          {%endif%}
+        </div>
+      </td>
+
+      <td style="padding-left: .8em; padding-right: .8em;" width="80%">
+        {%block issue_body%}BODY GOES HERE{%endblock%}
+      </td>
+    </tr>
+  </table>
+{%endblock%}
+
+
+{%block popup%}
+  {%if issue%}
+    <div class="popup" id="popup-issue">
+      <b>Issue {{issue.key.id}}: {{issue.subject}}
+	{%if issue.closed %} (Closed) {%endif%}</b><br/>
+      Created {{issue.created|timesince}} ago by {%nickname issue.owner%}<br/>
+      Modified {{issue.modified|timesince}} ago<br/>
+      Reviewers: {%nicknames issue.reviewers%}<br/>
+      Base URL: {{issue.base}}<br/>
+      Comments: {{issue.num_comments}}
+      {%if issue.num_drafts%} <span style="color: red;">+
+	{{issue.num_drafts}} drafts</span>{%endif%}
+    </div>
+  {%endif%}
+{%endblock%}
