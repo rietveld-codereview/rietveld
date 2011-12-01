@@ -2217,7 +2217,7 @@ def RealMain(argv, data=None):
                             options.save_cookies,
                             options.account_type)
   form_fields = [("subject", message)]
-  
+
   repo_guid = vcs.GetGUID()
   if repo_guid:
     form_fields.append(("repo_guid", repo_guid))
@@ -2267,10 +2267,6 @@ def RealMain(argv, data=None):
       form_fields.append(("private", "1"))
   if options.send_patch:
     options.send_mail = True
-  # If we're uploading base files, don't send the email before the uploads, so
-  # that it contains the file status.
-  if options.send_mail and options.download_base:
-    form_fields.append(("send_mail", "1"))
   if not options.download_base:
     form_fields.append(("content_upload", "1"))
   if len(data) > MAX_UPLOAD_SIZE:
@@ -2303,16 +2299,18 @@ def RealMain(argv, data=None):
     if not options.download_base:
       patches = result
 
-  payload = {}  # payload for final request
   if not options.download_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options, files)
-    if options.send_mail:
-      payload["send_mail"] = "yes"
-      if options.send_patch:
-        payload["attach_patch"] = "yes"
+
+  payload = {}  # payload for final request
+  if options.send_mail:
+    payload["send_mail"] = "yes"
+    if options.send_patch:
+      payload["attach_patch"] = "yes"
   payload = urllib.urlencode(payload)
   rpc_server.Send("/" + issue + "/upload_complete/" + patchset, payload=payload)
   return issue, patchset
+
 
 def main():
   try:
