@@ -1291,10 +1291,6 @@ def upload(request):
            (action,
             request.build_absolute_uri(
               reverse('show_bare_issue_number', args=[issue.key().id()]))))
-    # FIXME(andi): Disabled delta calculation in taskqueue for now, it
-    # conflicts with base file uploads that could happen in parallel.
-    # taskqueue.add(url=reverse(calculate_delta), params={'key':
-    # str(patchset.key())}, queue_name='deltacalculation')
     if (form.cleaned_data.get('content_upload') or
         form.cleaned_data.get('separate_patches')):
       # Extend the response message: 2nd line is patchset id.
@@ -1446,6 +1442,44 @@ def upload_patch(request):
 
   msg = 'OK\n' + str(patch.key().id())
   return HttpResponse(msg, content_type='text/plain')
+
+
+@post_required
+@patchset_owner_required
+@upload_required
+def upload_complete(request):
+  """/<issue>/upload_complete/<patchset> - Patchset upload is complete.
+
+  The following POST parameters are handled:
+
+   - send_mail: If 'yes', a notification mail will be send.
+   - attach_patch: If 'yes', the patches will be attached to the mail.
+  """
+  # Add delta calculation task.
+  taskqueue.add(url=reverse(calculate_delta),
+                params={'key': str(request.patchset.key())},
+                queue_name='deltacalculation')
+  # Check for completeness
+  errors = []
+  if request.issue.local_base:
+    query = request.patchset.patch_set.filter('is_binary =', False)
+    query = query.filter('status =', None)  # all uploaded file have a status
+    if query.count() > 0:
+      errors.append('Base files missing.')
+  # Send notification mail.
+  if request.POST.get('send_mail') == 'yes':
+    msg = _make_message(request, request.issue, '', '', True)
+    msg.put()
+    _notify_issue(request, request.issue, 'Mailed')
+  if errors:
+    msg = ('The following errors occured:\n%s\n'
+           'Try to upload the changeset again.'
+           % '\n'.join(errors))
+    status = 500
+  else:
+    msg = 'OK'
+    status = 200
+  return HttpResponse(msg, content_type='text/plain', status=status)
 
 
 class EmptyPatchSet(Exception):
@@ -2087,7 +2121,8 @@ def close(request):
 def mailissue(request):
   """/<issue>/mail - Send mail for an issue.
 
-  Used by upload.py.
+  This URL is deprecated and shouldn't be used anymore.  However,
+  older versions of upload.py or wrapper scripts still may use it.
   """
   if request.issue.owner != request.user:
     if not IS_DEV:

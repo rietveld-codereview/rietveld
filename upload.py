@@ -2303,15 +2303,16 @@ def RealMain(argv, data=None):
     if not options.download_base:
       patches = result
 
+  payload = {}  # payload for final request
   if not options.download_base:
     vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options, files)
     if options.send_mail:
-      payload = ""
+      payload["send_mail"] = "yes"
       if options.send_patch:
-        payload=urllib.urlencode({"attach_patch": "yes"})
-      rpc_server.Send("/" + issue + "/mail", payload=payload)
+        payload["attach_patch"] = "yes"
+  payload = urllib.urlencode(payload)
+  rpc_server.Send("/" + issue + "/upload_complete/" + patchset, payload=payload)
   return issue, patchset
-
 
 def main():
   try:
