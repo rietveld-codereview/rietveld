@@ -65,6 +65,11 @@ To deploy your own instance of the app to Google App Engine:
 you'll get a error message from "appcfg.py update" (called by "make
 update") complaining you don't have the right to administer this app.
 
+*** Don't update the Python runtime in app.yaml to Python 2.7!
+Currently Rietveld doesn't support Python 2.7 on App Engine due to
+some thread-safety issues (see
+http://code.google.com/p/rietveld/issues/detail?id=348).
+
 The VERSION=xxx argument sets the version; the version from the
 app.yaml is not used.  This is to support a convention used for the
 main Rietveld instance (codereview.appspot.com) whereby we never
