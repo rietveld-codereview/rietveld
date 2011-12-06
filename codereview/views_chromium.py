@@ -49,6 +49,7 @@ class EditFlagsForm(forms.Form):
 
   last_patchset = forms.IntegerField(widget=forms.HiddenInput())
   commit = forms.BooleanField(required=False)
+  builders = forms.CharField(max_length=255, required=False)
 
 
 ### Utility functions ###
@@ -233,24 +234,75 @@ def process_status_push(packets_json):
 
 ### View handlers ###
 
-@post_required
 @issue_editor_required
 @xsrf_required
 def edit_flags(request):
   """/<issue>/edit_flags - Edit issue's flags."""
+  def get_existing_builders(last_patchset):
+    return dict((job.builder, job) for job in
+                models.TryJobResult.all().ancestor(last_patchset))
+
+  last_patchset = models.PatchSet.all().ancestor(
+      request.issue).order('-created').get()
+  if not last_patchset:
+    return HttpResponseForbidden('Can only modify flags on last patchset',
+        content_type='text/plain')
+
+  if request.method == 'GET':
+    existing_builders = get_existing_builders(last_patchset)
+    initial_builders = (', '.join(existing_builders.iterkeys()) or
+                        'win, mac, linux')
+
+    form = EditFlagsForm(initial={
+        'last_patchset': last_patchset.key().id(),
+        'commit': request.issue.commit,
+        'builders': initial_builders})
+    return views.respond(request,
+                         'edit_flags.html',
+                         {'issue': request.issue,'form': form})
+
   form = EditFlagsForm(request.POST)
   if not form.is_valid():
     return HttpResponseBadRequest('Invalid POST arguments',
         content_type='text/plain')
-  # TODO: Request keys only.
-  patchsets = list(request.issue.patchset_set.order('created'))
-  if (not patchsets or
-      form.cleaned_data['last_patchset'] != patchsets[-1].key().id()):
+  if (form.cleaned_data['last_patchset'] != last_patchset.key().id()):
     return HttpResponseForbidden('Can only modify flags on last patchset',
         content_type='text/plain')
+
   if 'commit' in form.cleaned_data:
     request.issue.commit = form.cleaned_data['commit']
     request.issue.put()
+
+  if 'builders' in form.cleaned_data:
+    def txn():
+      jobs_to_save = []
+      jobs_to_delete = []
+
+      new_builders = filter(None, map(unicode.strip,
+                                      form.cleaned_data['builders'].split(',')))
+      existing_builders = get_existing_builders(last_patchset)
+
+      # Figure out which builders we need to remove.  Only remove any that are
+      # still pending.
+      for existing_builder, existing_job in existing_builders.iteritems():
+        if (existing_builder not in new_builders and
+            existing_job.result == models.TryJobResult.TRYPENDING):
+          jobs_to_delete.append(existing_job)
+
+      # Add any new builders.
+      for builder in new_builders:
+        if builder not in existing_builders:
+          try_job = models.TryJobResult(parent=last_patchset,
+                                        url='',  # Will be set later
+                                        result=models.TryJobResult.TRYPENDING,
+                                        builder=builder)
+          jobs_to_save.append(try_job)
+
+      # Commit everything.
+      db.delete(jobs_to_delete)
+      db.put(jobs_to_save)
+    db.run_in_transaction(txn)
+
   return HttpResponse('OK', content_type='text/plain')
 
 
@@ -413,3 +465,14 @@ def status_listener(request):
   #deferred.defer(process_status_push, packets)
   process_status_push(packets)
   return HttpResponse('OK')
+
+
+@views.json_response
+def get_pending_try_patchsets(request):
+  limit = int(request.GET.get('limit', '10'))
+  if limit > 1000:
+    limit = 1000
+
+  q = models.TryJobResult.all().filter(
+      'result =', models.TryJobResult.TRYPENDING).order('timestamp')
+  return [job.to_dict() for job in q.fetch(limit)]

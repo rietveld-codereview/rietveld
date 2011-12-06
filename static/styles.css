@@ -838,6 +838,10 @@ ul.errorlist li {
   background-color: rgb(143, 223, 95);
 }
 
+.build-status-color-try-pending {
+  background-color: rgb(223, 223, 223);
+}
+
 
 #reviewmsgdlg {
   background-color: #E9F2DF;
