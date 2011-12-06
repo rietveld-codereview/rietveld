@@ -1,0 +1,3 @@
+blacklist:
+- subnet: 50.17.104.147
+  description: Annoying EC2 instance harvesting our server for security holes.
