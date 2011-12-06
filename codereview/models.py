@@ -163,8 +163,10 @@ class TryJobResult(db.Model):
 
   Multiple try jobs can be associated to a single patchset.
   """
-  # From buildbot/status/results.py
-  SUCCESS, WARNINGS, FAILURE, SKIPPED, EXCEPTION, RETRY = range(6)
+  # The first 6 values come from buildbot/status/results.py, and should remain
+  # sync'ed.  The last is used internally to make a try job that should be
+  # tried with the commit queue, but has not been sent yet.
+  SUCCESS, WARNINGS, FAILURE, SKIPPED, EXCEPTION, RETRY, TRYPENDING = range(7)
   OK = (SUCCESS, WARNINGS, SKIPPED)
   FAIL = (FAILURE, EXCEPTION)
   # Define the priority level of result value when updating it.
@@ -194,6 +196,8 @@ class TryJobResult(db.Model):
       return 'success'
     elif self.result in self.FAIL:
       return 'failure'
+    elif self.result == self.TRYPENDING:
+      return 'try-pending'
     else:
       return 'pending'
 
