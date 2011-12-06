@@ -203,7 +203,8 @@ class TryJobResult(db.Model):
 
   @classmethod
   def result_priority(cls, result):
-    for index, possible_values in cls.PRIORITIES:
+    """The higher the more important."""
+    for index, possible_values in enumerate(cls.PRIORITIES):
       if result in possible_values:
         return index
     return None
@@ -249,8 +250,7 @@ class PatchSet(db.Model):
     Note the value is cached and doesn't expose a method to be refreshed.
     """
     if self._try_job_results is None:
-      self._try_job_results = list(
-          TryJobResult.gql('WHERE ANCESTOR IS :1', self))
+      self._try_job_results = TryJobResult.all().ancestor(self).fetch(1000)
 
       # Append fake object for all build_results properties.
       # TODO(maruel): Deprecated. Delete this code as soon as the live
@@ -271,8 +271,7 @@ class PatchSet(db.Model):
               result=result,
               builder=platform_id,
               timestamp=self.modified))
-    logging.warn('FOUND TRY JOB RESULTS: %s' % '\n'.join(str(a.to_dict()) for a
-      in self._try_job_results))
+      self._try_job_results.sort(key=lambda x: x.timestamp)
     return self._try_job_results
 
 

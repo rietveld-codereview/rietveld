@@ -127,41 +127,66 @@ def _lint_patch(patch):
   return True
 
 
-def handle_build_started_or_finished(timestamp, packet, payload):
+def unpack_result(result):
+  """Buildbot may pack results with multiple layer of lists."""
+  while isinstance(result, (list, tuple)):
+    result = result[0]
+  return result
+
+
+def handle_build_started(base_url, timestamp, packet, payload):
   build = payload['build']
+  # results should always be absent.
   result = build.get('results', [-1])
-  return inner_handle(timestamp, packet, result, build['properties'])
+  return inner_handle(base_url, timestamp, packet, result, build['properties'])
 
 
-def handle_step_finished(timestamp, packet, payload):
+def handle_build_finished(base_url, timestamp, packet, payload):
+  build = payload['build']
+  # results is omitted if success so insert it manually.
+  result = build.get('results', [models.TryJobResult.SUCCESS])
+  return inner_handle(base_url, timestamp, packet, result, build['properties'])
+
+
+def handle_step_finished(base_url, timestamp, packet, payload):
+  result = unpack_result(payload['step'].get('results', None))
+  if result in models.TryJobResult.OK:
+    # We don't want to mark the try job as success before it's completed!
+    result = -1
   return inner_handle(
-      timestamp, packet, payload['step']['results'], payload['properties'])
+      base_url, timestamp, packet, result, payload['properties'])
 
 
-def inner_handle(timestamp, packet, result, properties):
+def inner_handle(base_url, timestamp, packet, result, properties):
   """Handles one event coming from HttpStatusPush and update the relevant
   TryJobResult object.
+
+  Three cases can arrive:
+  - A new try job was started, initiated from svn/http request so no
+    TryJobResult exists. No key is passed through, a new entity must be created.
+  - A new try job was started from a TryJobResult.result=TRYPENDING. Then the
+    key is passed through since the TryJobResult object exists.
+  - An existing try job is updated. Most frequent case.
   """
   issue = None
   patchset = None
   try:
     properties = dict((name, value) for name, value, _ in properties)
-    revision = properties['revision']
+    revision = str(properties['revision'])
     buildername = properties['buildername']
     buildnumber = int(properties['buildnumber'])
     slavename = properties['slavename']
     # Keep them last.
     issue = int(properties['issue'])
     patchset = int(properties['patchset'])
+    project = packet['project']
   except (KeyError, TypeError, ValueError), e:
     logging.error('Failure when parsing properties: %s' % e)
   if not issue or not patchset:
     logging.error('Bad packet, no issue or patchset: %r' % properties)
     return
 
-  # 'Unpack' results.
-  while isinstance(result, (list, tuple)):
-    result = result[0]
+  result = unpack_result(result)
   issue_key = db.Key.from_path('Issue', issue)
   patchset_key = db.Key.from_path('PatchSet', patchset, parent=issue_key)
   # Verify the key validity by getting the instance.
@@ -169,15 +194,15 @@ def inner_handle(timestamp, packet, result, properties):
     logging.warn('Bad issue/patch id: %s/%s' % (issue, patchset))
     return
 
-  keyname = '%s-%s' % (buildername, buildnumber)
-  try_key = db.Key.from_path('TryJobResult', keyname, parent=patchset_key)
-
+  keyname = '%s-%s-%s-%s' % (issue, patchset, buildername, buildnumber)
   def tx_try_job_result():
-    try_obj = models.TryJobResult.get(try_key)
+    try_obj = models.TryJobResult.all(
+        ).ancestor(patchset_key
+        ).filter('builder =', buildername
+        ).filter('buildnumber =', buildnumber).get()
+    url = '%sbuildstatus?builder=%s&number=%s' % (
+        base_url, buildername, buildnumber)
     if try_obj is None:
-      url = (
-          'http://build.chromium.org/p/tryserver.chromium/buildstatus'
-          '?builder=%s&number=%s') % (buildername, buildnumber)
       try_obj = models.TryJobResult(
           parent=patchset_key,
           url=url,
@@ -188,29 +213,45 @@ def inner_handle(timestamp, packet, result, properties):
           revision=revision,
           # TODO(maruel): Missing data.
           reason='',
-          project=packet['project'],
+          project=project,
           timestamp=timestamp,
           )
-      logging.info('Creating instance %s %s/%s' % (keyname, issue, patchset))
+      logging.info('Creating instance %s' % keyname)
     else:
-      try_obj.timestamp = timestamp
       # Update result only if relevant.
       if (models.TryJobResult.result_priority(result) >
           models.TryJobResult.result_priority(try_obj.result)):
         try_obj.result = result
+      if try_obj.project and try_obj.project != project:
+        logging.critical(
+            'Project for %s didn\'t match: was %s, setting %s' % (keyname,
+              try_obj.project, project))
+      try_obj.project = project
+      # Update the rest unconditionally.
+      try_obj.timestamp = timestamp
+      try_obj.url = url
+      try_obj.revision = revision
+      try_obj.slave = slavename
+      try_obj.buildnumber = buildnumber
+      logging.info(
+          'Updated %s-%s-%s-%s: %s' % (
+            issue, patchset, buildername, buildnumber, try_obj.result))
     try_obj.put()
     return True
-  return db.run_in_transaction(tx_try_job_result)
+  if not db.run_in_transaction(tx_try_job_result):
+    logging.error('Failed to update %s' % keyname)
+    return False
+  return True
 
 
 HANDLER_MAP = {
-  'buildStarted': handle_build_started_or_finished,
-  'buildFinished': handle_build_started_or_finished,
+  'buildStarted': handle_build_started,
+  'buildFinished': handle_build_finished,
   'stepFinished': handle_step_finished,
 }
 
 
-def process_status_push(packets_json):
+def process_status_push(packets_json, base_url):
   """Processes all the packets coming from HttpStatusPush."""
   packets = sorted(json.loads(packets_json),
                    key=lambda packet: string_to_datetime(packet['timestamp']))
@@ -229,7 +270,7 @@ def process_status_push(packets_json):
     else:
       logging.warn('Invalid packet %r' % packet)
       continue
-    HANDLER_MAP[event](timestamp, packet, payload)
+    HANDLER_MAP[event](base_url, timestamp, packet, payload)
 
 
 ### View handlers ###
@@ -459,11 +500,14 @@ def status_listener(request):
   packets = request.POST.get('packets')
   if not packets:
     return HttpResponseBadRequest('No packets given')
+  base_url = request.POST.get('base_url')
+  if not base_url:
+    return HttpResponseBadRequest('No base url given')
   # Using deferred means that we could lose some packets if processing fails.
   # Until a good solution is found for this problem, process the packets
   # synchronously.
-  #deferred.defer(process_status_push, packets)
-  process_status_push(packets)
+  #deferred.defer(process_status_push, packets, base_url)
+  process_status_push(packets, base_url)
   return HttpResponse('OK')
 
 
