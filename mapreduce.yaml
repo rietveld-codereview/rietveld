@@ -1,14 +1,14 @@
 mapreduce:
 - name: Fix issues with account modified today
   mapper:
-    input_reader: mapreduce.input_readers.DatastoreInputReader
+    input_reader: google.appengine.ext.mapreduce.input_readers.DatastoreInputReader
     handler: fix_issue.FixIssue
     params:
     - name: entity_kind
       default: codereview.models.Issue
 - name: Delete unused accounts
   mapper:
-    input_reader: mapreduce.input_readers.DatastoreInputReader
+    input_reader: google.appengine.ext.mapreduce.input_readers.DatastoreInputReader
     handler: fix_issue.DeleteUnusedAccounts
     params:
     - name: entity_kind
