@@ -1,6 +1,6 @@
 import datetime
 import logging
-from mapreduce import operation as op
+from google.appengine.ext.mapreduce import operation as op
 from codereview.models import Account, Issue
 
 
@@ -15,7 +15,7 @@ def FixIssue(issue):
   i_uid = issue.owner.user_id()
   a_uid = account.user.user_id()
   if i_uid != a_uid:
-    canonical_date = datetime.datetime(2011, 05, 20)
+    canonical_date = datetime.datetime(2011, 07, 01)
     if account.modified >= canonical_date:
       logging.info('Account win! issue %d %s %s != %s' % (
           iid, email, i_uid, a_uid))
