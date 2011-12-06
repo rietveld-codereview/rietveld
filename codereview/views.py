@@ -31,6 +31,7 @@ from xml.etree import ElementTree
 
 from google.appengine.api import mail
 from google.appengine.api import memcache
+from google.appengine.api import taskqueue
 from google.appengine.api import users
 from google.appengine.api import urlfetch
 from google.appengine.api import xmpp
@@ -80,6 +81,7 @@ MAX_REVIEWERS = 1000
 MAX_CC = 2000
 MAX_MESSAGE = 10000
 MAX_FILENAME = 255
+MAX_DB_KEY_LENGTH = 1000
 
 
 ### Form classes ###
@@ -343,6 +345,9 @@ class PublishForm(forms.Form):
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
   commit = forms.BooleanField(required=False, widget=forms.HiddenInput())
+  in_reply_to = forms.CharField(required=False,
+                                max_length=MAX_DB_KEY_LENGTH,
+                                widget=forms.HiddenInput())
 
 
 class MiniPublishForm(forms.Form):
@@ -930,9 +935,9 @@ def json_response(func):
 
 
 def index(request):
-  """/ - Show a list of patches."""
+  """/ - Show a list of review issues"""
   if request.user is None:
-    return all(request)
+    return all(request, index_call=True)
   else:
     return mine(request)
 
@@ -1093,21 +1098,29 @@ def _paginate_issues_with_cursor(page_url,
   return _inner_paginate(request, issues, template, params)
 
 
-def all(request):
+def all(request, index_call=False):
   """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
-  closed = request.GET.get('closed') or ''
-  nav_parameters = {}
-  if closed:
-    nav_parameters['closed'] = '1'
-
-  if closed:
-    query = db.GqlQuery('SELECT * FROM Issue '
-                        'WHERE private = FALSE '
-                        'ORDER BY modified DESC')
+  closed = request.GET.get('closed', '')
+  if closed in ('0', 'false'):
+    closed = False
+  elif closed in ('1', 'true'):
+    closed = True
+  elif index_call:
+    # for index we display only open issues by default
+    closed = False
   else:
-    query = db.GqlQuery('SELECT * FROM Issue '
-                        'WHERE closed = FALSE AND private = FALSE '
-                        'ORDER BY modified DESC')
+    closed = None
+        
+
+  nav_parameters = {}
+  if closed is not None:
+    nav_parameters['closed'] = closed
+
+  query = models.Issue.all().filter('private =', False)
+  if closed is not None:
+    # return only opened or closed issues
+    query.filter('closed =', closed)
+  query.order('-modified')
 
   return _paginate_issues(reverse(all),
                           request,
@@ -1474,6 +1487,44 @@ def upload_patch(request):
   return HttpResponse(msg, content_type='text/plain')
 
 
+@post_required
+@patchset_owner_required
+@upload_required
+def upload_complete(request):
+  """/<issue>/upload_complete/<patchset> - Patchset upload is complete.
+
+  The following POST parameters are handled:
+
+   - send_mail: If 'yes', a notification mail will be send.
+   - attach_patch: If 'yes', the patches will be attached to the mail.
+  """
+  # Add delta calculation task.
+  taskqueue.add(url=reverse(calculate_delta),
+                params={'key': str(request.patchset.key())},
+                queue_name='deltacalculation')
+  # Check for completeness
+  errors = []
+  if request.issue.local_base:
+    query = request.patchset.patch_set.filter('is_binary =', False)
+    query = query.filter('status =', None)  # all uploaded file have a status
+    if query.count() > 0:
+      errors.append('Base files missing.')
+  # Send notification mail.
+  if request.POST.get('send_mail') == 'yes':
+    msg = _make_message(request, request.issue, '', '', True)
+    msg.put()
+    _notify_issue(request, request.issue, 'Mailed')
+  if errors:
+    msg = ('The following errors occured:\n%s\n'
+           'Try to upload the changeset again.'
+           % '\n'.join(errors))
+    status = 500
+  else:
+    msg = 'OK'
+    status = 200
+  return HttpResponse(msg, content_type='text/plain', status=status)
+
+
 class EmptyPatchSet(Exception):
   """Exception used inside _make_new() to break out of the transaction."""
 
@@ -1710,6 +1761,8 @@ def _calculate_delta(patch, patchset_id, patchsets):
   for other in patchsets:
     if patchset_id == other.key().id():
       break
+    if not hasattr(other, 'parsed_patches'):
+      other.parsed_patches = None  # cache variable for already parsed patches
     if other.data or other.parsed_patches:
       # Loading all the Patch entities in every PatchSet takes too long
       # (DeadLineExceeded) and consumes a lot of memory (MemoryError) so instead
@@ -2179,7 +2232,8 @@ def close(request):
 def mailissue(request):
   """/<issue>/mail - Send mail for an issue.
 
-  Used by upload.py.
+  This URL is deprecated and shouldn't be used anymore.  However,
+  older versions of upload.py or wrapper scripts still may use it.
   """
   if request.issue.owner != request.user:
     if not IS_DEV:
@@ -3064,7 +3118,8 @@ def publish(request):
                       form.cleaned_data['message'],
                       comments,
                       form.cleaned_data['send_mail'],
-                      draft=draft_message)
+                      draft=draft_message,
+                      in_reply_to=form.cleaned_data.get('in_reply_to'))
   tbd.append(msg)
 
   for obj in tbd:
@@ -3185,7 +3240,7 @@ def _get_draft_details(request, comments):
 
 
 def _make_message(request, issue, message, comments=None, send_mail=False,
-                  draft=None):
+                  draft=None, in_reply_to=None):
   """Helper to create a Message instance and optionally send an email."""
   attach_patch = request.POST.get("attach_patch") == "yes"
   template, context = _get_mail_template(request, issue, full_diff=attach_patch)
@@ -3203,7 +3258,8 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     to.remove(my_email)
   if my_email in cc:
     cc.remove(my_email)
-  subject = '%s (issue %d)' % (issue.subject, issue.key().id())
+  issue_id = issue.key().id()
+  subject = '%s (issue %d)' % (issue.subject, issue_id)
   patch = None
   if attach_patch:
     subject = 'PATCH: ' + subject
@@ -3232,6 +3288,17 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     msg.text = db.Text(text)
     msg.draft = False
     msg.date = datetime.datetime.now()
+
+  if in_reply_to:
+    try:
+      msg.in_reply_to = models.Message.get(in_reply_to)
+      replied_issue_id = msg.in_reply_to.issue.key().id()
+      if replied_issue_id != issue_id:
+        logging.warn('In-reply-to Message is for a different issue: '
+                     '%s instead of %s', replied_issue_id, issue_id)
+        msg.in_reply_to = None
+    except (db.KindError, db.BadKeyError):
+      logging.warn('Invalid in-reply-to Message or key given: %s', in_reply_to)
 
   if send_mail:
     # Limit the list of files in the email to approximately 200
@@ -3888,3 +3955,39 @@ def customized_upload_py(request):
                             'DEFAULT_REVIEW_SERVER = "%s"' % review_server)
 
   return HttpResponse(source, content_type='text/x-python')
+
+
+@post_required
+def calculate_delta(request):
+  """/calculate_delta - Calculate deltas for a patchset.
+
+  This URL is called by taskqueue to calculate deltas behind the
+  scenes. Returning a HttpResponse with any 2xx status means that the
+  task was finished successfully. Raising an exception means that the
+  taskqueue will retry to run the task.
+
+  This code is similar to the code in _get_patchset_info() which is
+  run when a patchset should be displayed in the UI.
+  """
+  key = request.POST.get('key')
+  if not key:
+    logging.debug('No key given.')
+    return HttpResponse()
+  try:
+    patchset = models.PatchSet.get(key)
+  except (db.KindError, db.BadKeyError), err:
+    logging.debug('Invalid PatchSet key %r: %s' % (key, err))
+    return HttpResponse()
+  if patchset is None:  # e.g. PatchSet was deleted inbetween
+    return HttpResponse()
+  patchset_id = patchset.key().id()
+  patchsets = None
+  for patch in patchset.patch_set.filter('delta_calculated =', False):
+    if patchsets is None:
+      # patchsets is retrieved on first iteration because patchsets
+      # isn't needed outside the loop at all.
+      patchsets = list(patchset.issue.patchset_set.order('created'))
+    patch.delta = _calculate_delta(patch, patchset_id, patchsets)
+    patch.delta_calculated = True
+    patch.put()
+  return HttpResponse()
