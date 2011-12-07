@@ -20,4 +20,4 @@ class RietveldError(Exception):
 
 
 class FetchError(RietveldError):
-  """Exception raised when fetching of base files fails."""
+  """Exception raised when fetching of remote files fails."""
