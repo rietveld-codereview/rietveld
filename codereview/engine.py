@@ -29,10 +29,7 @@ from django.template import loader, RequestContext
 import intra_region_diff
 import models
 import patching
-
-
-class FetchError(Exception):
-  """Exception raised by FetchBase() when a URL problem occurs."""
+from codereview.exceptions import FetchError
 
 
 # NOTE: The SplitPatch function is duplicated in upload.py, keep them in sync.

@@ -57,6 +57,7 @@ import engine
 import library
 import models
 import patching
+from codereview.exceptions import FetchError
 
 
 # Add our own template library.
@@ -2406,7 +2407,7 @@ def diff(request):
   else:
     try:
       rows = _get_diff_table_rows(request, patch, context, column_width)
-    except engine.FetchError, err:
+    except FetchError, err:
       return HttpResponseNotFound(str(err))
 
   _add_next_prev(patchset, patch)
@@ -2427,13 +2428,13 @@ def _get_diff_table_rows(request, patch, context, column_width):
   """Helper function that returns rendered rows for a patch.
 
   Raises:
-    engine.FetchError if patch parsing or download of base files fails.
+    FetchError if patch parsing or download of base files fails.
   """
   chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
-    raise engine.FetchError('Can\'t parse the patch to chunks')
+    raise FetchError('Can\'t parse the patch to chunks')
 
-  # Possible engine.FetchErrors are handled in diff() and diff_skipped_lines().
+  # Possible FetchErrors are handled in diff() and diff_skipped_lines().
   content = request.patch.get_content()
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
@@ -2478,7 +2479,7 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
 
   try:
     rows = _get_diff_table_rows(request, patch, None, column_width)
-  except engine.FetchError, err:
+  except FetchError, err:
     return HttpResponse('Error: %s; please report!' % err, status=500)
   return _get_skipped_lines_response(rows, id_before, id_after, where, context)
 
@@ -2566,7 +2567,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if patch_left:
     try:
       new_content_left = patch_left.get_patched_content()
-    except engine.FetchError, err:
+    except FetchError, err:
       return HttpResponseNotFound(str(err))
     lines_left = new_content_left.lines
   elif patch_right:
@@ -2577,7 +2578,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if patch_right:
     try:
       new_content_right = patch_right.get_patched_content()
-    except engine.FetchError, err:
+    except FetchError, err:
       return HttpResponseNotFound(str(err))
     lines_right = new_content_right.lines
   elif patch_left:
@@ -3108,7 +3109,7 @@ def _get_draft_details(request, comments):
           else:
             new_lines = patch.get_patched_content().text.splitlines(True)
             linecache[last_key] = new_lines
-        except engine.FetchError:
+        except FetchError:
           linecache[last_key] = patching.ParsePatchToLines(patch.lines)
           fetch_base_failed = True
     file_lines = linecache[last_key]
