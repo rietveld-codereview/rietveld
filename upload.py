@@ -2308,7 +2308,8 @@ def RealMain(argv, data=None):
     if options.send_patch:
       payload["attach_patch"] = "yes"
   payload = urllib.urlencode(payload)
-  rpc_server.Send("/" + issue + "/upload_complete/" + patchset, payload=payload)
+  rpc_server.Send("/" + issue + "/upload_complete/" + (patchset or ""),
+                  payload=payload)
   return issue, patchset
 
 
