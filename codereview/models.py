@@ -26,6 +26,7 @@ from google.appengine.api import users
 
 import engine
 import patching
+from codereview.exceptions import FetchError
 
 
 CONTEXT_CHOICES = (3, 10, 25, 50, 75, 100)
@@ -372,18 +373,18 @@ class Patch(db.Model):
       a Content instance.
 
     Raises:
-      engine.FetchError: If there was a problem fetching it.
+      FetchError: If there was a problem fetching it.
     """
     try:
       if self.content is not None:
         if self.content.is_bad:
           msg = 'Bad content. Try to upload again.'
           logging.warn('Patch.get_content: %s', msg)
-          raise engine.FetchError(msg)
+          raise FetchError(msg)
         if self.content.is_uploaded and self.content.text == None:
           msg = 'Upload in progress.'
           logging.warn('Patch.get_content: %s', msg)
-          raise engine.FetchError(msg)
+          raise FetchError(msg)
         else:
           return self.content
     except db.Error:
@@ -405,7 +406,7 @@ class Patch(db.Model):
       a Content instance.
 
     Raises:
-      engine.FetchError: If there was a problem fetching the old content.
+      FetchError: If there was a problem fetching the old content.
     """
     try:
       if self.patched_content is not None:
