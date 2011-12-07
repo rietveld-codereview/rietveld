@@ -1449,24 +1449,33 @@ def upload_patch(request):
 
 
 @post_required
-@patchset_owner_required
+@issue_owner_required
 @upload_required
-def upload_complete(request):
+def upload_complete(request, patchset_id=None):
   """/<issue>/upload_complete/<patchset> - Patchset upload is complete.
+     /<issue>/upload_complete/ - used when no base files are uploaded.
 
   The following POST parameters are handled:
 
    - send_mail: If 'yes', a notification mail will be send.
    - attach_patch: If 'yes', the patches will be attached to the mail.
   """
-  # Add delta calculation task.
-  taskqueue.add(url=reverse(calculate_delta),
-                params={'key': str(request.patchset.key())},
-                queue_name='deltacalculation')
+  if patchset_id is not None:
+    patchset = models.PatchSet.get_by_id(int(patchset_id),
+                                         parent=request.issue)
+    if patchset is None:
+      return HttpResponseNotFound('No patch set exists with that id (%s)' %
+                                  patchset_id)
+    # Add delta calculation task.
+    taskqueue.add(url=reverse(calculate_delta),
+                  params={'key': str(patchset.key())},
+                  queue_name='deltacalculation')
+  else:
+    patchset = None
   # Check for completeness
   errors = []
-  if request.issue.local_base:
-    query = request.patchset.patch_set.filter('is_binary =', False)
+  if request.issue.local_base and patchset is not None:
+    query = patchset.patch_set.filter('is_binary =', False)
     query = query.filter('status =', None)  # all uploaded file have a status
     if query.count() > 0:
       errors.append('Base files missing.')

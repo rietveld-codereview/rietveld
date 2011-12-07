@@ -52,7 +52,7 @@ urlpatterns = patterns(
      django.views.defaults.page_not_found, {}, 'diff2_skipped_lines_prefix'),
     (r'^(\d+)/upload_content/(\d+)/(\d+)$', 'upload_content'),
     (r'^(\d+)/upload_patch/(\d+)$', 'upload_patch'),
-    (r'^(\d+)/upload_complete/(\d+)$', 'upload_complete'),
+    (r'^(\d+)/upload_complete/(\d+)?$', 'upload_complete'),
     (r'^(\d+)/description$', 'description'),
     (r'^(\d+)/fields', 'fields'),
     (r'^(\d+)/star$', 'star'),
