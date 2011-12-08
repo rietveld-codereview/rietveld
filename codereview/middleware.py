@@ -23,7 +23,7 @@ from google.appengine.runtime import DeadlineExceededError
 from django.http import HttpResponse
 from django.template import Context, loader
 
-import models
+from codereview import models
 
 
 class AddUserToRequestMiddleware(object):
