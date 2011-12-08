@@ -14,7 +14,54 @@
 
 """Collection of helper functions."""
 
+import urlparse
+
 from google.appengine.ext import db
+
+from codereview.exceptions import FetchError
+
+
+def make_url(base, filename, rev):
+  """Helper to construct the URL to fetch.
+
+  Args:
+    base: The base property of the Issue to which the Patch belongs.
+    filename: The filename property of the Patch instance.
+    rev: Revision number, or None for head revision.
+
+  Returns:
+    A URL referring to the given revision of the file.
+  """
+  scheme, netloc, path, _, _, _ = urlparse.urlparse(base)
+  if netloc.endswith(".googlecode.com"):
+    # Handle Google code repositories
+    if rev is None:
+      raise FetchError("Can't access googlecode.com without a revision")
+    if not path.startswith("/svn/"):
+      raise FetchError( "Malformed googlecode.com URL (%s)" % base)
+    path = path[5:]  # Strip "/svn/"
+    url = "%s://%s/svn-history/r%d/%s/%s" % (scheme, netloc, rev,
+                                             path, filename)
+    return url
+  elif netloc.endswith("sourceforge.net") and rev is not None:
+    if path.strip().endswith("/"):
+      path = path.strip()[:-1]
+    else:
+      path = path.strip()
+    splitted_path = path.split("/")
+    url = "%s://%s/%s/!svn/bc/%d/%s/%s" % (scheme, netloc,
+                                           "/".join(splitted_path[1:3]), rev,
+                                           "/".join(splitted_path[3:]),
+                                           filename)
+    return url
+  # Default for viewvc-based URLs (svn.python.org)
+  url = base
+  if not url.endswith('/'):
+    url += '/'
+  url += filename
+  if rev is not None:
+    url += '?rev=%s' % rev
+  return url
 
 
 def to_dbtext(text):
