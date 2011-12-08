@@ -20,6 +20,7 @@ from google.appengine.api import users
 from google.appengine.runtime import apiproxy_errors
 from google.appengine.runtime import DeadlineExceededError
 
+from django.conf import settings
 from django.http import HttpResponse
 from django.template import Context, loader
 
@@ -41,7 +42,9 @@ class AddUserToRequestMiddleware(object):
 
 
 class PropagateExceptionMiddleware(object):
-  """Catch exceptions, log them and return a friendly error message."""
+  """Catch exceptions, log them and return a friendly error message.
+     Disables itself in DEBUG mode.
+  """
 
   def _text_requested(self, request):
     """Returns True if a text/plain response is requested."""
@@ -54,6 +57,8 @@ class PropagateExceptionMiddleware(object):
 
 
   def process_exception(self, request, exception):
+    if settings.DEBUG:
+      return None
     if isinstance(exception, apiproxy_errors.CapabilityDisabledError):
       msg = ('Rietveld: App Engine is undergoing maintenance. '
              'Please try again in a while.')
