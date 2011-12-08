@@ -346,17 +346,18 @@ class SettingsForm(forms.Form):
 
   nickname = forms.CharField(max_length=30)
   context = forms.IntegerField(
-    widget=forms.Select(choices=FORM_CONTEXT_VALUES),
-    required=False,
-    label='Context')
-  column_width = forms.IntegerField(initial=engine.DEFAULT_COLUMN_WIDTH,
-                                    min_value=engine.MIN_COLUMN_WIDTH,
-                                    max_value=engine.MAX_COLUMN_WIDTH)
+      widget=forms.Select(choices=FORM_CONTEXT_VALUES),
+      required=False,
+      label='Context')
+  column_width = forms.IntegerField(
+      initial=django_settings.DEFAULT_COLUMN_WIDTH,
+      min_value=django_settings.MIN_COLUMN_WIDTH,
+      max_value=django_settings.MAX_COLUMN_WIDTH)
   notify_by_email = forms.BooleanField(required=False,
                                        widget=forms.HiddenInput())
   notify_by_chat = forms.BooleanField(
-    required=False,
-    help_text='You must accept the invite for this to work.')
+      required=False,
+      help_text='You must accept the invite for this to work.')
 
   def clean_nickname(self):
     nickname = self.cleaned_data.get('nickname')
@@ -2359,7 +2360,7 @@ def _get_context_for_user(request):
 
   The value is validated against models.CONTEXT_CHOICES.
   If an invalid value is found, the value is overwritten with
-  engine.DEFAULT_CONTEXT.
+  django_settings.DEFAULT_CONTEXT.
   """
   get_param = request.GET.get('context') or None
   if 'context' in request.GET and get_param is None:
@@ -2369,10 +2370,10 @@ def _get_context_for_user(request):
     account = models.Account.current_user_account
     default_context = account.default_context
   else:
-    default_context = engine.DEFAULT_CONTEXT
+    default_context = django_settings.DEFAULT_CONTEXT
   context = _clean_int(get_param, default_context)
   if context is not None and context not in models.CONTEXT_CHOICES:
-    context = engine.DEFAULT_CONTEXT
+    context = django_settings.DEFAULT_CONTEXT
   return context
 
 def _get_column_width_for_user(request):
@@ -2381,10 +2382,11 @@ def _get_column_width_for_user(request):
     account = models.Account.current_user_account
     default_column_width = account.default_column_width
   else:
-    default_column_width = engine.DEFAULT_COLUMN_WIDTH
+    default_column_width = django_settings.DEFAULT_COLUMN_WIDTH
   column_width = _clean_int(request.GET.get('column_width'),
                             default_column_width,
-                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+                            django_settings.MIN_COLUMN_WIDTH,
+                            django_settings.MAX_COLUMN_WIDTH)
   return column_width
 
 
@@ -2475,8 +2477,9 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
   else:
     context = _get_context_for_user(request) or 100
 
-  column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
-                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+  column_width = _clean_int(column_width, django_settings.DEFAULT_COLUMN_WIDTH,
+                            django_settings.MIN_COLUMN_WIDTH,
+                            django_settings.MAX_COLUMN_WIDTH)
 
   try:
     rows = _get_diff_table_rows(request, patch, None, column_width)
@@ -2651,8 +2654,9 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
 def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
                         id_before, id_after, where, column_width):
   """/<issue>/diff2/... - Returns a fragment of skipped lines"""
-  column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
-                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+  column_width = _clean_int(column_width, django_settings.DEFAULT_COLUMN_WIDTH,
+                            django_settings.MIN_COLUMN_WIDTH,
+                            django_settings.MAX_COLUMN_WIDTH)
 
   if where == 'a':
     context = None

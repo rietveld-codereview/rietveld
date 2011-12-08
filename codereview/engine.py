@@ -20,6 +20,7 @@ import re
 
 from google.appengine.api import users
 
+from django.conf import settings
 from django.template import loader, RequestContext
 
 import intra_region_diff
@@ -85,14 +86,9 @@ def ParsePatchSet(patchset):
   return patches
 
 
-DEFAULT_CONTEXT = 10
-DEFAULT_COLUMN_WIDTH = 80
-MIN_COLUMN_WIDTH = 3
-MAX_COLUMN_WIDTH = 2000
-
 def RenderDiffTableRows(request, old_lines, chunks, patch,
-                        colwidth=DEFAULT_COLUMN_WIDTH, debug=False,
-                        context=DEFAULT_CONTEXT):
+                        colwidth=settings.DEFAULT_COLUMN_WIDTH, debug=False,
+                        context=settings.DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff for a patch.
 
   Args:
@@ -115,8 +111,8 @@ def RenderDiffTableRows(request, old_lines, chunks, patch,
 
 
 def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                         colwidth=DEFAULT_COLUMN_WIDTH, debug=False,
-                         context=DEFAULT_CONTEXT):
+                         colwidth=settings.DEFAULT_COLUMN_WIDTH, debug=False,
+                         context=settings.DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff between two patches.
 
   Args:
@@ -127,7 +123,8 @@ def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
     new_patch: The models.Patch instance corresponding to new_lines.
     colwidth: Optional column width (default 80).
     debug: Optional debugging flag (default False).
-    context: Maximum number of visible context lines (default DEFAULT_CONTEXT).
+    context: Maximum number of visible context lines (default
+      settings.DEFAULT_CONTEXT).
 
   Yields:
     Strings, each of which represents the text rendering one complete
@@ -224,7 +221,7 @@ def _ShortenBuffer(buffer, context):
 
 
 def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                          colwidth=DEFAULT_COLUMN_WIDTH, debug=False):
+                          colwidth=settings.DEFAULT_COLUMN_WIDTH, debug=False):
   """Internal version of RenderDiff2TableRows().
 
   Args:
@@ -296,7 +293,7 @@ def _GetComments(request):
 
 
 def _RenderDiffTableRows(request, old_lines, chunks, patch,
-                         colwidth=DEFAULT_COLUMN_WIDTH, debug=False):
+                         colwidth=settings.DEFAULT_COLUMN_WIDTH, debug=False):
   """Internal version of RenderDiffTableRows().
 
   Args:
@@ -318,7 +315,7 @@ def _RenderDiffTableRows(request, old_lines, chunks, patch,
 
 def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                        new_patch, new_dict, new_max, new_snapshot,
-                       triple_iterator, colwidth=DEFAULT_COLUMN_WIDTH,
+                       triple_iterator, colwidth=settings.DEFAULT_COLUMN_WIDTH,
                        debug=False, request=None):
   """Helper function to render side-by-side table rows.
 

@@ -69,3 +69,9 @@ except:
     pass
 
 UPLOAD_PY_SOURCE = os.path.join(os.path.dirname(__file__), 'upload.py')
+
+# Default values for patch rendering
+DEFAULT_CONTEXT = 10
+DEFAULT_COLUMN_WIDTH = 80
+MIN_COLUMN_WIDTH = 3
+MAX_COLUMN_WIDTH = 2000
