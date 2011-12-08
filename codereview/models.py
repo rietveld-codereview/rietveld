@@ -25,7 +25,8 @@ from google.appengine.api import urlfetch
 from google.appengine.api import users
 from google.appengine.ext import db
 
-import engine
+from django.conf import settings
+
 import patching
 from codereview import utils
 from codereview.exceptions import FetchError
@@ -605,9 +606,10 @@ class Account(db.Model):
   user = db.UserProperty(auto_current_user_add=True, required=True)
   email = db.EmailProperty(required=True)  # key == <email>
   nickname = db.StringProperty(required=True)
-  default_context = db.IntegerProperty(default=engine.DEFAULT_CONTEXT,
+  default_context = db.IntegerProperty(default=settings.DEFAULT_CONTEXT,
                                        choices=CONTEXT_CHOICES)
-  default_column_width = db.IntegerProperty(default=engine.DEFAULT_COLUMN_WIDTH)
+  default_column_width = db.IntegerProperty(
+      default=settings.DEFAULT_COLUMN_WIDTH)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   stars = db.ListProperty(int)  # Issue ids of all starred issues
