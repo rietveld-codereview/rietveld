@@ -53,10 +53,10 @@ from django.utils import simplejson
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 
-import engine
-import library
-import models
-import patching
+from codereview import engine
+from codereview import library
+from codereview import models
+from codereview import patching
 from codereview import utils
 from codereview.exceptions import FetchError
 

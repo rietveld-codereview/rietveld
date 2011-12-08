@@ -27,7 +27,7 @@ from google.appengine.ext import db
 
 from django.conf import settings
 
-import patching
+from codereview import patching
 from codereview import utils
 from codereview.exceptions import FetchError
 

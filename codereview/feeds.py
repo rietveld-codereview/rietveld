@@ -19,8 +19,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.utils.feedgenerator import Atom1Feed
 
-import library
-import models
+from codereview import library
+from codereview import models
 
 
 class BaseFeed(Feed):

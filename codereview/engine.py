@@ -23,9 +23,9 @@ from google.appengine.api import users
 from django.conf import settings
 from django.template import loader, RequestContext
 
-import intra_region_diff
-import models
-import patching
+from codereview import intra_region_diff
+from codereview import models
+from codereview import patching
 from codereview import utils
 
 
