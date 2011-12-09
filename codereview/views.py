@@ -61,10 +61,8 @@ from codereview import utils
 from codereview.exceptions import FetchError
 
 
-# Add our own template library.
-_library_name = __name__.rsplit('.', 1)[0] + '.library'
-if not django.template.libraries.get(_library_name, None):
-  django.template.add_to_builtins(_library_name)
+# Add our own custom template tags library.
+django.template.add_to_builtins('codereview.library')
 
 
 ### Constants ###
