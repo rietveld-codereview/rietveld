@@ -347,46 +347,6 @@ def edit_flags(request):
   return HttpResponse('OK', content_type='text/plain')
 
 
-@key_required
-@patchset_required
-def upload_build_result(request):
-  """/<issue>/upload_build_result/<patchset> - Set build result for a patchset.
-
-  Used to upload results from a build made with the patchset on a given
-  platform.
-  """
-  form = views.UploadBuildResult(request.POST, request.FILES)
-  if not form.is_valid():
-    return HttpResponse('ERROR: Upload build result errors:\n%s' %
-                        repr(form.errors), content_type='text/plain')
-  # Do we already have build results for this patchset on this platform?
-  platform_id = strip_tags(form.cleaned_data['platform_id'])
-  patchset = request.patchset
-  existing = False
-  index = None
-  for index, build_result in enumerate(patchset.build_results):
-    if (build_result.split(views.UploadBuildResult.SEPARATOR, 2)[0] ==
-        platform_id):
-      existing = True
-      break
-  if existing:
-    if form.cleaned_data['status']:
-      patchset.build_results[index] = str(form)
-      message = 'Updated existing result.'
-    else:
-      # An empty status means remove this build result.
-      patchset.build_results.pop(index)
-      message = 'Removed existing result.'
-  elif form.cleaned_data['status']:
-    patchset.build_results.append(str(form))
-    message = 'Adding new status result.'
-  else:
-    message = 'Not adding empty status result.'
-
-  patchset.put()
-  return HttpResponse(message, content_type='text/plain')
-
-
 @login_required
 @xsrf_required
 def conversions(request):

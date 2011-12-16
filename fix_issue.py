@@ -1,7 +1,7 @@
 import datetime
 import logging
 from google.appengine.ext.mapreduce import operation as op
-from codereview.models import Account, Issue
+from codereview.models import Account, Issue, TryJobResult
 
 
 def FixIssue(issue):
@@ -33,3 +33,49 @@ def DeleteUnusedAccounts(account):
     return
   logging.warn('Deleting %s' % email)
   yield op.db.Delete(account)
+
+
+def UpgradeBuildResults(patchset):
+  """Convert the old build_results member of PatchSet to TryJobResults.
+
+  For each entry in the build_results field in patchset, create an instance
+  of TryJobResult with the corresponding information.  The build_results field
+  is then removed from the patchset.
+
+  Args:
+    patchset: An entity of the model PatchSet.
+  """
+  SEPARATOR = '|'
+  objects_to_save = []
+
+  if patchset.build_results:
+    for build_result in patchset.build_results:
+      try:
+        (platform_id, status, details_url) = build_result.split(SEPARATOR, 2)
+        if status == 'success':
+          result = TryJobResult.SUCCESS
+        elif status == 'failure':
+          result = TryJobResult.FAILURE
+        else:
+          result = -1
+        job = TryJobResult(parent=patchset,
+                           url=details_url,
+                           result=result,
+                           builder=platform_id,
+                           timestamp=patchset.modified)
+        objects_to_save.append(job)
+      except ValueError:
+        logging.warn('Invalid build_result %s for patchset %d/%d',
+                     build_result,
+                     patchset.issue.key().id(),
+                     patchset.key().id())
+
+    patchset.build_results = []
+    objects_to_save.append(patchset)
+
+  class Put(op.base.Operation):
+    def __call__(self, context):
+      for obj in objects_to_save:
+        context.mutation_pool.put(obj)
+
+  yield Put()
