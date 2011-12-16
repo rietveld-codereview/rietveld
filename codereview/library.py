@@ -23,7 +23,7 @@ import django.template
 import django.utils.safestring
 from django.core.urlresolvers import reverse
 
-import models
+from codereview import models
 
 register = django.template.Library()
 
