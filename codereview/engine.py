@@ -16,23 +16,17 @@
 
 import cgi
 import difflib
-import logging
 import re
-import urlparse
 
-from google.appengine.api import urlfetch
 from google.appengine.api import users
-from google.appengine.ext import db
 
+from django.conf import settings
 from django.template import loader, RequestContext
 
-import intra_region_diff
-import models
-import patching
-
-
-class FetchError(Exception):
-  """Exception raised by FetchBase() when a URL problem occurs."""
+from codereview import intra_region_diff
+from codereview import models
+from codereview import patching
+from codereview import utils
 
 
 # NOTE: The SplitPatch function is duplicated in upload.py, keep them in sync.
@@ -87,107 +81,14 @@ def ParsePatchSet(patchset):
   """
   patches = []
   for filename, text in SplitPatch(patchset.data):
-    patches.append(models.Patch(patchset=patchset, text=ToText(text),
+    patches.append(models.Patch(patchset=patchset, text=utils.to_dbtext(text),
                                 filename=filename, parent=patchset))
   return patches
 
 
-def FetchBase(base, patch):
-  """Fetch the content of the file to which the file is relative.
-
-  Args:
-    base: the base property of the Issue to which the Patch belongs.
-    patch: a models.Patch instance.
-
-  Returns:
-    A models.Content instance.
-
-  Raises:
-    FetchError: For any kind of problem fetching the content.
-  """
-  filename, lines = patch.filename, patch.lines
-  rev = patching.ParseRevision(lines)
-  if rev is not None:
-    if rev == 0:
-      # rev=0 means it's a new file.
-      return models.Content(text=db.Text(u''), parent=patch)
-
-  # AppEngine can only fetch URLs that db.Link() thinks are OK,
-  # so try converting to a db.Link() here.
-  try:
-    base = db.Link(base)
-  except db.BadValueError:
-    msg = 'Invalid base URL for fetching: %s' % base
-    logging.warn(msg)
-    raise FetchError(msg)
-
-  url = _MakeUrl(base, filename, rev)
-  logging.info('Fetching %s', url)
-  try:
-    result = urlfetch.fetch(url)
-  except Exception, err:
-    msg = 'Error fetching %s: %s: %s' % (url, err.__class__.__name__, err)
-    logging.warn('FetchBase: %s', msg)
-    raise FetchError(msg)
-  if result.status_code != 200:
-    msg = 'Error fetching %s: HTTP status %s' % (url, result.status_code)
-    logging.warn('FetchBase: %s', msg)
-    raise FetchError(msg)
-  return models.Content(text=ToText(UnifyLinebreaks(result.content)),
-                        parent=patch)
-
-
-def _MakeUrl(base, filename, rev):
-  """Helper for FetchBase() to construct the URL to fetch.
-
-  Args:
-    base: The base property of the Issue to which the Patch belongs.
-    filename: The filename property of the Patch instance.
-    rev: Revision number, or None for head revision.
-
-  Returns:
-    A URL referring to the given revision of the file.
-  """
-  scheme, netloc, path, _, _, _ = urlparse.urlparse(base)
-  if netloc.endswith(".googlecode.com"):
-    # Handle Google code repositories
-    if rev is None:
-      raise FetchError("Can't access googlecode.com without a revision")
-    if not path.startswith("/svn/"):
-      raise FetchError( "Malformed googlecode.com URL (%s)" % base)
-    path = path[5:]  # Strip "/svn/"
-    url = "%s://%s/svn-history/r%d/%s/%s" % (scheme, netloc, rev,
-                                             path, filename)
-    return url
-  elif netloc.endswith("sourceforge.net") and rev is not None:
-    if path.strip().endswith("/"):
-      path = path.strip()[:-1]
-    else:
-      path = path.strip()
-    splitted_path = path.split("/")
-    url = "%s://%s/%s/!svn/bc/%d/%s/%s" % (scheme, netloc,
-                                           "/".join(splitted_path[1:3]), rev,
-                                           "/".join(splitted_path[3:]),
-                                           filename)
-    return url
-  # Default for viewvc-based URLs (svn.python.org)
-  url = base
-  if not url.endswith('/'):
-    url += '/'
-  url += filename
-  if rev is not None:
-    url += '?rev=%s' % rev
-  return url
-
-
-DEFAULT_CONTEXT = 10
-DEFAULT_COLUMN_WIDTH = 80
-MIN_COLUMN_WIDTH = 3
-MAX_COLUMN_WIDTH = 2000
-
 def RenderDiffTableRows(request, old_lines, chunks, patch,
-                        colwidth=DEFAULT_COLUMN_WIDTH, debug=False,
-                        context=DEFAULT_CONTEXT):
+                        colwidth=settings.DEFAULT_COLUMN_WIDTH, debug=False,
+                        context=settings.DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff for a patch.
 
   Args:
@@ -210,8 +111,8 @@ def RenderDiffTableRows(request, old_lines, chunks, patch,
 
 
 def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                         colwidth=DEFAULT_COLUMN_WIDTH, debug=False,
-                         context=DEFAULT_CONTEXT):
+                         colwidth=settings.DEFAULT_COLUMN_WIDTH, debug=False,
+                         context=settings.DEFAULT_CONTEXT):
   """Render the HTML table rows for a side-by-side diff between two patches.
 
   Args:
@@ -222,7 +123,8 @@ def RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
     new_patch: The models.Patch instance corresponding to new_lines.
     colwidth: Optional column width (default 80).
     debug: Optional debugging flag (default False).
-    context: Maximum number of visible context lines (default DEFAULT_CONTEXT).
+    context: Maximum number of visible context lines (default
+      settings.DEFAULT_CONTEXT).
 
   Yields:
     Strings, each of which represents the text rendering one complete
@@ -319,7 +221,7 @@ def _ShortenBuffer(buffer, context):
 
 
 def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
-                          colwidth=DEFAULT_COLUMN_WIDTH, debug=False):
+                          colwidth=settings.DEFAULT_COLUMN_WIDTH, debug=False):
   """Internal version of RenderDiff2TableRows().
 
   Args:
@@ -391,7 +293,7 @@ def _GetComments(request):
 
 
 def _RenderDiffTableRows(request, old_lines, chunks, patch,
-                         colwidth=DEFAULT_COLUMN_WIDTH, debug=False):
+                         colwidth=settings.DEFAULT_COLUMN_WIDTH, debug=False):
   """Internal version of RenderDiffTableRows().
 
   Args:
@@ -413,7 +315,7 @@ def _RenderDiffTableRows(request, old_lines, chunks, patch,
 
 def _TableRowGenerator(old_patch, old_dict, old_max, old_snapshot,
                        new_patch, new_dict, new_max, new_snapshot,
-                       triple_iterator, colwidth=DEFAULT_COLUMN_WIDTH,
+                       triple_iterator, colwidth=settings.DEFAULT_COLUMN_WIDTH,
                        debug=False, request=None):
   """Helper function to render side-by-side table rows.
 
@@ -798,32 +700,3 @@ def _ExpandTemplate(name, request, **params):
   return rslt.encode('utf-8')
 
 
-def ToText(text):
-  """Helper to turn a string into a db.Text instance.
-
-  Args:
-    text: a string.
-
-  Returns:
-    A db.Text instance.
-  """
-  if isinstance(text, unicode):
-    # A TypeError is raised if text is unicode and an encoding is given.
-    return db.Text(text)
-  else:
-    try:
-      return db.Text(text, encoding='utf-8')
-    except UnicodeDecodeError:
-      return db.Text(text, encoding='latin-1')
-
-
-def UnifyLinebreaks(text):
-  """Helper to return a string with all line breaks converted to LF.
-
-  Args:
-    text: a string.
-
-  Returns:
-    A string with all line breaks converted to LF.
-  """
-  return text.replace('\r\n', '\n').replace('\r', '\n')

@@ -56,17 +56,17 @@ from django.utils.html import urlize
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 
-import engine
-import library
-import models
-import models_chromium
-import patching
+from codereview import engine
+from codereview import library
+from codereview import models
+from codereview import models_chromium
+from codereview import patching
+from codereview import utils
+from codereview.exceptions import FetchError
 
 
-# Add our own template library.
-_library_name = __name__.rsplit('.', 1)[0] + '.library'
-if not django.template.libraries.get(_library_name, None):
-  django.template.add_to_builtins(_library_name)
+# Add our own custom template tags library.
+django.template.add_to_builtins('codereview.library')
 
 
 ### Constants ###
@@ -379,17 +379,18 @@ class SettingsForm(forms.Form):
 
   nickname = forms.CharField(max_length=30)
   context = forms.IntegerField(
-    widget=forms.Select(choices=FORM_CONTEXT_VALUES),
-    required=False,
-    label='Context')
-  column_width = forms.IntegerField(initial=engine.DEFAULT_COLUMN_WIDTH,
-                                    min_value=engine.MIN_COLUMN_WIDTH,
-                                    max_value=engine.MAX_COLUMN_WIDTH)
+      widget=forms.Select(choices=FORM_CONTEXT_VALUES),
+      required=False,
+      label='Context')
+  column_width = forms.IntegerField(
+      initial=django_settings.DEFAULT_COLUMN_WIDTH,
+      min_value=django_settings.MIN_COLUMN_WIDTH,
+      max_value=django_settings.MAX_COLUMN_WIDTH)
   notify_by_email = forms.BooleanField(required=False,
                                        widget=forms.HiddenInput())
   notify_by_chat = forms.BooleanField(
-    required=False,
-    help_text='You must accept the invite for this to work.')
+      required=False,
+      help_text='You must accept the invite for this to work.')
 
   def clean_nickname(self):
     nickname = self.cleaned_data.get('nickname')
@@ -1441,7 +1442,7 @@ def upload_content(request):
     if patch.is_binary:
       content.data = data
     else:
-      content.text = engine.ToText(engine.UnifyLinebreaks(data))
+      content.text = utils.to_dbtext(utils.unify_linebreaks(data))
     content.checksum = checksum
   content.put()
   return HttpResponse('OK', content_type='text/plain')
@@ -1472,7 +1473,7 @@ def upload_patch(request):
   if patchset.data:
     return HttpResponse('ERROR: Can\'t upload patches to patchset with data.',
                         content_type='text/plain')
-  text = engine.ToText(engine.UnifyLinebreaks(form.get_uploaded_patch()))
+  text = utils.to_dbtext(utils.unify_linebreaks(form.get_uploaded_patch()))
   patch = models.Patch(patchset=patchset,
                        text=text,
                        filename=form.cleaned_data['filename'], parent=patchset)
@@ -1488,24 +1489,33 @@ def upload_patch(request):
 
 
 @post_required
-@patchset_owner_required
+@issue_owner_required
 @upload_required
-def upload_complete(request):
+def upload_complete(request, patchset_id=None):
   """/<issue>/upload_complete/<patchset> - Patchset upload is complete.
+     /<issue>/upload_complete/ - used when no base files are uploaded.
 
   The following POST parameters are handled:
 
    - send_mail: If 'yes', a notification mail will be send.
    - attach_patch: If 'yes', the patches will be attached to the mail.
   """
-  # Add delta calculation task.
-  taskqueue.add(url=reverse(calculate_delta),
-                params={'key': str(request.patchset.key())},
-                queue_name='deltacalculation')
+  if patchset_id is not None:
+    patchset = models.PatchSet.get_by_id(int(patchset_id),
+                                         parent=request.issue)
+    if patchset is None:
+      return HttpResponseNotFound('No patch set exists with that id (%s)' %
+                                  patchset_id)
+    # Add delta calculation task.
+    taskqueue.add(url=reverse(calculate_delta),
+                  params={'key': str(patchset.key())},
+                  queue_name='deltacalculation')
+  else:
+    patchset = None
   # Check for completeness
   errors = []
-  if request.issue.local_base:
-    query = request.patchset.patch_set.filter('is_binary =', False)
+  if request.issue.local_base and patchset is not None:
+    query = patchset.patch_set.filter('is_binary =', False)
     query = query.filter('status =', None)  # all uploaded file have a status
     if query.count() > 0:
       errors.append('Base files missing.')
@@ -1623,7 +1633,7 @@ def _get_data_url(form):
     return None
 
   if data is not None:
-    data = db.Blob(engine.UnifyLinebreaks(data.read()))
+    data = db.Blob(utils.unify_linebreaks(data.read()))
     url = None
   elif url:
     try:
@@ -1634,7 +1644,7 @@ def _get_data_url(form):
     if fetch_result.status_code != 200:
       form.errors['url'] = ['HTTP status code %s' % fetch_result.status_code]
       return None
-    data = db.Blob(engine.UnifyLinebreaks(fetch_result.content))
+    data = db.Blob(utils.unify_linebreaks(fetch_result.content))
 
   return data, url, separate_patches
 
@@ -2457,7 +2467,7 @@ def _get_context_for_user(request):
 
   The value is validated against models.CONTEXT_CHOICES.
   If an invalid value is found, the value is overwritten with
-  engine.DEFAULT_CONTEXT.
+  django_settings.DEFAULT_CONTEXT.
   """
   get_param = request.GET.get('context') or None
   if 'context' in request.GET and get_param is None:
@@ -2467,10 +2477,10 @@ def _get_context_for_user(request):
     account = models.Account.current_user_account
     default_context = account.default_context
   else:
-    default_context = engine.DEFAULT_CONTEXT
+    default_context = django_settings.DEFAULT_CONTEXT
   context = _clean_int(get_param, default_context)
   if context is not None and context not in models.CONTEXT_CHOICES:
-    context = engine.DEFAULT_CONTEXT
+    context = django_settings.DEFAULT_CONTEXT
   return context
 
 def _get_column_width_for_user(request):
@@ -2479,10 +2489,11 @@ def _get_column_width_for_user(request):
     account = models.Account.current_user_account
     default_column_width = account.default_column_width
   else:
-    default_column_width = engine.DEFAULT_COLUMN_WIDTH
+    default_column_width = django_settings.DEFAULT_COLUMN_WIDTH
   column_width = _clean_int(request.GET.get('column_width'),
                             default_column_width,
-                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+                            django_settings.MIN_COLUMN_WIDTH,
+                            django_settings.MAX_COLUMN_WIDTH)
   return column_width
 
 
@@ -2508,7 +2519,7 @@ def diff(request):
   else:
     try:
       rows = _get_diff_table_rows(request, patch, context, column_width)
-    except engine.FetchError, err:
+    except FetchError, err:
       return HttpResponseNotFound(str(err))
 
   _add_next_prev(patchset, patch)
@@ -2529,13 +2540,13 @@ def _get_diff_table_rows(request, patch, context, column_width):
   """Helper function that returns rendered rows for a patch.
 
   Raises:
-    engine.FetchError if patch parsing or download of base files fails.
+    FetchError if patch parsing or download of base files fails.
   """
   chunks = patching.ParsePatchToChunks(patch.lines, patch.filename)
   if chunks is None:
-    raise engine.FetchError('Can\'t parse the patch to chunks')
+    raise FetchError('Can\'t parse the patch to chunks')
 
-  # Possible engine.FetchErrors are handled in diff() and diff_skipped_lines().
+  # Possible FetchErrors are handled in diff() and diff_skipped_lines().
   content = request.patch.get_content()
 
   rows = list(engine.RenderDiffTableRows(request, content.lines,
@@ -2575,12 +2586,13 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
   else:
     context = _get_context_for_user(request) or 100
 
-  column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
-                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+  column_width = _clean_int(column_width, django_settings.DEFAULT_COLUMN_WIDTH,
+                            django_settings.MIN_COLUMN_WIDTH,
+                            django_settings.MAX_COLUMN_WIDTH)
 
   try:
     rows = _get_diff_table_rows(request, patch, None, column_width)
-  except engine.FetchError, err:
+  except FetchError, err:
     return HttpResponse('Error: %s; please report!' % err, status=500)
   return _get_skipped_lines_response(rows, id_before, id_after, where, context)
 
@@ -2668,7 +2680,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if patch_left:
     try:
       new_content_left = patch_left.get_patched_content()
-    except engine.FetchError, err:
+    except FetchError, err:
       return HttpResponseNotFound(str(err))
     lines_left = new_content_left.lines
   elif patch_right:
@@ -2679,7 +2691,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if patch_right:
     try:
       new_content_right = patch_right.get_patched_content()
-    except engine.FetchError, err:
+    except FetchError, err:
       return HttpResponseNotFound(str(err))
     lines_right = new_content_right.lines
   elif patch_left:
@@ -2751,8 +2763,9 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
 def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
                         id_before, id_after, where, column_width):
   """/<issue>/diff2/... - Returns a fragment of skipped lines"""
-  column_width = _clean_int(column_width, engine.DEFAULT_COLUMN_WIDTH,
-                            engine.MIN_COLUMN_WIDTH, engine.MAX_COLUMN_WIDTH)
+  column_width = _clean_int(column_width, django_settings.DEFAULT_COLUMN_WIDTH,
+                            django_settings.MIN_COLUMN_WIDTH,
+                            django_settings.MAX_COLUMN_WIDTH)
 
   if where == 'a':
     context = None
@@ -3212,7 +3225,7 @@ def _get_draft_details(request, comments):
           else:
             new_lines = patch.get_patched_content().text.splitlines(True)
             linecache[last_key] = new_lines
-        except engine.FetchError:
+        except FetchError:
           linecache[last_key] = patching.ParsePatchToLines(patch.lines)
           fetch_base_failed = True
     file_lines = linecache[last_key]

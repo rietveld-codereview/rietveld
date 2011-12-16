@@ -20,12 +20,16 @@ import os
 import re
 import time
 
-from google.appengine.ext import db
 from google.appengine.api import memcache
+from google.appengine.api import urlfetch
 from google.appengine.api import users
+from google.appengine.ext import db
 
-import engine
-import patching
+from django.conf import settings
+
+from codereview import patching
+from codereview import utils
+from codereview.exceptions import FetchError
 
 
 CONTEXT_CHOICES = (3, 10, 25, 50, 75, 100)
@@ -465,25 +469,25 @@ class Patch(db.Model):
       a Content instance.
 
     Raises:
-      engine.FetchError: If there was a problem fetching it.
+      FetchError: If there was a problem fetching it.
     """
     try:
       if self.content is not None:
         if self.content.is_bad:
           msg = 'Bad content. Try to upload again.'
           logging.warn('Patch.get_content: %s', msg)
-          raise engine.FetchError(msg)
+          raise FetchError(msg)
         if self.content.is_uploaded and self.content.text == None:
           msg = 'Upload in progress.'
           logging.warn('Patch.get_content: %s', msg)
-          raise engine.FetchError(msg)
+          raise FetchError(msg)
         else:
           return self.content
     except db.Error:
       # This may happen when a Content entity was deleted behind our back.
       self.content = None
 
-    content = engine.FetchBase(self.patchset.issue.base, self)
+    content = self.fetch_base()
     content.put()
     self.content = content
     self.put()
@@ -498,7 +502,7 @@ class Patch(db.Model):
       a Content instance.
 
     Raises:
-      engine.FetchError: If there was a problem fetching the old content.
+      FetchError: If there was a problem fetching the old content.
     """
     try:
       if self.patched_content is not None:
@@ -524,6 +528,46 @@ class Patch(db.Model):
   def no_base_file(self):
     """Returns True iff the base file is not available."""
     return self.content and self.content.file_too_large
+
+  def fetch_base(self):
+    """Fetch base file for the patch.
+
+    Returns:
+      A models.Content instance.
+
+    Raises:
+      FetchError: For any kind of problem fetching the content.
+    """
+    rev = patching.ParseRevision(self.lines)
+    if rev is not None:
+      if rev == 0:
+        # rev=0 means it's a new file.
+        return Content(text=db.Text(u''), parent=self)
+
+    # AppEngine can only fetch URLs that db.Link() thinks are OK,
+    # so try converting to a db.Link() here.
+    try:
+      base = db.Link(self.patchset.issue.base)
+    except db.BadValueError:
+      msg = 'Invalid base URL for fetching: %s' % self.patchset.issue.base
+      logging.warn(msg)
+      raise FetchError(msg)
+
+    url = utils.make_url(base, self.filename, rev)
+    logging.info('Fetching %s', url)
+    try:
+      result = urlfetch.fetch(url)
+    except urlfetch.Error, err:
+      msg = 'Error fetching %s: %s: %s' % (url, err.__class__.__name__, err)
+      logging.warn('FetchBase: %s', msg)
+      raise FetchError(msg)
+    if result.status_code != 200:
+      msg = 'Error fetching %s: HTTP status %s' % (url, result.status_code)
+      logging.warn('FetchBase: %s', msg)
+      raise FetchError(msg)
+    return Content(text=utils.to_dbtext(utils.unify_linebreaks(result.content)),
+                   parent=self)
+
 
 
 class Comment(db.Model):
@@ -655,9 +699,10 @@ class Account(db.Model):
   user = db.UserProperty(auto_current_user_add=True, required=True)
   email = db.EmailProperty(required=True)  # key == <email>
   nickname = db.StringProperty(required=True)
-  default_context = db.IntegerProperty(default=engine.DEFAULT_CONTEXT,
+  default_context = db.IntegerProperty(default=settings.DEFAULT_CONTEXT,
                                        choices=CONTEXT_CHOICES)
-  default_column_width = db.IntegerProperty(default=engine.DEFAULT_COLUMN_WIDTH)
+  default_column_width = db.IntegerProperty(
+      default=settings.DEFAULT_COLUMN_WIDTH)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   stars = db.ListProperty(int)  # Issue ids of all starred issues
