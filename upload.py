@@ -531,14 +531,13 @@ group.add_option("--account_type", action="store", dest="account_type",
                        "valid choices are 'GOOGLE' and 'HOSTED')."))
 # Issue
 group = parser.add_option_group("Issue options")
-group.add_option("-d", "--description", action="store", dest="description",
-                 metavar="DESCRIPTION", default=None,
-                 help="Optional description when creating an issue.")
-group.add_option("-f", "--description_file", action="store",
-                 dest="description_file", metavar="DESCRIPTION_FILE",
+group.add_option("-t", "--title", action="store", dest="title",
+                 help="New issue subject or new patch set title")
+group.add_option("-m", "--message", action="store", dest="message",
                  default=None,
-                 help="Optional path of a file that contains "
-                      "the description when creating an issue.")
+                 help="New issue description or new patch set message")
+group.add_option("-F", "--file", action="store", dest="file",
+                 default=None, help="Read the message above from file.")
 group.add_option("-r", "--reviewers", action="store", dest="reviewers",
                  metavar="REVIEWERS", default=None,
                  help="Add reviewers (comma separated email addresses).")
@@ -550,10 +549,6 @@ group.add_option("--private", action="store_true", dest="private",
                  help="Make the issue restricted to reviewers and those CCed")
 # Upload options
 group = parser.add_option_group("Patch options")
-group.add_option("-m", "--message", action="store", dest="message",
-                 metavar="MESSAGE", default=None,
-                 help="A message to identify the patch. "
-                      "Will prompt if omitted.")
 group.add_option("-i", "--issue", type="int", action="store",
                  metavar="ISSUE", default=None,
                  help="Issue number to which to add. Defaults to new issue.")
@@ -1560,15 +1555,15 @@ class PerforceVCS(VersionControlSystem):
 
     ConfirmLogin()
 
-    if not options.message:
+    if not options.title:
       description = self.RunPerforceCommand(["describe", self.p4_changelist],
                                             marshal_output=True)
       if description and "desc" in description:
         # Rietveld doesn't support multi-line descriptions
-        raw_message = description["desc"].strip()
-        lines = raw_message.splitlines()
+        raw_title = description["desc"].strip()
+        lines = raw_title.splitlines()
         if len(lines):
-          options.message = lines[0]
+          options.title = lines[0]
 
   def GetGUID(self):
     """For now we don't know how to get repository ID for Perforce"""
@@ -2205,18 +2200,18 @@ def RealMain(argv, data=None):
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
   if options.issue:
-    prompt = "Message describing this patch set: "
+    prompt = "Title describing this patch set: "
   else:
     prompt = "New issue subject: "
-  message = options.message or raw_input(prompt).strip()
-  if not message:
-    ErrorExit("A non-empty message is required")
+  title = options.title or raw_input(prompt).strip()
+  if not title:
+    ErrorExit("A non-empty title is required")
   rpc_server = GetRpcServer(options.server,
                             options.email,
                             options.host,
                             options.save_cookies,
                             options.account_type)
-  form_fields = [("subject", message)]
+  form_fields = [("subject", title)]
 
   repo_guid = vcs.GetGUID()
   if repo_guid:
@@ -2241,15 +2236,19 @@ def RealMain(argv, data=None):
     for cc in options.cc.split(','):
       CheckReviewer(cc)
     form_fields.append(("cc", options.cc))
-  description = options.description
-  if options.description_file:
-    if options.description:
-      ErrorExit("Can't specify description and description_file")
-    file = open(options.description_file, 'r')
-    description = file.read()
+  message = options.message
+  if options.file:
+    if options.message:
+      ErrorExit("Can't specify both message and message file options")
+    file = open(options.file, 'r')
+    message = file.read()
     file.close()
-  if description:
-    form_fields.append(("description", description))
+  if message:
+    if not options.issue:
+      form_fields.append(("description", message))
+    else:
+      # TODO: [ ] figure out how to send a comment from upload.py
+      pass
   # Send a hash of all the base file so the server can determine if a copy
   # already exists in an earlier patchset.
   base_hashes = ""
