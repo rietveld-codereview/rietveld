@@ -13,3 +13,10 @@ mapreduce:
     params:
     - name: entity_kind
       default: codereview.models.Account
+- name: Convert the old build_results member of PatchSet to TryJobResults
+  mapper:
+    input_reader: google.appengine.ext.mapreduce.input_readers.DatastoreInputReader
+    handler: fix_issue.UpgradeBuildResults
+    params:
+    - name: entity_kind
+      default: codereview.models.PatchSet
