@@ -1954,9 +1954,9 @@ def GuessVCSName(options):
   if res != None:
     return res
 
-  # Subversion: from 1.7 svn has a single centralized .svn folder 
+  # Subversion from 1.7 has a single centralized .svn folder 
   # ( see http://subversion.apache.org/docs/release-notes/1.7.html#wc-ng )
-  # Try running it, but don't die if we don't have svn installed.
+  # That's why we use 'svn info' instead of checking for .svn dir
   res = RunDetectCommand(VCS_SUBVERSION, ["svn", "info"])
   if res != None:
     return res
