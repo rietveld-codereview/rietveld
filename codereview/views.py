@@ -1073,11 +1073,10 @@ def all(request, index_call=False):
     closed = False
   else:
     closed = None
-        
 
   nav_parameters = {}
   if closed is not None:
-    nav_parameters['closed'] = closed
+    nav_parameters['closed'] = int(closed)
 
   query = models.Issue.all().filter('private =', False)
   if closed is not None:
