@@ -21,7 +21,7 @@ from google.appengine.runtime import apiproxy_errors
 from google.appengine.runtime import DeadlineExceededError
 
 from django.conf import settings
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.template import Context, loader
 
 from codereview import models
@@ -57,7 +57,7 @@ class PropagateExceptionMiddleware(object):
 
 
   def process_exception(self, request, exception):
-    if settings.DEBUG:
+    if settings.DEBUG or isinstance(exception, Http404):
       return None
     if isinstance(exception, apiproxy_errors.CapabilityDisabledError):
       msg = ('Rietveld: App Engine is undergoing maintenance. '
