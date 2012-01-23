@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding: utf-8
 #
 # Copyright 2007 Google Inc.
 #
@@ -2201,19 +2202,12 @@ def RealMain(argv, data=None):
   files = vcs.GetBaseFiles(data)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
-  if options.issue:
-    prompt = "Title describing this patch set: "
-  else:
-    prompt = "New issue subject: "
-  title = options.title or raw_input(prompt).strip()
-  if not title:
-    ErrorExit("A non-empty title is required")
   rpc_server = GetRpcServer(options.server,
                             options.email,
                             options.host,
                             options.save_cookies,
                             options.account_type)
-  form_fields = [("subject", title)]
+  form_fields = []
 
   repo_guid = vcs.GetGUID()
   if repo_guid:
@@ -2238,19 +2232,37 @@ def RealMain(argv, data=None):
     for cc in options.cc.split(','):
       CheckReviewer(cc)
     form_fields.append(("cc", options.cc))
-  message = options.message
+
+  # Process --message, --title and --file.
+  message = options.message or ""
+  title = options.title or ""
   if options.file:
     if options.message:
       ErrorExit("Can't specify both message and message file options")
     file = open(options.file, 'r')
     message = file.read()
     file.close()
+  if options.issue:
+    prompt = "Title describing this patch set: "
+  else:
+    prompt = "New issue subject: "
+  title = (
+      title or message.split('\n', 1)[0].strip() or raw_input(prompt)).strip()
+  if not title:
+    ErrorExit("A non-empty title is required")
+  if len(title) > 100:
+    title = title[:99] + '…'
+  if title and not options.issue:
+    message = message or title
+
+  form_fields.append(("subject", title))
   if message:
     if not options.issue:
       form_fields.append(("description", message))
     else:
-      # TODO: [ ] figure out how to send a comment from upload.py
+      # TODO: [ ] Use /<issue>/publish to add a comment.
       pass
+
   # Send a hash of all the base file so the server can determine if a copy
   # already exists in an earlier patchset.
   base_hashes = ""
