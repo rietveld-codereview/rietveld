@@ -16,6 +16,7 @@
 
 
 import binascii
+import cgi
 import datetime
 import email  # see incoming_mail()
 import email.utils
@@ -50,12 +51,15 @@ from django.shortcuts import render_to_response
 import django.template
 from django.template import RequestContext
 from django.utils import simplejson
+from django.utils.html import strip_tags
+from django.utils.html import urlize
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 
 from codereview import engine
 from codereview import library
 from codereview import models
+from codereview import models_chromium
 from codereview import patching
 from codereview import utils
 from codereview.exceptions import FetchError
@@ -214,6 +218,7 @@ class UploadForm(forms.Form):
   private = forms.BooleanField(required=False, initial=False)
   send_mail = forms.BooleanField(required=False)
   base_hashes = forms.CharField(required=False)
+  commit = forms.BooleanField(required=False)
   repo_guid = forms.CharField(required=False, max_length=MAX_URL)
 
   def clean_base(self):
@@ -252,6 +257,32 @@ class UploadPatchForm(forms.Form):
 
   def get_uploaded_patch(self):
     return self.files['data'].read()
+
+
+class UploadBuildResult(forms.Form):
+  platform_id = forms.CharField(max_length=255)
+  # Not specifying a status removes this build result
+  status = forms.CharField(max_length=255, required=False)
+  details_url = forms.URLField(max_length=2083, required=False)
+
+  SEPARATOR = '|'
+  _VALID_STATUS = ['failure', 'pending', 'success', '']
+
+  def is_valid(self):
+    if not super(UploadBuildResult, self).is_valid():
+      return False
+    if self.cleaned_data['status'] not in UploadBuildResult._VALID_STATUS:
+      self.errors['status'] = ['"%s" is not a valid build result status' %
+                               self.cleaned_data['status']]
+      return False
+    return True
+
+  def __str__(self):
+    return '%s%s%s%s%s' % (strip_tags(self.cleaned_data['platform_id']),
+                           UploadBuildResult.SEPARATOR,
+                           strip_tags(self.cleaned_data['status']),
+                           UploadBuildResult.SEPARATOR,
+                           strip_tags(self.cleaned_data['details_url']))
 
 
 class EditForm(IssueBaseForm):
@@ -305,6 +336,7 @@ class PublishForm(forms.Form):
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
+  add_as_reviewer = forms.BooleanField(required=False, initial=True)
   message = forms.CharField(required=False,
                             max_length=MAX_MESSAGE,
                             widget=forms.Textarea(attrs={'cols': 60}))
@@ -312,6 +344,7 @@ class PublishForm(forms.Form):
                                     widget=forms.HiddenInput())
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
+  commit = forms.BooleanField(required=False, widget=forms.HiddenInput())
   in_reply_to = forms.CharField(required=False,
                                 max_length=MAX_DB_KEY_LENGTH,
                                 widget=forms.HiddenInput())
@@ -327,6 +360,7 @@ class MiniPublishForm(forms.Form):
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
+  add_as_reviewer = forms.BooleanField(required=False, initial=True)
   message = forms.CharField(required=False,
                             max_length=MAX_MESSAGE,
                             widget=forms.Textarea(attrs={'cols': 60}))
@@ -334,6 +368,7 @@ class MiniPublishForm(forms.Form):
                                     widget=forms.HiddenInput())
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
+  commit = forms.BooleanField(required=False, widget=forms.HiddenInput())
 
 
 FORM_CONTEXT_VALUES = [(x, '%d lines' % x) for x in models.CONTEXT_CHOICES]
@@ -421,6 +456,7 @@ class SearchForm(forms.Form):
                               label="Repository ID")
   base = forms.CharField(required=False, max_length=MAX_URL)
   private = forms.NullBooleanField(required=False)
+  commit = forms.NullBooleanField(required=False)
   created_before = forms.DateTimeField(required=False, label='Created before')
   created_after = forms.DateTimeField(
       required=False, label='Created on or after')
@@ -565,7 +601,9 @@ def _can_view_issue(user, issue):
   return (not issue.private
           or issue.owner == user
           or user_email in issue.cc
-          or user_email in issue.reviewers)
+          or user_email in issue.reviewers
+          or user_email.endswith("@chromium.org")
+          or user_email.endswith("@google.com"))
 
 
 def _notify_issue(request, issue, message):
@@ -1302,6 +1340,7 @@ def upload(request):
       if form.cleaned_data.get('content_upload'):
         # Extend the response: additional lines are the expected filenames.
         issue.local_base = True
+        issue.commit = form.cleaned_data.get('commit', False)
         issue.put()
 
         base_hashes = {}
@@ -1660,6 +1699,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   else:
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
+  issue.commit = False
   issue.put()
 
   if form.cleaned_data.get('send_mail'):
@@ -1701,6 +1741,16 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
       if db_email not in emails:
         emails.append(db_email)
   return emails
+
+
+def _reorder_patches_by_filename(patches):
+  """Reorder a list of patches to put C/C++ headers before sources."""
+  splits = [os.path.splitext(patch.filename) for patch in patches]
+  for i in range(len(splits) - 1):
+    if (splits[i][0] == splits[i+1][0] and
+        splits[i][1] in ['.c', '.cc', '.cpp'] and
+        splits[i+1][1] in ['.h', '.hxx', '.hpp']):
+      patches[i:i+2] = [patches[i+1], patches[i]]
 
 
 def _calculate_delta(patch, patchset_id, patchsets):
@@ -1810,6 +1860,8 @@ def _get_patchset_info(request, patchset_id):
     patchset.parsed_patches = None
     if patchset_id == patchset.key().id():
       patchset.patches = list(patchset.patch_set.order('filename'))
+      # Reorder the list of patches to put .h files before .cc.
+      _reorder_patches_by_filename(patchset.patches)
       try:
         attempt = _clean_int(request.GET.get('attempt'), 0, 0)
         if attempt < 0:
@@ -1870,6 +1922,48 @@ def _get_patchset_info(request, patchset_id):
   return issue, patchsets, response
 
 
+def replace_bug(message):
+  bugs = re.split(r"[\s,]+", message.group(1))
+  base_tracker_url = 'http://code.google.com/p/%s/issues/detail?id=%s'
+  valid_trackers = ('chromium', 'chromium-os', 'chrome-os-partner', 'gyp', 'v8')
+  urls = []
+  for bug in bugs:
+    if not bug:
+      continue
+    tracker = 'chromium'
+    if ':' in bug:
+      tracker, bug_id = bug.split(':', 1)
+      if tracker not in valid_trackers:
+        urls.append(bug)
+        continue
+    else:
+      bug_id = bug
+    url = '<a href="' + base_tracker_url % (tracker, bug_id) + '">'
+    urls.append(url + bug + '</a>')
+
+  return ", ".join(urls) + "\n"
+
+
+def _map_base_url(base):
+  """Check if Base URL can be converted into a source code viewer URL."""
+  for rule in models_chromium.UrlMap.gql('ORDER BY base_url_template'):
+    base_template = r'^%s$' % rule.base_url_template
+    match = re.match(base_template, base)
+    if not match:
+      continue
+    try:
+      src_url = re.sub(base_template,
+                       rule.source_code_url_template,
+                       base)
+    except re.error, err:
+      logging.error('err: %s base: "%s" rule: "%s" => "%s"',
+                    err, base, rule.base_url_template,
+                    rule.source_code_url_template)
+      return None
+    return src_url
+  return None
+
+
 @issue_required
 def show(request, form=None):
   """/<issue> - Show an issue."""
@@ -1891,6 +1985,15 @@ def show(request, form=None):
     elif msg.draft and request.user and msg.sender == request.user.email():
       has_draft_message = True
   num_patchsets = len(patchsets)
+
+  issue.description = cgi.escape(issue.description)
+  issue.description = urlize(issue.description)
+  re_string = r"(?<=BUG=)"
+  re_string += "(\s*(?:[a-z0-9-]+:)?\d+\s*(?:,\s*(?:[a-z0-9-]+:)?\d+\s*)*)"
+  expression = re.compile(re_string, re.IGNORECASE)
+  issue.description = re.sub(expression, replace_bug, issue.description)
+  issue.description = issue.description.replace('\n', '<br/>')
+  src_url = _map_base_url(issue.base)
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
@@ -1898,6 +2001,7 @@ def show(request, form=None):
                   'num_patchsets': num_patchsets,
                   'first_patch': first_patch,
                   'has_draft_message': has_draft_message,
+                  'src_url': src_url,
                   })
 
 
@@ -2004,6 +2108,8 @@ def edit(request):
   issue.subject = cleaned_data['subject']
   issue.description = cleaned_data['description']
   issue.closed = cleaned_data['closed']
+  if issue.closed:
+    issue.commit = False
   issue.private = cleaned_data.get('private', False)
   base_changed = (issue.base != base)
   issue.base = base
@@ -2119,6 +2225,7 @@ def close(request):
   """/<issue>/close - Close an issue."""
   issue = request.issue
   issue.closed = True
+  issue.commit = False
   if request.method == 'POST':
     new_description = request.POST.get('description')
     if new_description:
@@ -2286,6 +2393,7 @@ def _issue_as_dict(issue, messages, request=None):
     'issue': issue.key().id(),
     'base_url': issue.base,
     'private': issue.private,
+    'commit': issue.commit,
   }
   if messages:
     values['messages'] = [
@@ -2313,6 +2421,7 @@ def _patchset_as_dict(patchset, request=None):
     'created': str(patchset.created),
     'modified': str(patchset.modified),
     'num_comments': patchset.num_comments,
+    'try_job_results': [t.to_dict() for t in patchset.try_job_results],
     'files': {},
   }
   for patch in models.Patch.gql("WHERE patchset = :1", patchset):
@@ -2402,6 +2511,8 @@ def diff(request):
 
   context = _get_context_for_user(request)
   column_width = _get_column_width_for_user(request)
+  if patch.filename.startswith('webkit/api'):
+    column_width = engine.MAX_COLUMN_WIDTH
   if patch.is_binary:
     rows = None
   else:
@@ -2699,6 +2810,7 @@ def _add_next_prev(patchset, patch):
   patch.prev = patch.next = None
   patches = models.Patch.all().filter('patchset =', patchset.key()).order(
       'filename').fetch(1000)
+  _reorder_patches_by_filename(patches)
   patchset.patches = patches  # Required to render the jump to select.
 
   comments_by_patch, drafts_by_patch = _get_comment_counts(
@@ -2902,7 +3014,9 @@ def _get_affected_files(issue, full_diff=False):
   patchsets = list(issue.patchset_set.order('created'))
   if len(patchsets):
     patchset = patchsets[-1]
-    for patch in patchset.patch_set.order('filename'):
+    patches = list(patchset.patch_set.order('filename'))
+    _reorder_patches_by_filename(patches)
+    for patch in patches:
       file_str = ''
       if patch.status:
         file_str += patch.status + ' '
@@ -2954,11 +3068,6 @@ def publish(request):
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
     cc = issue.cc[:]
-    if request.user != issue.owner and (request.user.email()
-                                        not in issue.reviewers):
-      reviewers.append(request.user.email())
-      if request.user.email() in cc:
-        cc.remove(request.user.email())
     reviewers = [models.Account.get_nickname_for_email(reviewer,
                                                        default=reviewer)
                  for reviewer in reviewers]
@@ -2990,8 +3099,10 @@ def publish(request):
     reviewers = _get_emails(form, 'reviewers')
   else:
     reviewers = issue.reviewers
-    if request.user != issue.owner and request.user.email() not in reviewers:
-      reviewers.append(db.Email(request.user.email()))
+  if (request.user != issue.owner and
+     request.user.email() not in reviewers and
+     form.cleaned_data.get('add_as_reviewer')):
+    reviewers.append(db.Email(request.user.email()))
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
   else:
@@ -3003,6 +3114,8 @@ def publish(request):
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
   issue.reviewers = reviewers
   issue.cc = cc
+  if form.cleaned_data['commit'] and not issue.closed:
+    issue.commit = True
   if not form.cleaned_data.get('message_only', False):
     tbd, comments = _get_draft_comments(request, issue)
   else:
@@ -3147,8 +3260,11 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   my_email = db.Email(request.user.email())
   to = [db.Email(issue.owner.email())] + issue.reviewers
   cc = issue.cc[:]
-  if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
-    cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
+  # Chromium's instance adds reply@chromiumcodereview.appspotmail.com to the
+  # Google Group which is CCd on all reviews.
+  #cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
+  #if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
+  #  cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
   reply_to = to + cc
   if my_email in to and len(to) > 1:  # send_mail() wants a non-empty to list
     to.remove(my_email)
@@ -3400,6 +3516,8 @@ def search(request):
     q.filter('reviewers = ', form.cleaned_data['reviewer'])
   if form.cleaned_data['private'] is not None:
     q.filter('private = ', form.cleaned_data['private'])
+  if form.cleaned_data['commit'] is not None:
+    q.filter('commit = ', form.cleaned_data['commit'])
   if form.cleaned_data['repo_guid']:
     q.filter('repo_guid = ', form.cleaned_data['repo_guid'])
   if form.cleaned_data['base']:
