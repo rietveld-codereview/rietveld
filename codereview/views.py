@@ -1994,6 +1994,13 @@ def show(request, form=None):
   issue.description = re.sub(expression, replace_bug, issue.description)
   issue.description = issue.description.replace('\n', '<br/>')
   src_url = _map_base_url(issue.base)
+
+  # TODO(rogerta): build this list dynamically.  
+  default_builders = ['win_rel', 'mac_rel', 'linux_rel', 'linux_chromeos',
+                      'linux_view', 'win', 'mac', 'linux',
+                      'linux_clang', 'linux_chromeos_aura', 'win_shared',
+                      'linux_shared']
+  
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
@@ -2002,6 +2009,7 @@ def show(request, form=None):
                   'first_patch': first_patch,
                   'has_draft_message': has_draft_message,
                   'src_url': src_url,
+                  'default_builders': default_builders,
                   })
 
 

@@ -279,9 +279,10 @@ def process_status_push(packets_json, base_url):
 @xsrf_required
 def edit_flags(request):
   """/<issue>/edit_flags - Edit issue's flags."""
-  def get_existing_builders(last_patchset):
-    return dict((job.builder, job) for job in
-                models.TryJobResult.all().ancestor(last_patchset))
+  def get_try_pending_jobs(last_patchset):
+    return dict((job.builder, job)
+                for job in models.TryJobResult.all().ancestor(last_patchset)
+                if job.result == models.TryJobResult.TRYPENDING)
 
   last_patchset = models.PatchSet.all().ancestor(
       request.issue).order('-created').get()
@@ -290,7 +291,7 @@ def edit_flags(request):
         content_type='text/plain')
 
   if request.method == 'GET':
-    existing_builders = get_existing_builders(last_patchset)
+    existing_builders = get_try_pending_jobs(last_patchset)
     initial_builders = (', '.join(existing_builders.iterkeys()) or
                         'win, mac, linux')
 
@@ -298,9 +299,10 @@ def edit_flags(request):
         'last_patchset': last_patchset.key().id(),
         'commit': request.issue.commit,
         'builders': initial_builders})
+    
     return views.respond(request,
                          'edit_flags.html',
-                         {'issue': request.issue,'form': form})
+                         {'issue': request.issue, 'form': form})
 
   form = EditFlagsForm(request.POST)
   if not form.is_valid():
@@ -310,33 +312,39 @@ def edit_flags(request):
     return HttpResponseForbidden('Can only modify flags on last patchset',
         content_type='text/plain')
 
-  if 'commit' in form.cleaned_data:
+  if 'commit' in request.POST:
     request.issue.commit = form.cleaned_data['commit']
     request.issue.put()
 
-  if 'builders' in form.cleaned_data:
+  if 'builders' in request.POST:
     def txn():
       jobs_to_save = []
       jobs_to_delete = []
 
       new_builders = filter(None, map(unicode.strip,
                                       form.cleaned_data['builders'].split(',')))
-      existing_builders = get_existing_builders(last_patchset)
+      existing_builders = get_try_pending_jobs(last_patchset)
 
       # Figure out which builders we need to remove.  Only remove any that are
       # still pending.
       for existing_builder, existing_job in existing_builders.iteritems():
-        if (existing_builder not in new_builders and
-            existing_job.result == models.TryJobResult.TRYPENDING):
+        if (existing_builder not in new_builders):
           jobs_to_delete.append(existing_job)
 
       # Add any new builders.
       for builder in new_builders:
         if builder not in existing_builders:
           try_job = models.TryJobResult(parent=last_patchset,
-                                        url='',  # Will be set later
                                         result=models.TryJobResult.TRYPENDING,
-                                        builder=builder)
+                                        builder=builder,
+                                        # The following later will be set
+                                        url='',
+                                        slave='',
+                                        buildnumber=0,
+                                        reason='',
+                                        revision='',
+                                        project='',
+                                        timestamp=datetime.datetime.max)
           jobs_to_save.append(try_job)
 
       # Commit everything.

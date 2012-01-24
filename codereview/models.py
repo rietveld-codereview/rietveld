@@ -275,7 +275,7 @@ class PatchSet(db.Model):
               result=result,
               builder=platform_id,
               timestamp=self.modified))
-      self._try_job_results.sort(key=lambda x: x.timestamp)
+      self._try_job_results.sort(key=lambda x: x.timestamp, reverse=True)
     return self._try_job_results
 
 
