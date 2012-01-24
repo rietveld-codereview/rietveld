@@ -188,9 +188,11 @@
 <script language="JavaScript" type="text/javascript">
   <!--
     document.onkeydown = M_changelistKeyDown;
+    document.onmousedown = M_changelistMouseDown;
     var dashboardState = new M_DashboardState(window, 'patch', 'M_CLPatchMarker');
     var issueId = {{issue.key.id}};
     M_toggleIssueOverviewByAnchor();
+    M_showTryJobResult('tryjobdiv-{{last_patchset.key.id}}', false);
   // -->
 </script>
 
@@ -219,6 +221,27 @@
   <a id="resizer" class="resizer" style="display:none;cursor:pointer">
     <img src="{{media_url}}zippyplus.gif">
   </a>
+
+  <!-- Popup display to add and remove trybots from last patchset -->  
+  <div id="trybot-popup" style="display:none;">
+    <form method="POST" action="" id="trybotform">
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}"/>
+      <div class="trybot-popup-column">
+      {%for builder in default_builders%}
+        <div class="trybot-popup-input">
+          <input type="checkbox" name="{{builder}}" id="cb_{{builder}}"
+                 checked="checked">{{builder}}</input>
+        </div>
+        {%cycle '' '' '' '</div><div class="trybot-popup-column">'%} 
+      {%endfor%}
+      </div>
+      <div style="clear: all;"/>
+      <input type="button" value="Update"
+             onclick="M_updatePendingTrybots('{{issue.key.id}}', '{{last_patchset.key.id}}', '{{xsrf_token}}')"/>
+      <input type="button" value="Close"
+             onclick="M_closePendingTrybots()"/>
+    </form>
+  </div>
 {%endif%}
 
-{%endblock%}
+{%endblock issue_body%}

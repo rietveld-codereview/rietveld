@@ -96,21 +96,35 @@
     {%endfor%}
 
   </table>
-  {%if patchset.try_job_results%}
-    <table style="background: transparent">
-      <tr>
-        <td><i>Trybot&nbsp;results:</i></td>
-        {%for try_job in patchset.try_job_results%}
-          <td><a class="build-result build-status-color-{{try_job.status}}"
-                 href="{{try_job.url}}"
-                 title="{{try_job.status}}"
-                 target="_blank">&nbsp;{{try_job.builder}}&nbsp;</a>
-          </td>
-        {%endfor%}
-        <td width="100%"></td>
-      </tr>
-    </table>
-  {%endif%}
+  <div id="tryjobdiv-{{patchset.key.id}}"
+       style="background: transparent; margin: 4px 0px">
+    <span><i>Trybot&nbsp;results:</i></span>
+    {%if patchset.try_job_results%}
+      {%for try_job in patchset.try_job_results%}
+        <a class="build-result build-status-color-{{try_job.status}}"
+           href="{{try_job.url}}"
+           status="{{try_job.status}}"
+           title="{{try_job.status}} {{try_job.buildnumber}}"
+        {%ifequal last_patchset.key.id patchset.key.id%}
+           style="display:none;"
+        {%endifequal%}
+           target="_blank">&nbsp;{{try_job.builder}}&nbsp;</a>
+      {%endfor%}
+      <a id="tryjobdiv-{{patchset.key.id}}-morelink" style="display: none;"
+         href="#" onclick="M_showTryJobResult('tryjobdiv-{{patchset.key.id}}', true); return false">
+         More&gt;&gt;&gt;</a>
+      <a id="tryjobdiv-{{patchset.key.id}}-lesslink" style="display: none;"
+         href="#" onclick="M_showTryJobResult('tryjobdiv-{{patchset.key.id}}', false); return false">
+         &lt;&lt;&lt;Less</a>
+    {%endif%}
+    {%if user%}
+    {%ifequal last_patchset.key.id patchset.key.id%}
+    | <a id="tryjobchange-{{patchset.key.id}}" href="#"
+         onclick="M_editPendingTryJobs('{{patchset.key.id}}'); return false">Try more bots</a>
+    {%endifequal%}
+    {%endif%}
+  </div>
+
   {%ifequal last_patchset.key.id patchset.key.id%}
     <form id="commitform" name="commitform" method="post">
       <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">

@@ -467,22 +467,25 @@ function M_toggleSectionForPS(issue, patchset) {
 }
 
 /**
- * Change the commit bit for the given issue by using edit_flags.
+ * Send an /<issue>/edit_flags POST request.
  * @param {String} issue The issue key
+ * @param {String} data The POST data to send in the request.
+ * @param {Function} func_opt Callback called when the request completes.
+ *     Take an XMLHttpRequest as argument, and returns nothing.
  */
-function M_editFlags(issue) {
+function M_sendEditFlagsRequest(issue, data, func_opt) {
   var httpreq = M_getXMLHttpRequest();
-  if (!httpreq) {
-    return true;
-  }
+  if (!httpreq)
+    return;
+
   // This timeout can potentially race with the request coming back OK. In
   // general, if it hasn't come back for 60 seconds, it won't ever come back.
   var aborted = false;
   var httpreq_timeout = setTimeout(function() {
     aborted = true;
     httpreq.abort();
-    alert("Commit bit could not be updated for 60 seconds. Please ensure " +
-          "connectivity (and that the server is up) and try again.");
+    alert('Request could not be updated for 60 seconds. Please ensure ' +
+          'connectivity (and that the server is up) and try again.');
   }, 60000);
   httpreq.onreadystatechange = function () {
     // Firefox 2.0, at least, runs this with readyState = 4 but all other
@@ -491,20 +494,30 @@ function M_editFlags(issue) {
     if (httpreq.readyState == 4 && !aborted) {
       clearTimeout(httpreq_timeout);
       if (httpreq.status != 200) {
-        alert("An error occurred while trying to set the commit bit");
+        alert('An error occurred while trying to update the issue');
       }
+      if (func_opt)
+        func_opt(httpreq);
     }
   }
-  httpreq.open("POST", base_url + issue + "/edit_flags", true);
-  httpreq.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+  httpreq.open('POST', base_url + issue + '/edit_flags', true);
+  httpreq.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  httpreq.send(data);
+}
+
+/**
+ * Change the commit bit for the given issue by using edit_flags.
+ * @param {String} issue The issue key
+ */
+function M_editFlags(issue) {
   var req = [];
   var len = document.commitform.elements.length;
   for (var i = 0; i < len; i++) {
     var element = document.commitform.elements[i];
     var value = undefined;
-    if (element.type == "hidden") {
+    if (element.type == 'hidden') {
       value = element.value;
-    } else if (element.type == "checkbox") {
+    } else if (element.type == 'checkbox') {
       if (element.checked) {
         value = '1';
       } else {
@@ -512,11 +525,118 @@ function M_editFlags(issue) {
       }
     }
     if (value != undefined) {
-      req.push(element.name + "=" + encodeURIComponent(value));
+      req.push(element.name + '=' + encodeURIComponent(value));
     }
   }
-  httpreq.send(req.join("&"));
+
+  M_sendEditFlagsRequest(issue, req.join('&'));
   return true;
+}
+
+/**
+ * Edit the list of pending try jobs for the given patchset. 
+ * @param {String} patchset The patchset key.
+ */
+function M_editPendingTryJobs(patchset) {
+  // find existing pending try jobs.
+  var existing_jobs = {};
+  jQuery('a[status="try-pending"]',
+         document.getElementById('#tryjobdiv-' + patchset)).each(function(i) {
+    var trimmed = jQuery.trim(jQuery(this).text());
+    existing_jobs[trimmed] = 1;
+  });
+
+  // Set the state of the checkboxes as needed.
+  var popup = jQuery('#trybot-popup');
+  jQuery('input:checkbox', popup).each(function(i) {
+    var self = jQuery(this);
+    self.attr('checked', self.attr('name') in existing_jobs); 
+    var value = self.attr('name') in existing_jobs ? 'true' : 'false';
+  });
+
+  // Show the popup and position it near the link.
+  var alink = jQuery('#tryjobchange-' + patchset);
+  var offset = alink.offset();
+  offset.top += alink.height() + 1 - window.pageYOffset;
+
+  popup.css('left', offset.left);
+  popup.css('top', offset.top);
+  popup.css('display', '');
+}
+
+/**
+ * Updates the pending builders for the patchset.
+ * @param {String} issue The issue key.
+ * @param {String} patchset The patchset key.
+ * @param {String} xsrf_token Security token.
+ */
+function M_updatePendingTrybots(issue, patchset, xsrf_token) {
+  // Find which builder are checked.
+  var builders = [];
+  var popup = jQuery('#trybot-popup');
+  jQuery('input:checkbox', popup).each(function(i) {
+    var self = jQuery(this);
+    if (self.attr('checked'))
+      builders.push(self.attr('name')); 
+  });
+  
+  // Build POST data for request.
+  var data = [];
+  data.push('xsrf_token=' + xsrf_token);
+  data.push('last_patchset=' + patchset);
+  data.push('builders=' + builders.join(','));
+  
+  M_sendEditFlagsRequest(issue, data.join("&"), function(xhr) {
+    if (xhr.status == 200)
+      window.location.reload();
+  });
+  
+  // Hide the popup.
+  jQuery('#trybot-popup').css('display', 'none');
+  return true;
+}
+
+/**
+ * Hide the pending builders popup.
+ */
+function M_closePendingTrybots() {
+  jQuery('#trybot-popup').css('display', 'none');
+}
+
+/**
+ * Show or hide older try bot results. 
+ * @param {String} id The id of the div elements that holds all the try job
+ *     a elements.
+ * @param makeVisible If true, makes older try bots visible.
+ */
+function M_showTryJobResult(id, makeVisible) {
+  // This set keeps track of the first occurance of each try job result for
+  // a given builder.  The try job results are ordered reverse chronologically,
+  // so we visit them from newest to oldest.
+  var firstBuilderSet = {};
+  var oldBuildersExist = false;
+  jQuery('a', document.getElementById(id)).each(function(i) {
+    var self = jQuery(this); 
+    var builder = self.text();
+    if (self.attr('status') == 'try-pending') {
+      // Try pending jobs are always visible.
+      self.css('display', 'inline');
+    } else if (builder in firstBuilderSet) {
+      // This is not the first time we see this builder, so toggle its
+      // visibility.
+      self.css('display', makeVisible ? 'inline' : 'none');
+      oldBuildersExist = true;
+    } else {
+      // The first time we see a builder, its always visible.  Remember the
+      // builder name.
+      self.css('display', 'inline');
+      firstBuilderSet[builder] = true;
+    }
+  });
+  jQuery('#' + id + '-morelink')
+      .css('display', !oldBuildersExist || makeVisible ? 'none' : '');
+  jQuery('#' + id + '-lesslink')
+      .css('display', oldBuildersExist && makeVisible ? '' : 'none');
 }
 
 /**
@@ -2131,7 +2251,6 @@ function M_keyDownCommon(evt, handler, input_handler) {
         return false;
       }
     }
-    return true;
   }
   return handler(keyName);
 }
@@ -2279,11 +2398,34 @@ function M_changelistKeyDown(evt) {
     } else if (key == 'U') {
       // back to dashboard
       document.location.href = base_url;
+    } else if (key == 'Esc') {
+      M_closePendingTrybots();
     } else {
       return true;
     }
     return false;
   });
+}
+
+/**
+ * A mouse down handler for the change list page.  Dismissed the try bot
+ * popup if visible.
+ * @param {Event} evt The event object that triggered this handler.
+ * @return false if the event was handled.
+ */
+function M_changelistMouseDown(evt) {
+  var trybotPopup = document.getElementById('trybot-popup');
+  if (trybotPopup && trybotPopup.style.display != 'none') {
+    var target = M_getEventTarget(evt);
+    while(target) {
+      if (target == trybotPopup)
+        return true;
+      target = target.parentNode;
+    }
+    trybotPopup.style.display = 'none';
+    return false;
+  }
+  return true;
 }
 
 /**

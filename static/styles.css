@@ -530,6 +530,25 @@ table#queues td, table#clfiles td {
   padding: 2px;
 }
 
+div#trybot-popup {
+  position: fixed;
+  padding: 8px;
+  background-color: #E5ECF9;
+  border: 1px solid  #93b7fa;
+  border-radius: 4px;
+  -webkit-border-radius: 4px;
+  -moz-border-radius: 4px;
+}
+
+div.trybot-popup-column {
+  float: left;
+  margin-bottom: 8px;
+}
+
+div.trybot-popup-input {
+  margin-right: 8px;
+}
+
 div#help {
   position: fixed;
   right: 4%;
@@ -820,8 +839,6 @@ ul.errorlist li {
 }
 
 .build-result {
-  display: block;
-  height: 17px;
   text-decoration: none;
   color: #333333;
 }
