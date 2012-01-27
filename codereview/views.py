@@ -279,19 +279,22 @@ class EditLocalBaseForm(forms.Form):
 
 
 class RepoForm(forms.Form):
-  # TODO: Make this work without djangoforms.
-
-  class Meta:
-    model = models.Repository
-    exclude = ['owner']
+  name = forms.CharField()
+  url = forms.URLField()
+  guid = forms.CharField(required=False)
 
 
 class BranchForm(forms.Form):
-  # TODO: Make this work without djangoforms.
+  repo = forms.CharField(widget=forms.Select())
+  category = forms.CharField(
+    widget=forms.Select(choices=[(ch, ch)
+                                 for ch in models.Branch.category.choices]))
+  name = forms.CharField()
+  url = forms.URLField()
 
-  class Meta:
-    model = models.Branch
-    exclude = ['owner', 'repo_name']
+  def set_repo_choices(self):
+    self.fields['repo'].widget.choices = [
+      (r.key(), r.name) for r in models.Repository.all().order('name')]
 
 
 class PublishForm(forms.Form):
@@ -3489,8 +3492,12 @@ def repo_new(request):
   errors = form.errors
   if not errors:
     try:
-      repo = form.save(commit=False)
-    except ValueError, err:
+      repo = models.Repository(
+        name=form.cleaned_data.get('name'),
+        url=form.cleaned_data.get('url'),
+        guid=form.cleaned_data.get('guid'),
+        )
+    except (db.BadValueError, ValueError), err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'repo_new.html', {'form': form})
@@ -3543,21 +3550,28 @@ def repo_init(_request):
 def branch_new(request, repo_id):
   """/branch_new/<repo> - Add a new Branch to a Repository record."""
   repo = models.Repository.get_by_id(int(repo_id))
+  # TODO: Don't make the Repo field editable?  It could just be hidden.
   if request.method != 'POST':
-    # XXX Use repo.key() so that the default gets picked up
     form = BranchForm(initial={'repo': repo.key(),
                                'url': repo.url,
                                'category': 'branch',
                                })
+    form.set_repo_choices()
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
   form = BranchForm(request.POST)
   errors = form.errors
   if not errors:
     try:
-      branch = form.save(commit=False)
-    except ValueError, err:
+      branch = models.Branch(
+        repo=db.Key(form.cleaned_data.get('repo')),
+        category=form.cleaned_data.get('category'),
+        name=form.cleaned_data.get('name'),
+        url=form.cleaned_data.get('url'),
+        )
+    except (db.BadValueError, ValueError), err:
       errors['__all__'] = unicode(err)
   if errors:
+    form.set_repo_choices()
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
   branch.repo_name = repo.name
   branch.put()
@@ -3572,18 +3586,27 @@ def branch_edit(request, branch_id):
   if branch.owner != request.user:
     return HttpResponseForbidden('You do not own this branch')
   if request.method != 'POST':
-    form = BranchForm(instance=branch)
+    form = BranchForm(initial={'repo': branch.repo.key(),
+                               'category': branch.category,
+                               'name': branch.name,
+                               'url': branch.url,
+                               })
+    form.set_repo_choices()
     return respond(request, 'branch_edit.html',
                    {'branch': branch, 'form': form})
 
-  form = BranchForm(request.POST, instance=branch)
+  form = BranchForm(request.POST)
   errors = form.errors
   if not errors:
     try:
-      branch = form.save(commit=False)
-    except ValueError, err:
+      branch.repo = db.Key(form.cleaned_data.get('repo'))
+      branch.category = form.cleaned_data.get('category')
+      branch.name = form.cleaned_data.get('name')
+      branch.url = form.cleaned_data.get('url')
+    except (db.BadValueError, ValueError), err:
       errors['__all__'] = unicode(err)
   if errors:
+    form.set_repo_choices()
     return respond(request, 'branch_edit.html',
                    {'branch': branch, 'form': form})
   branch.repo_name = branch.repo.name
