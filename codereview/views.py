@@ -35,7 +35,6 @@ from google.appengine.api import users
 from google.appengine.api import urlfetch
 from google.appengine.api import xmpp
 from google.appengine.ext import db
-from google.appengine.ext.db import djangoforms
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.runtime import apiproxy_errors
 
@@ -279,14 +278,16 @@ class EditLocalBaseForm(forms.Form):
     return None
 
 
-class RepoForm(djangoforms.ModelForm):
+class RepoForm(forms.Form):
+  # TODO: Make this work without djangoforms.
 
   class Meta:
     model = models.Repository
     exclude = ['owner']
 
 
-class BranchForm(djangoforms.ModelForm):
+class BranchForm(forms.Form):
+  # TODO: Make this work without djangoforms.
 
   class Meta:
     model = models.Branch
@@ -3459,14 +3460,14 @@ def search(request):
 def repos(request):
   """/repos - Show the list of known Subversion repositories."""
   # Clean up garbage created by buggy edits
-  bad_branches = list(models.Branch.gql('WHERE owner = :1', None))
+  bad_branches = models.Branch.gql('WHERE owner = :1', None).fetch(100)
   if bad_branches:
     db.delete(bad_branches)
   repo_map = {}
-  for repo in list(models.Repository.all()):
+  for repo in models.Repository.all().fetch(1000, batch_size=100):
     repo_map[str(repo.key())] = repo
   branches = []
-  for branch in models.Branch.all():
+  for branch in models.Branch.all().fetch(2000, batch_size=100):
     # Using ._repo instead of .repo returns the db.Key of the referenced entity.
     # Access to a protected member FOO of a client class
     # pylint: disable=W0212
