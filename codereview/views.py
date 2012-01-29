@@ -35,7 +35,6 @@ from google.appengine.api import users
 from google.appengine.api import urlfetch
 from google.appengine.api import xmpp
 from google.appengine.ext import db
-from google.appengine.ext.db import djangoforms
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.runtime import apiproxy_errors
 
@@ -279,18 +278,18 @@ class EditLocalBaseForm(forms.Form):
     return None
 
 
-class RepoForm(djangoforms.ModelForm):
+class RepoForm(forms.Form):
+  name = forms.CharField()
+  url = forms.URLField()
+  guid = forms.CharField(required=False)
 
-  class Meta:
-    model = models.Repository
-    exclude = ['owner']
 
-
-class BranchForm(djangoforms.ModelForm):
-
-  class Meta:
-    model = models.Branch
-    exclude = ['owner', 'repo_name']
+class BranchForm(forms.Form):
+  category = forms.CharField(
+    widget=forms.Select(choices=[(ch, ch)
+                                 for ch in models.Branch.category.choices]))
+  name = forms.CharField()
+  url = forms.URLField()
 
 
 class PublishForm(forms.Form):
@@ -3488,8 +3487,12 @@ def repo_new(request):
   errors = form.errors
   if not errors:
     try:
-      repo = form.save(commit=False)
-    except ValueError, err:
+      repo = models.Repository(
+        name=form.cleaned_data.get('name'),
+        url=form.cleaned_data.get('url'),
+        guid=form.cleaned_data.get('guid'),
+        )
+    except (db.BadValueError, ValueError), err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'repo_new.html', {'form': form})
@@ -3543,9 +3546,7 @@ def branch_new(request, repo_id):
   """/branch_new/<repo> - Add a new Branch to a Repository record."""
   repo = models.Repository.get_by_id(int(repo_id))
   if request.method != 'POST':
-    # XXX Use repo.key() so that the default gets picked up
-    form = BranchForm(initial={'repo': repo.key(),
-                               'url': repo.url,
+    form = BranchForm(initial={'url': repo.url,
                                'category': 'branch',
                                })
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
@@ -3553,8 +3554,13 @@ def branch_new(request, repo_id):
   errors = form.errors
   if not errors:
     try:
-      branch = form.save(commit=False)
-    except ValueError, err:
+      branch = models.Branch(
+        repo=repo,
+        category=form.cleaned_data.get('category'),
+        name=form.cleaned_data.get('name'),
+        url=form.cleaned_data.get('url'),
+        )
+    except (db.BadValueError, ValueError), err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
@@ -3571,21 +3577,25 @@ def branch_edit(request, branch_id):
   if branch.owner != request.user:
     return HttpResponseForbidden('You do not own this branch')
   if request.method != 'POST':
-    form = BranchForm(instance=branch)
+    form = BranchForm(initial={'category': branch.category,
+                               'name': branch.name,
+                               'url': branch.url,
+                               })
     return respond(request, 'branch_edit.html',
                    {'branch': branch, 'form': form})
 
-  form = BranchForm(request.POST, instance=branch)
+  form = BranchForm(request.POST)
   errors = form.errors
   if not errors:
     try:
-      branch = form.save(commit=False)
-    except ValueError, err:
+      branch.category = form.cleaned_data.get('category')
+      branch.name = form.cleaned_data.get('name')
+      branch.url = form.cleaned_data.get('url')
+    except (db.BadValueError, ValueError), err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'branch_edit.html',
                    {'branch': branch, 'form': form})
-  branch.repo_name = branch.repo.name
   branch.put()
   return HttpResponseRedirect(reverse(repos))
 
