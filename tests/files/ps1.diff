@@ -1,0 +1,25 @@
+Index: TODO
+===================================================================
+--- TODO	(revision 185)
++++ TODO	(working copy)
+@@ -2,7 +2,6 @@
+ ----
+ 
+ If a user never logs in, someone else can grab their nickname
+-'u' doesn't work from delta pages
+ See the issue tracker at code.google.com/p/rietveld for more bugs
+ 
+ Downloads
+Index: templates/diff2.html
+===================================================================
+--- templates/diff2.html	(revision 185)
++++ templates/diff2.html	(working copy)
+@@ -41,7 +41,7 @@
+ 
+ <div style="float: left;">
+   <h2 style="margin-bottom: 0em; margin-top: 0em;">Delta Between Two Patch Sets: {{patch_right.filename}}</h2>
+-  <div style="margin-top: .2em;"><b>Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');">{{issue.key.id}}</a>:</b>
++  <div style="margin-top: .2em;"><b>Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');" id="upCL">{{issue.key.id}}</a>:</b>
+   {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}
+   {%if issue.base%}<span class="extra">SVN Base: {{issue.base}}</span>{%endif%}</div>
+   <div style="margin-top: .4em;">
