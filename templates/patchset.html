@@ -96,8 +96,8 @@
     {%endfor%}
 
   </table>
-  {%if patchset.try_job_results%}
-    <div id="tryjobdiv-{{patchset.key.id}}"
+  <div id="tryjobdiv-{{patchset.key.id}}"
+    {%if patchset.try_job_results%}
          style="background: transparent; margin: 4px 0px">
       <span><i>Trybot&nbsp;results:</i></span>
       {%for try_job in patchset.try_job_results%}
@@ -127,8 +127,8 @@
       {%endifequal%}
       {%endif%}
       {%endcomment%}
-    </div>
-  {%endif%}
+    {%endif%}
+  </div>
 
   {%ifequal last_patchset.key.id patchset.key.id%}
     <form id="commitform" name="commitform" method="post">
