@@ -96,10 +96,10 @@
     {%endfor%}
 
   </table>
-  <div id="tryjobdiv-{{patchset.key.id}}"
-       style="background: transparent; margin: 4px 0px">
-    <span><i>Trybot&nbsp;results:</i></span>
-    {%if patchset.try_job_results%}
+  {%if patchset.try_job_results%}
+    <div id="tryjobdiv-{{patchset.key.id}}"
+         style="background: transparent; margin: 4px 0px">
+      <span><i>Trybot&nbsp;results:</i></span>
       {%for try_job in patchset.try_job_results%}
         <a class="build-result build-status-color-{{try_job.status}}"
            href="{{try_job.url}}"
@@ -116,19 +116,19 @@
       <a id="tryjobdiv-{{patchset.key.id}}-lesslink" style="display: none;"
          href="#" onclick="M_showTryJobResult('tryjobdiv-{{patchset.key.id}}', false); return false">
          &lt;&lt;&lt;Less</a>
-    {%endif%}
 
-    {%comment%}
-    This block is commented until the try bots are changed to look for the pending-try
-    job results.
-    {%if user%}
-    {%ifequal last_patchset.key.id patchset.key.id%}
-    | <a id="tryjobchange-{{patchset.key.id}}" href="#"
-         onclick="M_editPendingTryJobs('{{patchset.key.id}}'); return false">Try more bots</a>
-    {%endifequal%}
-    {%endif%}
-    {%endcomment%}
-  </div>
+      {%comment%}
+      This block is commented until the try bots are changed to look for the pending-try
+      job results.
+      {%if user%}
+      {%ifequal last_patchset.key.id patchset.key.id%}
+      | <a id="tryjobchange-{{patchset.key.id}}" href="#"
+           onclick="M_editPendingTryJobs('{{patchset.key.id}}'); return false">Try more bots</a>
+      {%endifequal%}
+      {%endif%}
+      {%endcomment%}
+    </div>
+  {%endif%}
 
   {%ifequal last_patchset.key.id patchset.key.id%}
     <form id="commitform" name="commitform" method="post">
