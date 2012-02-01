@@ -58,9 +58,6 @@ import django.db
 import django.dispatch.dispatcher
 import django.forms
 
-# Work-around to avoid warning about django.newforms in djangoforms.
-django.newforms = django.forms
-
 
 def log_exception(*args, **kwds):
   """Django signal handler to log an exception."""

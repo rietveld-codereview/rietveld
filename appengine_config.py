@@ -25,9 +25,8 @@ def appstats_normalize_path(path):
             return path[:i] + '/X'
     return re.sub(r'\d+', 'X', path)
 
-# Declare the Django version we need.
-from google.appengine.dist import use_library
-use_library('django', '1.2')
+# Segregate Appstats by runtime (python vs. python27).
+appstats_KEY_NAMESPACE = '__appstats_%s__' % os.getenv('APPENGINE_RUNTIME')
 
 # Fail early if we can't import Django 1.x.  Log identifying information.
 import django
