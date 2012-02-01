@@ -21,6 +21,7 @@ import email  # see incoming_mail()
 import email.utils
 import logging
 import md5
+import mimetypes
 import os
 import random
 import re
@@ -868,6 +869,9 @@ def image_required(func):
       content = request.patch.patched_content
     # Other values are erroneous so request.content won't be set.
     if not content or not content.data:
+      return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
+    request.mime_type = mimetypes.guess_type(request.patch.filename)[0]
+    if not request.mime_type or not request.mime_type.startswith('image/'):
       return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
     request.content = content
     return func(request, *args, **kwds)
@@ -2260,7 +2264,7 @@ def patch_helper(request, nav_type='patch'):
 @image_required
 def image(request):
   """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
-  return HttpResponse(request.content.data)
+  return HttpResponse(request.content.data, content_type=request.mime_type)
 
 
 @patch_required
