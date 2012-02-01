@@ -40,17 +40,6 @@ from google.appengine.ext.webapp import util
 from google.appengine.ext.webapp import template
 
 
-# Helper to enter the debugger.  This passes in __stdin__ and
-# __stdout__, because stdin and stdout are connected to the request
-# and response streams.  You must import this from __main__ to use it.
-# (I tried to make it universally available via __builtin__, but that
-# doesn't seem to work for some reason.)
-def BREAKPOINT():
-  import pdb
-  p = pdb.Pdb(None, sys.__stdin__, sys.__stdout__)
-  p.set_trace()
-
-
 # Import various parts of Django.
 import django.core.handlers.wsgi
 import django.core.signals
