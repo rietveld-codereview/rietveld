@@ -2247,9 +2247,12 @@ def RealMain(argv, data=None):
   else:
     prompt = "New issue subject: "
   title = (
-      title or message.split('\n', 1)[0].strip() or raw_input(prompt)).strip()
-  if not title:
-    ErrorExit("A non-empty title is required")
+      title or message.split('\n', 1)[0].strip() or raw_input(prompt).strip())
+  if not title and not options.issue:
+    ErrorExit("A non-empty title is required for a new issue")
+  # For existing issues, it's fine to give a patchset an empty name. Rietveld
+  # doesn't accept that so use a whitespace.
+  title = title or " "
   if len(title) > 100:
     title = title[:99] + '…'
   if title and not options.issue:
