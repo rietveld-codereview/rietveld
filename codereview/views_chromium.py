@@ -27,19 +27,18 @@ from google.appengine.ext import db
 from django import forms
 from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
 from django.http import HttpResponseBadRequest, HttpResponseForbidden
-from django.utils.html import strip_tags
 from django.utils import simplejson as json
 
-import cpplint
-import cpplint_chromium
-import engine
-import models
-import models_chromium
-import patching
-import views
-from views import issue_editor_required, login_required
-from views import patch_required, patchset_required, post_required
-from views import respond, reverse, xsrf_required
+from codereview import cpplint
+from codereview import cpplint_chromium
+from codereview import exceptions
+from codereview import models
+from codereview import models_chromium
+from codereview import patching
+from codereview import views
+from codereview.views import issue_editor_required, login_required
+from codereview.views import patch_required, patchset_required, post_required
+from codereview.views import respond, reverse, xsrf_required
 
 
 ### Forms ###
@@ -101,7 +100,7 @@ def _lint_patch(patch):
 
   try:
     patch.get_patched_content()
-  except engine.FetchError:
+  except exceptions.FetchError:
     return False
 
   patch.parsed_lines = patching.ParsePatchToLines(patch.lines)
