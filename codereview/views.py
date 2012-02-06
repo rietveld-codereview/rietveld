@@ -623,14 +623,14 @@ def _notify_issue(request, issue, message):
 
 class HttpTextResponse(HttpResponse):
   def __init__(self, *args, **kwargs):
-    super(HttpTextResponse, self).__init__(
-        *args, content_type='text/plain; charset=utf-8', **kwargs)
+    kwargs['content_type'] = 'text/plain; charset=utf-8'
+    super(HttpTextResponse, self).__init__(*args, **kwargs)
 
 
 class HttpHtmlResponse(HttpResponse):
   def __init__(self, *args, **kwargs):
-    super(HttpHtmlResponse, self).__init__(
-        *args, content_type='text/html; charset=utf-8', **kwargs)
+    kwargs['content_type'] = 'text/html; charset=utf-8'
+    super(HttpHtmlResponse, self).__init__(*args, **kwargs)
 
 
 ### Decorators for request handlers ###
