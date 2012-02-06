@@ -39,7 +39,6 @@ from google.appengine.ext import db
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.runtime import apiproxy_errors
 
-# TODO(guido): Don't import classes/functions directly.
 from django import forms
 # Import settings as django_settings to avoid name conflict with settings().
 from django.conf import settings as django_settings
