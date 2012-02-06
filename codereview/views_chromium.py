@@ -254,22 +254,22 @@ def process_status_push(packets_json, base_url):
   """Processes all the packets coming from HttpStatusPush."""
   packets = sorted(json.loads(packets_json),
                    key=lambda packet: string_to_datetime(packet['timestamp']))
-  for packet in packets:
-    timestamp = string_to_datetime(packet['timestamp'])
-    event = packet.get('event', '')
-    if event not in HANDLER_MAP:
-      logging.warn('Stop sending events of type %s' % event)
-      continue
-    if 'payload' in packet:
-      # 0.8.x
-      payload = packet.pop('payload')
-    elif 'payload_json' in packet:
-      # 0.7.12
-      payload = json.loads(packet.pop('payload_json'))
-    else:
-      logging.warn('Invalid packet %r' % packet)
-      continue
-    HANDLER_MAP[event](base_url, timestamp, packet, payload)
+  logging.info('Processing %d packets' % len(packets))
+  done = 0
+  try:
+    for packet in packets:
+      timestamp = string_to_datetime(packet['timestamp'])
+      event = packet.get('event', '')
+      if event not in HANDLER_MAP:
+        logging.warn('Stop sending events of type %s' % event)
+        continue
+      if 'payload' not in packet:
+        logging.warn('Invalid packet %r' % packet)
+        continue
+      HANDLER_MAP[event](base_url, timestamp, packet, packet.pop('payload'))
+      done += 1
+  finally:
+    logging.info('Processed %d packets' % done)
 
 
 ### View handlers ###
