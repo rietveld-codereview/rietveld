@@ -40,13 +40,10 @@ from google.appengine.ext import db
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.runtime import apiproxy_errors
 
-# TODO(guido): Don't import classes/functions directly.
 from django import forms
 # Import settings as django_settings to avoid name conflict with settings().
 from django.conf import settings as django_settings
 from django.http import HttpResponse, HttpResponseRedirect
-from django.http import HttpResponseForbidden, HttpResponseNotFound
-from django.http import HttpResponseBadRequest
 from django.shortcuts import render_to_response
 import django.template
 from django.template import RequestContext
@@ -662,6 +659,18 @@ def _notify_issue(request, issue, message):
       return False
 
 
+class HttpTextResponse(HttpResponse):
+  def __init__(self, *args, **kwargs):
+    super(HttpTextResponse, self).__init__(
+        *args, content_type='text/plain; charset=utf-8', **kwargs)
+
+
+class HttpHtmlResponse(HttpResponse):
+  def __init__(self, *args, **kwargs):
+    super(HttpHtmlResponse, self).__init__(
+        *args, content_type='text/html; charset=utf-8', **kwargs)
+
+
 ### Decorators for request handlers ###
 
 
@@ -670,7 +679,7 @@ def post_required(func):
 
   def post_wrapper(request, *args, **kwds):
     if request.method != 'POST':
-      return HttpResponse('This requires a POST request.', status=405)
+      return HttpTextResponse('This requires a POST request.', status=405)
     return func(request, *args, **kwds)
 
   return post_wrapper
@@ -701,16 +710,16 @@ def xsrf_required(func):
     if request.method == 'POST':
       post_token = request.POST.get('xsrf_token')
       if not post_token:
-        return HttpResponse('Missing XSRF token.', status=403)
+        return HttpTextResponse('Missing XSRF token.', status=403)
       account = models.Account.current_user_account
       if not account:
-        return HttpResponse('Must be logged in for XSRF check.', status=403)
+        return HttpTextResponse('Must be logged in for XSRF check.', status=403)
       xsrf_token = account.get_xsrf_token()
       if post_token != xsrf_token:
         # Try the previous hour's token
         xsrf_token = account.get_xsrf_token(-1)
         if post_token != xsrf_token:
-          return HttpResponse('Invalid XSRF token.', status=403)
+          return HttpTextResponse('Invalid XSRF token.', status=403)
     return func(request, *args, **kwds)
 
   return xsrf_wrapper
@@ -735,7 +744,8 @@ def admin_required(func):
       return HttpResponseRedirect(
           users.create_login_url(request.get_full_path().encode('utf-8')))
     if not request.user_is_admin:
-      return HttpResponseForbidden('You must be admin in for this function')
+      return HttpTextResponse(
+          'You must be admin in for this function', status=403)
     return func(request, *args, **kwds)
 
   return admin_wrapper
@@ -747,15 +757,15 @@ def issue_required(func):
   def issue_wrapper(request, issue_id, *args, **kwds):
     issue = models.Issue.get_by_id(int(issue_id))
     if issue is None:
-      return HttpResponseNotFound('No issue exists with that id (%s)' %
-                                  issue_id)
+      return HttpTextResponse(
+          'No issue exists with that id (%s)' % issue_id, status=404)
     if issue.private:
       if request.user is None:
         return HttpResponseRedirect(
             users.create_login_url(request.get_full_path().encode('utf-8')))
       if not _can_view_issue(request.user, issue):
-        return HttpResponseForbidden('You do not have permission to '
-                                     'view this issue')
+        return HttpTextResponse(
+            'You do not have permission to view this issue', status=403)
     request.issue = issue
     return func(request, *args, **kwds)
 
@@ -773,8 +783,9 @@ def user_key_required(func):
       account = models.Account.get_account_for_nickname(user_key)
       if not account:
         logging.info("account not found for nickname %s" % user_key)
-        return HttpResponseNotFound('No user found with that key (%s)' %
-                                    urllib.quote(user_key))
+        return HttpTextResponse(
+            'No user found with that key (%s)' % urllib.quote(user_key),
+            status=404)
       request.user_to_show = account.user
     return func(request, *args, **kwds)
 
@@ -790,7 +801,7 @@ def owner_required(func):
   @login_required
   def owner_wrapper(request, *args, **kwds):
     if request.issue.owner != request.user:
-      return HttpResponseForbidden('You do not own this issue')
+      return HttpTextResponse('You do not own this issue', status=403)
     return func(request, *args, **kwds)
 
   return owner_wrapper
@@ -815,8 +826,8 @@ def issue_editor_required(func):
   @issue_required
   def issue_editor_wrapper(request, *args, **kwds):
     if not request.issue.user_can_edit(request.user):
-      return HttpResponseForbidden('You do not have permission to '
-                                   'edit this issue')
+      return HttpTextResponse(
+          'You do not have permission to edit this issue', status=403)
     return func(request, *args, **kwds)
 
   return issue_editor_wrapper
@@ -829,8 +840,8 @@ def patchset_required(func):
   def patchset_wrapper(request, patchset_id, *args, **kwds):
     patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
     if patchset is None:
-      return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                  patchset_id)
+      return HttpTextResponse(
+          'No patch set exists with that id (%s)' % patchset_id, status=404)
     patchset.issue = request.issue
     request.patchset = patchset
     return func(request, *args, **kwds)
@@ -857,8 +868,10 @@ def patch_required(func):
   def patch_wrapper(request, patch_id, *args, **kwds):
     patch = models.Patch.get_by_id(int(patch_id), parent=request.patchset)
     if patch is None:
-      return HttpResponseNotFound('No patch exists with that id (%s/%s)' %
-                                  (request.patchset.key().id(), patch_id))
+      return HttpTextResponse(
+          'No patch exists with that id (%s/%s)' %
+          (request.patchset.key().id(), patch_id),
+          status=404)
     patch.patchset = request.patchset
     request.patch = patch
     return func(request, *args, **kwds)
@@ -930,7 +943,7 @@ def json_response(func):
       data = simplejson.dumps(data, indent='  ', sort_keys=True)
     else:
       data = simplejson.dumps(data, separators=(',',':'))
-    return HttpResponse(data, content_type='application/json')
+    return HttpResponse(data, content_type='application/json; charset=utf-8')
 
   return json_wrapper
 
@@ -1297,11 +1310,10 @@ def upload(request):
     if IS_DEV:
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
-      return HttpResponse('Login required', status=401)
+      return HttpTextResponse('Login required', status=401)
   # Check against old upload.py usage.
   if request.POST.get('num_parts') > 1:
-    return HttpResponse('Upload.py is too old, get the latest version.',
-                        content_type='text/plain')
+    return HttpTextResponse('Upload.py is too old, get the latest version.')
   form = UploadForm(request.POST, request.FILES)
   issue = None
   patchset = None
@@ -1393,7 +1405,7 @@ def upload(request):
             id_string = "nobase_" + str(id_string)
           msg += "\n%s %s" % (id_string, patch.filename)
         db.put(patches)
-  return HttpResponse(msg, content_type='text/plain')
+  return HttpTextResponse(msg)
 
 
 @post_required
@@ -1406,16 +1418,16 @@ def upload_content(request):
   """
   form = UploadContentForm(request.POST, request.FILES)
   if not form.is_valid():
-    return HttpResponse('ERROR: Upload content errors:\n%s' % repr(form.errors),
-                        content_type='text/plain')
+    return HttpTextResponse(
+        'ERROR: Upload content errors:\n%s' % repr(form.errors))
   if request.user is None:
     if IS_DEV:
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
-      return HttpResponse('Error: Login required', status=401)
+      return HttpTextResponse('Error: Login required', status=401)
   if request.user != request.issue.owner:
-    return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
-                        (request.user, request.issue.key().id()))
+    return HttpTextResponse('ERROR: You (%s) don\'t own this issue (%s).' %
+                            (request.user, request.issue.key().id()))
   patch = request.patch
   patch.status = form.cleaned_data['status']
   patch.is_binary = form.cleaned_data['is_binary']
@@ -1423,7 +1435,7 @@ def upload_content(request):
 
   if form.cleaned_data['is_current']:
     if patch.patched_content:
-      return HttpResponse('ERROR: Already have current content.')
+      return HttpTextResponse('ERROR: Already have current content.')
     content = models.Content(is_uploaded=True, parent=patch)
     content.put()
     patch.patched_content = content
@@ -1439,15 +1451,14 @@ def upload_content(request):
     if checksum != request.POST.get('checksum'):
       content.is_bad = True
       content.put()
-      return HttpResponse('ERROR: Checksum mismatch.',
-                          content_type='text/plain')
+      return HttpTextResponse('ERROR: Checksum mismatch.')
     if patch.is_binary:
       content.data = data
     else:
       content.text = utils.to_dbtext(utils.unify_linebreaks(data))
     content.checksum = checksum
   content.put()
-  return HttpResponse('OK', content_type='text/plain')
+  return HttpTextResponse('OK')
 
 
 @post_required
@@ -1463,18 +1474,19 @@ def upload_patch(request):
     if IS_DEV:
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
-      return HttpResponse('Error: Login required', status=401)
+      return HttpTextResponse('Error: Login required', status=401)
   if request.user != request.issue.owner:
-    return HttpResponse('ERROR: You (%s) don\'t own this issue (%s).' %
-                        (request.user, request.issue.key().id()))
+    return HttpTextResponse(
+        'ERROR: You (%s) don\'t own this issue (%s).' %
+        (request.user, request.issue.key().id()))
   form = UploadPatchForm(request.POST, request.FILES)
   if not form.is_valid():
-    return HttpResponse('ERROR: Upload patch errors:\n%s' % repr(form.errors),
-                        content_type='text/plain')
+    return HttpTextResponse(
+        'ERROR: Upload patch errors:\n%s' % repr(form.errors))
   patchset = request.patchset
   if patchset.data:
-    return HttpResponse('ERROR: Can\'t upload patches to patchset with data.',
-                        content_type='text/plain')
+    return HttpTextResponse(
+        'ERROR: Can\'t upload patches to patchset with data.')
   text = utils.to_dbtext(utils.unify_linebreaks(form.get_uploaded_patch()))
   patch = models.Patch(patchset=patchset,
                        text=text,
@@ -1487,7 +1499,7 @@ def upload_patch(request):
     patch.put()
 
   msg = 'OK\n' + str(patch.key().id())
-  return HttpResponse(msg, content_type='text/plain')
+  return HttpTextResponse(msg)
 
 
 @post_required
@@ -1506,8 +1518,8 @@ def upload_complete(request, patchset_id=None):
     patchset = models.PatchSet.get_by_id(int(patchset_id),
                                          parent=request.issue)
     if patchset is None:
-      return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                  patchset_id)
+      return HttpTextResponse(
+          'No patch set exists with that id (%s)' % patchset_id, status=403)
     # Add delta calculation task.
     taskqueue.add(url=reverse(calculate_delta),
                   params={'key': str(patchset.key())},
@@ -1534,7 +1546,7 @@ def upload_complete(request, patchset_id=None):
   else:
     msg = 'OK'
     status = 200
-  return HttpResponse(msg, content_type='text/plain', status=status)
+  return HttpTextResponse(msg, status=status)
 
 
 class EmptyPatchSet(Exception):
@@ -1868,7 +1880,7 @@ def _get_patchset_info(request, patchset_id):
       try:
         attempt = _clean_int(request.GET.get('attempt'), 0, 0)
         if attempt < 0:
-          response = HttpResponse('Invalid parameter', status=404)
+          response = HttpTextResponse('Invalid parameter', status=404)
           break
         for patch in patchset.patches:
           pkey = patch.key()
@@ -1914,7 +1926,8 @@ def _get_patchset_info(request, patchset_id):
       except DeadlineExceededError:
         logging.exception('DeadlineExceededError in _get_patchset_info')
         if attempt > 2:
-          response = HttpResponse('DeadlineExceededError - create a new issue.')
+          response = HttpTextResponse(
+              'DeadlineExceededError - create a new issue.')
         else:
           response = HttpResponseRedirect('%s?attempt=%d' %
                                           (request.path, attempt + 1))
@@ -2065,7 +2078,7 @@ def account(request):
     added, response = searchAccounts("nickname", domain, added, response)
   added, response = searchAccounts("nickname", "", added, response)
   added, response = searchAccounts("email", "", added, response)
-  return HttpResponse(response)
+  return HttpTextResponse(response)
 
 
 @issue_editor_required
@@ -2243,7 +2256,7 @@ def close(request):
       issue.description = new_description
   issue.put()
   _notify_issue(request, issue, 'Closed')
-  return HttpResponse('Closed', content_type='text/plain')
+  return HttpTextResponse('Closed')
 
 
 @post_required
@@ -2257,28 +2270,28 @@ def mailissue(request):
   """
   if request.issue.owner != request.user:
     if not IS_DEV:
-      return HttpResponse('Login required', status=401)
+      return HttpTextResponse('Login required', status=401)
   issue = request.issue
   msg = _make_message(request, issue, '', '', True)
   msg.put()
   _notify_issue(request, issue, 'Mailed')
 
-  return HttpResponse('OK', content_type='text/plain')
+  return HttpTextResponse('OK')
 
 
 @patchset_required
 def download(request):
   """/download/<issue>_<patchset>.diff - Download a patch set."""
   if request.patchset.data is None:
-    return HttpResponseNotFound('Patch set (%s) is too large.'
-                                % request.patchset.key().id())
+    return HttpTextResponse(
+        'Patch set (%s) is too large.' % request.patchset.key().id(),
+        status=404)
   padding = ''
   user_agent = request.META.get('HTTP_USER_AGENT')
   if user_agent and 'MSIE' in user_agent:
     # Add 256+ bytes of padding to prevent XSS attacks on Internet Explorer.
     padding = ('='*67 + '\n') * 4
-  return HttpResponse(padding + request.patchset.data,
-                      content_type='text/plain')
+  return HttpTextResponse(padding + request.patchset.data)
 
 
 @issue_required
@@ -2290,15 +2303,15 @@ def description(request):
   """
   if request.method != 'POST':
     description = request.issue.description or ""
-    return HttpResponse(description, content_type='text/plain')
+    return HttpTextResponse(description)
   if not request.issue.user_can_edit(request.user):
     if not IS_DEV:
-      return HttpResponse('Login required', status=401)
+      return HttpTextResponse('Login required', status=401)
   issue = request.issue
   issue.description = request.POST.get('description')
   issue.put()
   _notify_issue(request, issue, 'Changed')
-  return HttpResponse('')
+  return HttpTextResponse('')
 
 
 @issue_required
@@ -2324,7 +2337,7 @@ def fields(request):
 
   if not request.issue.user_can_edit(request.user):
     if not IS_DEV:
-      return HttpResponse('Login required', status=401)
+      return HttpTextResponse('Login required', status=401)
   fields = simplejson.loads(request.POST.get('fields'))
   issue = request.issue
   if 'description' in fields:
@@ -2335,7 +2348,7 @@ def fields(request):
     issue.subject = fields['subject']
   issue.put()
   _notify_issue(request, issue, 'Changed')
-  return HttpResponse('')
+  return HttpTextResponse('')
 
 
 @patch_required
@@ -2362,7 +2375,7 @@ def patch_helper(request, nav_type='patch'):
   request.patch.nav_type = nav_type
   parsed_lines = patching.ParsePatchToLines(request.patch.lines)
   if parsed_lines is None:
-    return HttpResponseNotFound('Can\'t parse the patch to lines')
+    return HttpTextResponse('Can\'t parse the patch to lines', status=404)
   rows = engine.RenderUnifiedTableRows(request, parsed_lines)
   return respond(request, 'patch.html',
                  {'patch': request.patch,
@@ -2385,7 +2398,7 @@ def image(request):
 @patch_required
 def download_patch(request):
   """/download/issue<issue>_<patchset>_<patch>.diff - Download patch."""
-  return HttpResponse(request.patch.text, content_type='text/plain')
+  return HttpTextResponse(request.patch.text)
 
 
 def _issue_as_dict(issue, messages, request=None):
@@ -2530,7 +2543,7 @@ def diff(request):
     try:
       rows = _get_diff_table_rows(request, patch, context, column_width)
     except FetchError, err:
-      return HttpResponseNotFound(str(err))
+      return HttpTextResponse(str(err), status=404)
 
   _add_next_prev(patchset, patch)
   return respond(request, 'diff.html',
@@ -2603,7 +2616,7 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
   try:
     rows = _get_diff_table_rows(request, patch, None, column_width)
   except FetchError, err:
-    return HttpResponse('Error: %s; please report!' % err, status=500)
+    return HttpTextResponse('Error: %s; please report!' % err, status=500)
   return _get_skipped_lines_response(rows, id_before, id_after, where, context)
 
 
@@ -2667,13 +2680,13 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   """Helper function that returns objects for diff2 views"""
   ps_left = models.PatchSet.get_by_id(int(ps_left_id), parent=request.issue)
   if ps_left is None:
-    return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                ps_left_id)
+    return HttpTextResponse(
+        'No patch set exists with that id (%s)' % ps_left_id, status=404)
   ps_left.issue = request.issue
   ps_right = models.PatchSet.get_by_id(int(ps_right_id), parent=request.issue)
   if ps_right is None:
-    return HttpResponseNotFound('No patch set exists with that id (%s)' %
-                                ps_right_id)
+    return HttpTextResponse(
+        'No patch set exists with that id (%s)' % ps_right_id, status=404)
   ps_right.issue = request.issue
   if patch_id is not None:
     patch_right = models.Patch.get_by_id(int(patch_id), parent=ps_right)
@@ -2691,7 +2704,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
     try:
       new_content_left = patch_left.get_patched_content()
     except FetchError, err:
-      return HttpResponseNotFound(str(err))
+      return HttpTextResponse(str(err), status=404)
     lines_left = new_content_left.lines
   elif patch_right:
     lines_left = patch_right.get_content().lines
@@ -2702,7 +2715,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
     try:
       new_content_right = patch_right.get_patched_content()
     except FetchError, err:
-      return HttpResponseNotFound(str(err))
+      return HttpTextResponse(str(err), status=404)
     lines_right = new_content_right.lines
   elif patch_left:
     lines_right = patch_left.get_content().lines
@@ -2745,7 +2758,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
 
   data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
                          column_width, patch_filename)
-  if isinstance(data, HttpResponseNotFound):
+  if isinstance(data, HttpResponse) and data.status_code != 302:
     return data
 
   patchsets = list(request.issue.patchset_set.order('created'))
@@ -2784,7 +2797,7 @@ def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
 
   data = _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, 10000,
                          column_width)
-  if isinstance(data, HttpResponseNotFound):
+  if isinstance(data, HttpResponse) and data.status_code != 302:
     return data
   return _get_skipped_lines_response(data["rows"], id_before, id_after,
                                      where, context)
@@ -2924,8 +2937,9 @@ def inline_draft(request):
     # TODO(guido): return some kind of error instead?
     # Return HttpResponse for now because the JS part expects
     # a 200 status code.
-    return HttpResponse('<font color="red">Error: %s; please report!</font>' %
-                        err.__class__.__name__)
+    return HttpHtmlResponse(
+        '<font color="red">Error: %s; please report!</font>' %
+        err.__class__.__name__)
 
 
 def _inline_draft(request):
@@ -2934,7 +2948,7 @@ def _inline_draft(request):
   # Don't use @login_required, since the JS doesn't understand redirects.
   if not request.user:
     # Don't log this, spammers have started abusing this.
-    return HttpResponse('Not logged in')
+    return HttpTextResponse('Not logged in')
   snapshot = request.POST.get('snapshot')
   assert snapshot in ('old', 'new'), repr(snapshot)
   left = (snapshot == 'old')
@@ -2992,7 +3006,7 @@ def _inline_draft(request):
     # Show anonymous draft even though we don't save it
     comments.append(comment)
   if not comments:
-    return HttpResponse(' ')
+    return HttpTextResponse(' ')
   for c in comments:
     c.complete()
   return render_to_response('inline_comment.html',
@@ -3153,7 +3167,7 @@ def publish(request):
   # There are now no comments here (modulo race conditions)
   models.Account.current_user_account.update_drafts(issue, 0)
   if form.cleaned_data.get('no_redirect', False):
-    return HttpResponse('OK', content_type='text/plain')
+    return HttpTextResponse('OK')
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
@@ -3435,8 +3449,7 @@ def draft_message(request):
     return _post_draft_message(request, draft_message)
   elif request.method == 'DELETE':
     return _delete_draft_message(draft_message)
-  return HttpResponse('An error occurred.', content_type='text/plain',
-                      status=500)
+  return HttpTextResponse('An error occurred.', status=500)
 
 
 def _get_draft_message(draft):
@@ -3447,9 +3460,7 @@ def _get_draft_message(draft):
 
   Returns the content of a draft message or an empty string if draft is None.
   """
-  if draft is None:
-    return HttpResponse('', content_type='text/plain')
-  return HttpResponse(draft.text, content_type='text/plain')
+  return HttpTextResponse(draft.text if draft else '')
 
 
 def _post_draft_message(request, draft):
@@ -3466,7 +3477,7 @@ def _post_draft_message(request, draft):
                            sender=request.user.email(), draft=True)
   draft.text = request.POST.get('reviewmsg')
   draft.put()
-  return HttpResponse(draft.text, content_type='text/plain')
+  return HttpTextResponse(draft.text)
 
 
 def _delete_draft_message(draft):
@@ -3479,7 +3490,7 @@ def _delete_draft_message(draft):
   """
   if draft is not None:
     draft.delete()
-  return HttpResponse('OK', content_type='text/plain')
+  return HttpTextResponse('OK')
 
 
 @json_response
@@ -3495,8 +3506,7 @@ def search(request):
   else:
     form = SearchForm(request.POST)
     if not form.is_valid():
-      return HttpResponseBadRequest('Invalid arguments',
-          content_type='text/plain')
+      return HttpTextResponse('Invalid arguments', status=400)
   logging.info('%s' % form.cleaned_data)
   keys_only = form.cleaned_data['keys_only'] or False
   format = form.cleaned_data['format'] or 'html'
@@ -3705,7 +3715,7 @@ def branch_edit(request, branch_id):
   """/branch_edit/<branch> - Edit a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))
   if branch.owner != request.user:
-    return HttpResponseForbidden('You do not own this branch')
+    return HttpTextResponse('You do not own this branch', status=403)
   if request.method != 'POST':
     form = BranchForm(initial={'category': branch.category,
                                'name': branch.name,
@@ -3737,7 +3747,7 @@ def branch_delete(request, branch_id):
   """/branch_delete/<branch> - Delete a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))
   if branch.owner != request.user:
-    return HttpResponseForbidden('You do not own this branch')
+    return HttpTextResponse('You do not own this branch', status=403)
   repo = branch.repo
   branch.delete()
   num_branches = models.Branch.gql('WHERE repo = :1', repo).count()
@@ -3819,8 +3829,9 @@ def user_popup(request):
   except Exception, err:
     logging.exception('Exception in user_popup processing:')
     # Return HttpResponse because the JS part expects a 200 status code.
-    return HttpResponse('<font color="red">Error: %s; please report!</font>' %
-                        err.__class__.__name__)
+    return HttpHtmlResponse(
+        '<font color="red">Error: %s; please report!</font>' %
+        err.__class__.__name__)
 
 
 def _user_popup(request):
@@ -3860,10 +3871,10 @@ def incoming_chat(request):
     msg = xmpp.Message(request.POST)
   except xmpp.InvalidMessageError, err:
     logging.warn('Incoming invalid chat message: %s' % err)
-    return HttpResponse('')
+    return HttpTextResponse('')
   sts = msg.reply('Sorry, Rietveld does not support chat input')
   logging.debug('XMPP status %r', sts)
-  return HttpResponse('')
+  return HttpTextResponse('')
 
 
 @post_required
@@ -3878,7 +3889,7 @@ def incoming_mail(request, recipients):
     _process_incoming_mail(request.raw_post_data, recipients)
   except InvalidIncomingEmailError, err:
     logging.debug(str(err))
-  return HttpResponse('')
+  return HttpTextResponse('')
 
 
 def _process_incoming_mail(raw_message, recipients):
@@ -3953,10 +3964,11 @@ def xsrf_token(request):
   be included in the HTTP request; an error is returned otherwise.
   """
   if not request.META.has_key('HTTP_X_REQUESTING_XSRF_TOKEN'):
-    return HttpResponse('Please include a header named X-Requesting-XSRF-Token '
-                        '(its content doesn\'t matter).', status=400)
-  return HttpResponse(models.Account.current_user_account.get_xsrf_token(),
-                      mimetype='text/plain')
+    return HttpTextResponse(
+        'Please include a header named X-Requesting-XSRF-Token '
+        '(its content doesn\'t matter).',
+        status=400)
+  return HttpTextResponse(models.Account.current_user_account.get_xsrf_token())
 
 
 def customized_upload_py(request):
@@ -3988,7 +4000,7 @@ def customized_upload_py(request):
     source = source.replace('DEFAULT_REVIEW_SERVER = "codereview.appspot.com"',
                             'DEFAULT_REVIEW_SERVER = "%s"' % review_server)
 
-  return HttpResponse(source, content_type='text/x-python')
+  return HttpResponse(source, content_type='text/x-python; charset=utf-8')
 
 
 @post_required
