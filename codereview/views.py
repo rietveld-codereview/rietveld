@@ -2277,7 +2277,12 @@ def patch_helper(request, nav_type='patch'):
 @image_required
 def image(request):
   """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
-  return HttpResponse(request.content.data, content_type=request.mime_type)
+  response = HttpResponse(request.content.data, content_type=request.mime_type)
+  filename = re.sub(
+      r'[^\w\.]', '_', response.patch.filename.encode('ascii', 'replace'))
+  response['Content-Disposition'] = 'attachment; filename="%s"' % filename
+  response['Cache-Control'] = 'no-cache, no-store'
+  return response
 
 
 @patch_required
