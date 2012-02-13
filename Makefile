@@ -19,6 +19,8 @@ help:
 	@echo "Available commands:"
 	@sed -n '/^[a-zA-Z0-9_.]*:/s/:.*//p' <Makefile | sort
 
+run: serve
+
 serve: update_revision
 	@echo "---[Starting SDK AppEngine Server]---"
 	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) .
