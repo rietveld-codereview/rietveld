@@ -1,21 +1,25 @@
 # Makefile to simplify some common AppEngine actions.
 # Use 'make help' for a list of commands.
 
-DEV_APPSERVER?= dev_appserver.py
+SDK_PATH ?=
+
+DEV_APPSERVER?= $(if $(SDK_PATH), $(SDK_PATH)/,)dev_appserver.py
 DEV_APPSERVER_FLAGS?=
 
-APPCFG?= appcfg.py
+APPCFG?= $(if $(SDK_PATH), $(SDK_PATH)/,)/appcfg.py
 APPCFG_FLAGS?=
 
 PYTHON?= python2.5
 COVERAGE?= coverage
-SDK_PATH?=
+
 
 default: help
 
 help:
 	@echo "Available commands:"
 	@sed -n '/^[a-zA-Z0-9_.]*:/s/:.*//p' <Makefile | sort
+
+run: serve
 
 serve: update_revision
 	@echo "---[Starting SDK AppEngine Server]---"
