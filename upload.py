@@ -780,7 +780,7 @@ class VersionControlSystem(object):
       options: Command line options.
     """
     self.options = options
-    
+
   def GetGUID(self):
     """Return string to distinguish the repository from others, for example to
     query all opened review issues for it"""
@@ -940,7 +940,7 @@ class SubversionVCS(VersionControlSystem):
     # Result is cached to not guess it over and over again in GetBaseFile().
     required = self.options.download_base or self.options.revision is not None
     self.svn_base = self._GuessBase(required)
-    
+
   def GetGUID(self):
     return self._GetInfo("Repository UUID")
 
@@ -975,7 +975,7 @@ class SubversionVCS(VersionControlSystem):
     if required:
       ErrorExit("Can't find URL in output from svn info")
     return None
-    
+
   def _GetInfo(self, key):
     """Parses 'svn info' for current dir. Returns value for key or None"""
     for line in RunShell(["svn", "info"]).splitlines():
@@ -1218,7 +1218,7 @@ class GitVCS(VersionControlSystem):
     self.hashes = {}
     # Map of new filename -> old filename for renames.
     self.renames = {}
-    
+
   def GetGUID(self):
     revlist = RunShell("git rev-list --parents HEAD".split()).splitlines()
     # M-A: Return the 1st root hash, there could be multiple when a
@@ -1299,8 +1299,10 @@ class GitVCS(VersionControlSystem):
     # git config key "diff.external" is used).
     env = os.environ.copy()
     if 'GIT_EXTERNAL_DIFF' in env: del env['GIT_EXTERNAL_DIFF']
-    return RunShell(["git", "diff", "--no-ext-diff", "--full-index",
-                     "--ignore-submodules", "-M"] + extra_args, env=env)
+    return RunShell(
+        [ "git", "diff", "--no-color", "--no-ext-diff", "--full-index",
+          "--ignore-submodules", "-M"] + extra_args,
+        env=env)
 
   def GetUnknownFiles(self):
     status = RunShell(["git", "ls-files", "--exclude-standard", "--others"],
@@ -1450,7 +1452,9 @@ class MercurialVCS(VersionControlSystem):
     return os.path.relpath(absname)
 
   def GenerateDiff(self, extra_args):
-    cmd = ["hg", "diff", "--git", "-r", self.base_rev] + extra_args
+    cmd = [
+        "hg", "diff", "--color", "never", "--git", "-r", self.base_rev
+        ] + extra_args
     data = RunShell(cmd, silent_ok=True)
     svndiff = []
     filecount = 0
@@ -1476,7 +1480,8 @@ class MercurialVCS(VersionControlSystem):
   def GetUnknownFiles(self):
     """Return a list of files unknown to the VCS."""
     args = []
-    status = RunShell(["hg", "status", "--rev", self.base_rev, "-u", "."],
+    status = RunShell(
+        ["hg", "status", "--color", "never", "--rev", self.base_rev, "-u", "."],
         silent_ok=True)
     unknown_files = []
     for line in status.splitlines():
@@ -1493,7 +1498,9 @@ class MercurialVCS(VersionControlSystem):
     is_binary = False
     oldrelpath = relpath = self._GetRelPath(filename)
     # "hg status -C" returns two lines for moved/copied files, one otherwise
-    out = RunShell(["hg", "status", "-C", "--rev", self.base_rev, relpath])
+    out = RunShell(
+        [ "hg", "status", "--color", "never", "-C", "--rev", self.base_rev,
+          relpath])
     out = out.splitlines()
     # HACK: strip error message about missing file/directory if it isn't in
     # the working copy
@@ -1955,7 +1962,7 @@ def GuessVCSName(options):
   if res != None:
     return res
 
-  # Subversion from 1.7 has a single centralized .svn folder 
+  # Subversion from 1.7 has a single centralized .svn folder
   # ( see http://subversion.apache.org/docs/release-notes/1.7.html#wc-ng )
   # That's why we use 'svn info' instead of checking for .svn dir
   res = RunDetectCommand(VCS_SUBVERSION, ["svn", "info"])
