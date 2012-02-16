@@ -6,7 +6,7 @@ SDK_PATH ?=
 DEV_APPSERVER?= $(if $(SDK_PATH), $(SDK_PATH)/,)dev_appserver.py
 DEV_APPSERVER_FLAGS?=
 
-APPCFG?= $(if $(SDK_PATH), $(SDK_PATH)/,)/appcfg.py
+APPCFG?= $(if $(SDK_PATH), $(SDK_PATH)/,)appcfg.py
 APPCFG_FLAGS?=
 
 PYTHON?= python2.5
