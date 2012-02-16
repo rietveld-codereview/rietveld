@@ -4,7 +4,8 @@ import os
 import sys
 from optparse import HelpFormatter
 
-sys.path.append(os.path.abspath('static/'))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
 
 import upload
 
@@ -56,6 +57,7 @@ def main():
     print HEADER
     print upload.parser.format_option_help()
     print '</dl>'  # TODO: Formatter should do this
+    print FOOTER
     print
 
 HEADER = """#summary upload.py usage and options.
@@ -79,12 +81,23 @@ Diff options are passed to the diff command of the underlying system.
  * Git
  * Mercurial
  * Subversion
+ * Perforce
 
 It is important for Git/Mercurial users to specify a tree/node/branch to diff
 against by using the '--rev' option.
 
 """
 
+FOOTER = """\
+
+==== Running upload.py from perforce GUIs ====
+
+You can right click on a perforce changelist and create a new Rietveld code review by adding a custom tool with the following settings:
+
+Application: python Arguments: /PATH/TO/upload.py -s MY_SERVER --p4_changelist %p --p4_port $p --p4_user $u --p4_client $c Start In: empty. Check "Add to applicable context menus", "Run tool in terminal window" (or system equivalent), and "Ignore P4CONFIG files".
+
+Replace /PATH/TO/ with the location of upload.py, and MY_SERVER with the rietveld code review server. See screenshot [http://alexmccarthy.net/Rietveld%20-%20P4V%20Custom%20Tool%20Settings.png here].
+"""
 
 if __name__ == '__main__':
     main()
