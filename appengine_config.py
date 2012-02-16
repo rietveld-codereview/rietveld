@@ -19,6 +19,12 @@ def appstats_normalize_path(path):
         return '/user/X'
     if path.startswith('/user_popup/'):
         return '/user_popup/X'
+    if '/diff/' in path:
+      return '/X/diff/...'
+    if '/diff2/' in path:
+      return '/X/diff2/...'
+    if '/patch/' in path:
+      return '/X/patch/...'
     if path.startswith('/rss/'):
         i = path.find('/', 5)
         if i > 0:
