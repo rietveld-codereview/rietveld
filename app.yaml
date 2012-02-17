@@ -29,11 +29,6 @@ handlers:
 - url: .*
   script: main.py
 
-admin_console:
-  pages:
-  - name: Appstats
-    url: /_ah/stats
-
 inbound_services:
 - mail
 - xmpp_message
