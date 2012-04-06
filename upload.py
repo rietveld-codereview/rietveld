@@ -2261,12 +2261,10 @@ def RealMain(argv, data=None):
     message = message or title
 
   form_fields.append(("subject", title))
-  if message:
-    if not options.issue:
-      form_fields.append(("description", message))
-    else:
-      # TODO: [ ] Use /<issue>/publish to add a comment.
-      pass
+  # If it's a new issue send message as description. Otherwise a new
+  # message is created below on upload_complete.
+  if message and not options.issue:
+    form_fields.append(("description", message))
 
   # Send a hash of all the base file so the server can determine if a copy
   # already exists in an earlier patchset.
@@ -2325,6 +2323,8 @@ def RealMain(argv, data=None):
     payload["send_mail"] = "yes"
     if options.send_patch:
       payload["attach_patch"] = "yes"
+  if options.issue and message:
+    payload["message"] = message
   payload = urllib.urlencode(payload)
   rpc_server.Send("/" + issue + "/upload_complete/" + (patchset or ""),
                   payload=payload)
