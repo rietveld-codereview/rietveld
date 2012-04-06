@@ -34,14 +34,8 @@ def appstats_normalize_path(path):
 # Segregate Appstats by runtime (python vs. python27).
 appstats_KEY_NAMESPACE = '__appstats_%s__' % os.getenv('APPENGINE_RUNTIME')
 
-# Fail early if we can't import Django 1.x.  Log identifying information.
-import django
-logging.info('django.__file__ = %r, django.VERSION = %r',
-             django.__file__, django.VERSION)
-assert django.VERSION[0] >= 1, "This Django version is too old"
-
-# Custom Django configuration.
-# NOTE: All "main" scripts must import webapp.template before django.
+# Django 1.2 requires DJANGO_SETTINGS_MODULE environment variable to be set
+# http://code.google.com/appengine/docs/python/tools/libraries.html#Django 
 os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
-from django.conf import settings
-settings._target = None
+# NOTE: All "main" scripts must import webapp.template before django.
+
