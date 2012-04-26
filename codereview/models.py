@@ -14,6 +14,7 @@
 
 """App Engine data model (schema) definition for Rietveld."""
 
+import datetime
 import logging
 import md5
 import os
@@ -175,7 +176,7 @@ class TryJobResult(db.Model):
   FAIL = (FAILURE, EXCEPTION)
   # Define the priority level of result value when updating it.
   PRIORITIES = (
-      (-1, None),
+      (-1, None, TRYPENDING),
       (RETRY,),
       OK,
       FAIL,
@@ -275,7 +276,18 @@ class PatchSet(db.Model):
               result=result,
               builder=platform_id,
               timestamp=self.modified))
-      self._try_job_results.sort(key=lambda x: x.timestamp, reverse=True)
+
+      def GetKey(job):
+        """Gets the key used to order jobs in the results list.
+
+        We want pending jobs to appear first in the list, so these jobs
+        return datetime.datetime.max, as the sort is in reverse chronological
+        order."""
+        if job.result == TryJobResult.TRYPENDING:
+          return datetime.datetime.max
+        return job.timestamp
+
+      self._try_job_results.sort(key=GetKey, reverse=True)
     return self._try_job_results
 
 

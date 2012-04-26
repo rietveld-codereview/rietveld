@@ -298,7 +298,7 @@ def edit_flags(request):
         'last_patchset': last_patchset.key().id(),
         'commit': request.issue.commit,
         'builders': initial_builders})
-    
+
     return views.respond(request,
                          'edit_flags.html',
                          {'issue': request.issue, 'form': form})
@@ -343,7 +343,7 @@ def edit_flags(request):
                                         reason='',
                                         revision='',
                                         project='',
-                                        timestamp=datetime.datetime.max)
+                                        timestamp=datetime.datetime.now())
           jobs_to_save.append(try_job)
 
       # Commit everything.
@@ -484,6 +484,27 @@ def get_pending_try_patchsets(request):
   if limit > 1000:
     limit = 1000
 
+  cursor = request.GET.get('cursor', None)
+
+  def MakeJobDescription(job):
+    patchset = job.parent()
+    issue = patchset.issue
+    owner = issue.owner
+
+    # The job description is the basically the job itself with some extra
+    # data from the patchset and issue.
+    description = job.to_dict()
+    description['issue'] = issue.key().id()
+    description['patchset'] = patchset.key().id()
+    description['name'] = owner.nickname()
+    description['user'] = owner.email()
+    description['root'] = 'src'  # TODO(rogerta): figure out how to get it
+    return description
+
   q = models.TryJobResult.all().filter(
       'result =', models.TryJobResult.TRYPENDING).order('timestamp')
-  return [job.to_dict() for job in q.fetch(limit)]
+  if cursor:
+    q.with_cursor(cursor)
+
+  jobs = [MakeJobDescription(job) for job in q.fetch(limit)]
+  return {'cursor': q.cursor(), 'jobs': jobs}
