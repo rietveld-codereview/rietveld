@@ -1707,6 +1707,12 @@ function M_HookState(win) {
   this.indicator = document.getElementById("hook-sel");
 
   /**
+   * The element the indicator points to
+   * @type Element
+   */
+  this.indicated_element = null;
+
+  /**
    * Caches whether we are in an IE browser
    * @type Boolean
    */
@@ -1758,7 +1764,9 @@ M_HookState.prototype.computeHooks_ = function() {
  */
 M_HookState.prototype.updateHooks = function() {
   var curHook = null;
-  if (this.hookPos >= 0 && this.hookPos < this.visibleHookCache.length) {
+  if (this.indicated_element != null) {
+    curHook = this.indicated_element;
+  } else if (this.hookPos >= 0 && this.hookPos < this.visibleHookCache.length) {
     curHook = this.visibleHookCache[this.hookPos];
   }
   this.computeHooks_();
@@ -1798,6 +1806,7 @@ M_HookState.prototype.updateIndicator_ = function(tr) {
   this.indicator.style.left = "0px";
   this.indicator.style.width = totWidth + "px";
   this.indicator.style.display = "";
+  this.indicated_element = tr;
 };
 
 /**
@@ -1812,6 +1821,7 @@ M_HookState.prototype.gotoHook = function(direction) {
 
   // Hide the current selection image
   this.indicator.style.display = "none";
+  this.indicated_element = null;
 
   // Add a border to all td's in the selected row
   if (this.hookPos < -1) {
@@ -1853,12 +1863,102 @@ M_HookState.prototype.gotoHook = function(direction) {
   }
 };
 
+
+/**
+ * Update the indicator and hook position by moving to the next/prev line.
+ * If the target line doesn't have a hook marker, the marker is added.
+ * @param {Integer} direction Scroll direction: -1 for up, 1 for down.
+ */
+M_HookState.prototype.gotoLine = function(direction) {
+  var thecode = document.getElementById("thecode").rows;
+  // find current hook and store visible code lines
+  var currHook = this.indicated_element;
+  var hookIdx = -1;
+  var codeRows = new Array();
+  for (var i=0; i < thecode.length; i++) {
+    if (thecode[i].id.substr(0, 4) == "pair") {
+      codeRows.push(thecode[i]);
+      if (currHook && thecode[i].id == currHook.id) {
+        hookIdx = codeRows.length - 1;
+      }
+    }
+  }
+  if (direction > 0) {
+    if (hookIdx == -1 && this.hookPos == -2) {  // not on a hook yet
+      this.incrementHook_(false);
+      this.gotoHook(0);
+      return;
+    } else if (hookIdx == -1 && this.indicated_element.id == "codeBottom") {
+      // about to move off the borders
+      return;
+    } else if (hookIdx == codeRows.length - 1) {  // last row
+      window.scrollTo(0, document.body.offsetHeight);
+      this.hookPos = this.visibleHookCache.length;
+      this.updateIndicator_(thecode[thecode.length - 1]);
+      return;
+    } else {
+      hookIdx = Math.min(hookIdx + 1, codeRows.length - 1);
+    }
+  } else {
+    if (hookIdx == -1 && this.hookPos < 0) {  // going beyond the top
+      return;
+    } else if (hookIdx == -1) { // we are at the bottom line
+      hookIdx = codeRows.length - 1;
+    } else if (hookIdx == 0) {  // we are at the top
+      this.hookPos = -1;
+      this.indicated_element = null;
+      this.gotoHook(-1);
+      return;
+    } else {
+      hookIdx = Math.max(hookIdx - 1, 0);
+    }
+  }
+  var tr = codeRows[hookIdx];
+  if (tr) {
+    this.updateIndicator_(tr);
+    if (!M_isElementVisible(this.win, tr)) {
+      M_scrollIntoView(this.win, tr, direction);
+    }
+  }
+}
+
+
+/**
+ * Updates hookPos relative to indicated line.
+ * @param {Array} hooks Hook array.
+ * @param {Integer} direction Wether to look for the next or prev element.
+ */
+M_HookState.prototype.updateHookPosByIndicator_ = function(hooks, direction) {
+  if (this.indicated_element == null) {
+    return;
+  } else if (this.indicated_element.getAttribute("name") == "hook") {
+    // hookPos is alread a hook
+    return;
+  }
+  var indicatorLine = parseInt(this.indicated_element.id.split("-")[1]);
+  for (var i=0; i < hooks.length; i++) {
+    if (hooks[i].id.substr(0, 4) == "pair" &&
+        parseInt(hooks[i].id.split("-")[1]) > indicatorLine) {
+      if (direction > 0) {
+        this.hookPos = i - 1;
+      } else {
+        this.hookPos = i;
+      }
+      return;
+    }
+  }
+}
+
+
 /**
  * Set this.hookPos to the next desired hook.
  * @param {Boolean} findComment Whether to look only for comment hooks
  */
 M_HookState.prototype.incrementHook_ = function(findComment) {
   var hooks = this.visibleHookCache;
+  if (this.indicated_line) {
+    this.hookPos = this.findClosestHookPos_(hooks);
+  }
   if (findComment) {
     this.hookPos = Math.max(0, this.hookPos + 1);
     while (this.hookPos < hooks.length &&
@@ -1937,6 +2037,7 @@ M_HookState.prototype.gotoNextHook = function(opt_findComment) {
   // If the current hook is not on the page, select the first hook that is
   // either on the screen or below.
   var hooks = this.visibleHookCache;
+  this.updateHookPosByIndicator_(hooks, 1);
   var diffs = document.getElementsByName("diffs");
   var thecode = document.getElementById("thecode");
   var findComment = Boolean(opt_findComment);
@@ -1967,6 +2068,7 @@ M_HookState.prototype.gotoPrevHook = function(opt_findComment) {
   // If the current hook is not on the page, select the last hook that is
   // above the bottom of the screen window.
   var hooks = this.visibleHookCache;
+  this.updateHookPosByIndicator_(hooks, -1);
   var diffs = document.getElementsByName("diffs");
   var findComment = Boolean(opt_findComment);
   if (diffs && diffs.length >= 1) {
@@ -1998,6 +2100,12 @@ M_HookState.prototype.gotoPrevHook = function(opt_findComment) {
  * the draft if there is one already. Prefer the right side of the table.
  */
 M_HookState.prototype.respond = function() {
+  if (this.indicated_element &&
+      ! this.indicated_element.getAttribute("name") != "hook") {
+    // Turn indicated element into a "real" hook so we can add comments.
+    this.indicated_element.setAttribute("name", "hook")
+  }
+  this.updateHooks();
   var hooks = this.visibleHookCache;
   if (this.hookPos >= 0 && this.hookPos < hooks.length &&
       M_isElementVisible(this.win, hooks[this.hookPos].cells[0])) {
@@ -2210,6 +2318,8 @@ function M_getKeyName(evt) {
   case 188: return name + ",";  //  [,<]
   case 190: return name + ".";  //  [.>]
   case 191: return name + "/";  //  [/?]
+  case 38: return name + "ArrowUp";
+  case 40: return name + "ArrowDown";
   case 17: // Ctrl
   case 18: // Alt
   case 16: // Shift
@@ -2322,6 +2432,10 @@ function M_keyDown(evt) {
     } else if (key == 'Shift-P') {
       // previous comment
       if (hookState) hookState.gotoPrevHook(true);
+    } else if (key == 'ArrowDown') {
+      if (hookState) hookState.gotoLine(1);
+    } else if (key == 'ArrowUp') {
+      if (hookState) hookState.gotoLine(-1);
     } else if (key == 'J') {
       // next file
       M_jumpToHrefOrChangelist('nextFile')

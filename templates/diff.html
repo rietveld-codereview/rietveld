@@ -114,7 +114,7 @@ login_warned = false;
        ondblclick="M_handleTableDblClick(event)" width="100%"
        ontouchstart="M_handleTableTouchStart(event)"
        ontouchend="M_handleTableTouchEnd(event)">
-<tr><th>OLD</th><th>NEW</th></tr>
+<tr id="codeTop"><th>OLD</th><th>NEW</th></tr>
 
 {%if patch.is_binary %}
 <tr>
@@ -129,7 +129,7 @@ login_warned = false;
 {%for row in rows%}{{row|safe}}{%endfor%}
 {%endif%}
 
-<tr><th>OLD</th><th>NEW</th></tr>
+<tr id="codeBottom"><th>OLD</th><th>NEW</th></tr>
 
 </table>
 
