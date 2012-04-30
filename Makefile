@@ -1,6 +1,8 @@
 # Makefile to simplify some common AppEngine actions.
 # Use 'make help' for a list of commands.
 
+APPID?= `cat app.yaml | sed -n 's/^application: *//p'`
+
 SDK_PATH ?=
 
 DEV_APPSERVER?= $(if $(SDK_PATH), $(SDK_PATH)/,)dev_appserver.py
@@ -39,8 +41,8 @@ update_revision:
 	@echo "`hg id -n`:`hg id -i`" >REVISION
 
 update: update_revision
-	@echo "---[Updating `cat app.yaml | sed -n 's/^application: *//p'`]---"
-	$(APPCFG) $(APPCFG_FLAGS) update . --version $(VERSION)
+	@echo "---[Updating $(APPID)]---"
+	$(APPCFG) $(APPCFG_FLAGS) update . --application $(APPID) --version $(VERSION)
 
 upload: update
 
