@@ -1533,9 +1533,10 @@ def upload_complete(request, patchset_id=None):
     query = query.filter('status =', None)  # all uploaded file have a status
     if query.count() > 0:
       errors.append('Base files missing.')
-  # Send notification mail.
-  if request.POST.get('send_mail') == 'yes':
-    msg = _make_message(request, request.issue, '', '', True)
+  # Create (and send) a message if needed.
+  if request.POST.get('send_mail') == 'yes' or request.POST.get('message'):
+    msg = _make_message(request, request.issue, request.POST.get('message', ''),
+                        send_mail=(request.POST.get('send_mail', '') == 'yes'))
     msg.put()
     _notify_issue(request, request.issue, 'Mailed')
   if errors:
