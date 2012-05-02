@@ -61,11 +61,12 @@ django.core.signals.got_request_exception.connect(log_exception)
 django.core.signals.got_request_exception.disconnect(
     django.db._rollback_on_exception)
 
+# Create a Django application for WSGI.
+application = django.core.handlers.wsgi.WSGIHandler()
+
 
 def real_main():
   """Main program."""
-  # Create a Django application for WSGI.
-  application = django.core.handlers.wsgi.WSGIHandler()
   # Run the WSGI CGI handler with that application.
   util.run_wsgi_app(application)
 
