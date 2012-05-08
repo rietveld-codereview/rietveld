@@ -1,0 +1,43 @@
+{%extends "issue_base.html"%}
+{%block title1%}Edit Issue -{%endblock%}
+{%block head%}{{form.media}}{%endblock%}
+{%block issue_body%}
+<form action="{%url codereview.views.edit issue.key.id%}"
+      method="post" id="edit-form">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+<table>
+{{form}}
+{%if issue.local_base%}
+<tr>
+  <th><label>Base files:</label></hd>
+  <td>Use <i>upload.py</i> to upload base files.</td>
+</tr>
+{%endif%}
+<tr><td><input type="submit" value="Update Issue"></td></tr>
+</table>
+</form>
+
+<a id="resizer" style="display:none;cursor:pointer">
+<img src="{{media_url}}zippyplus.gif"></a>
+<script language="JavaScript" type="text/javascript"><!--
+M_addTextResizer_(document.getElementById("edit-form"));
+--></script>
+
+<p>
+<ul>
+<li>Owner: {{issue.owner|show_user}}
+<li>Created: {{issue.created|date:"Y/m/d H:i:s"}}
+<li>Last updated: {{issue.modified|date:"Y/m/d H:i:s"}}
+</ul>
+</p>
+
+{%ifequal issue.owner user%}
+<h2>Delete This Issue</h2>
+
+<form action="{%url codereview.views.delete issue.key.id%}" method="post">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+<input type="submit" value="Delete Issue"> There is no undo!
+</form>
+{%endifequal%}
+
+{%endblock%}
