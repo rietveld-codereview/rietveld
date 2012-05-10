@@ -17,6 +17,7 @@
 import cgi
 import datetime
 import logging
+import mimetypes
 import os
 import re
 import sha
@@ -75,6 +76,32 @@ def key_required(func):
       return HttpResponseForbidden('You must be admin in for this function')
     return func(request, *args, **kwds)
   return key_wrapper
+
+
+def binary_required(func):
+  """Decorator that processes the content argument.
+
+  Attributes set on the request:
+   content: a Content entity.
+  """
+
+  @patch_required
+  def binary_wrapper(request, content_type, *args, **kwds):
+    content = None
+    if content_type == "0":
+      content = request.patch.content
+    elif content_type == "1":
+      content = request.patch.patched_content
+    # Other values are erroneous so request.content won't be set.
+    if not content or not content.data:
+      return views.HttpTextResponse(
+          'Invalid content type: %s, expected 0 or 1' % content_type,
+          status=404)
+    request.mime_type = mimetypes.guess_type(request.patch.filename)[0]
+    request.content = content
+    return func(request, *args, **kwds)
+
+  return binary_wrapper
 
 
 def string_to_datetime(text):
@@ -476,6 +503,21 @@ def status_listener(request):
   #deferred.defer(process_status_push, packets, base_url)
   process_status_push(packets, base_url)
   return HttpResponse('OK')
+
+
+@binary_required
+def download_binary(request):
+  """/<issue>/binary/<patchset>/<patch>/<content>
+
+  Return patch's binary content.  If the patch is not binary, an empty stream
+  is returned.  <content> may be 0 for the base content or 1 for the new
+  content.  All other values are invalid.
+  """
+  response = HttpResponse(request.content.data, content_type=request.mime_type)
+  filename = re.sub(
+      r'[^\w\.]', '_', request.patch.filename.encode('ascii', 'replace'))
+  response['Content-Disposition'] = 'attachment; filename="%s"' % filename
+  return response
 
 
 @views.json_response

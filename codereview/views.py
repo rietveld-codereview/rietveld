@@ -2401,7 +2401,7 @@ def patch_helper(request, nav_type='patch'):
 
 @image_required
 def image(request):
-  """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
+  """/<issue>/image/<patchset>/<patch>/<content> - Return patch's content."""
   response = HttpResponse(request.content.data, content_type=request.mime_type)
   filename = re.sub(
       r'[^\w\.]', '_', request.patch.filename.encode('ascii', 'replace'))
