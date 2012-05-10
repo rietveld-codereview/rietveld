@@ -102,6 +102,7 @@ urlpatterns += patterns(
 urlpatterns += patterns(
     'codereview.views_chromium',
     (r'^(\d+)/edit_flags$', 'edit_flags'),
+    (r'^(\d+)/binary/(\d+)/(\d+)/(\d+)$', 'download_binary'),
     (r'^conversions$', 'conversions'),
     (r'^lint/issue(\d+)_(\d+)', 'lint'),
     (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
