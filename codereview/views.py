@@ -2289,7 +2289,7 @@ def image(request):
   """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
   response = HttpResponse(request.content.data, content_type=request.mime_type)
   filename = re.sub(
-      r'[^\w\.]', '_', response.patch.filename.encode('ascii', 'replace'))
+      r'[^\w\.]', '_', request.patch.filename.encode('ascii', 'replace'))
   response['Content-Disposition'] = 'attachment; filename="%s"' % filename
   response['Cache-Control'] = 'no-cache, no-store'
   return response
