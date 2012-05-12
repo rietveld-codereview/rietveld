@@ -681,7 +681,16 @@ def xsrf_required(func):
         # Try the previous hour's token
         xsrf_token = account.get_xsrf_token(-1)
         if post_token != xsrf_token:
-          return HttpTextResponse('Invalid XSRF token.', status=403)
+          msg = [u'Invalid XSRF token.']
+          if request.POST:
+            msg.extend([u'',
+                        u'However, this was the data posted to the server:',
+                        u''])
+            for key in request.POST:
+              msg.append(u'%s: %s' % (key, request.POST[key]))
+            msg.extend([u'', u'-'*10,
+                        u'Please reload the previous page and post again.'])
+          return HttpTextResponse(u'\n'.join(msg), status=403)
     return func(request, *args, **kwds)
 
   return xsrf_wrapper
@@ -2280,7 +2289,7 @@ def image(request):
   """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
   response = HttpResponse(request.content.data, content_type=request.mime_type)
   filename = re.sub(
-      r'[^\w\.]', '_', response.patch.filename.encode('ascii', 'replace'))
+      r'[^\w\.]', '_', request.patch.filename.encode('ascii', 'replace'))
   response['Content-Disposition'] = 'attachment; filename="%s"' % filename
   response['Cache-Control'] = 'no-cache, no-store'
   return response
