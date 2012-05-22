@@ -1120,7 +1120,7 @@ class SubversionVCS(VersionControlSystem):
                            self._EscapeFilename(filename)], silent_ok=True)
       base_content = ""
       is_binary = bool(mimetype) and not mimetype.startswith("text/")
-      if is_binary and self.IsImage(filename):
+      if is_binary:
         new_content = self.ReadFile(filename)
     elif (status[0] in ("M", "D", "R") or
           (status[0] == "A" and status[3] == "+") or  # Copied file.
@@ -1152,17 +1152,14 @@ class SubversionVCS(VersionControlSystem):
         # Empty base content just to force an upload.
         base_content = ""
       elif is_binary:
-        if self.IsImage(filename):
-          get_base = True
-          if status[0] == "M":
-            if not self.rev_end:
-              new_content = self.ReadFile(filename)
-            else:
-              url = "%s/%s@%s" % (self.svn_base, filename, self.rev_end)
-              new_content = RunShell(["svn", "cat", url],
-                                     universal_newlines=True, silent_ok=True)
-        else:
-          base_content = ""
+        get_base = True
+        if status[0] == "M":
+          if not self.rev_end:
+            new_content = self.ReadFile(filename)
+          else:
+            url = "%s/%s@%s" % (self.svn_base, filename, self.rev_end)
+            new_content = RunShell(["svn", "cat", url],
+                                   universal_newlines=True, silent_ok=True)
       else:
         get_base = True
 
@@ -1341,15 +1338,13 @@ class GitVCS(VersionControlSystem):
     is_image = self.IsImage(filename)
 
     # Grab the before/after content if we need it.
-    # We should include file contents if it's text or it's an image.
-    if not is_binary or is_image:
-      # Grab the base content if we don't have it already.
-      if base_content is None and hash_before:
-        base_content = self.GetFileContent(hash_before, is_binary)
-      # Only include the "after" file if it's an image; otherwise it
-      # it is reconstructed from the diff.
-      if is_image and hash_after:
-        new_content = self.GetFileContent(hash_after, is_binary)
+    # Grab the base content if we don't have it already.
+    if base_content is None and hash_before:
+      base_content = self.GetFileContent(hash_before, is_binary)
+    # Only include the "after" file if it's an image; otherwise it
+    # it is reconstructed from the diff.
+    if is_image and hash_after:
+      new_content = self.GetFileContent(hash_after, is_binary)
 
     return (base_content, new_content, is_binary, status)
 
@@ -1522,7 +1517,7 @@ class MercurialVCS(VersionControlSystem):
       # Fetch again without converting newlines
       base_content = RunShell(["hg", "cat", "-r", base_rev, oldrelpath],
         silent_ok=True, universal_newlines=False)
-    if not is_binary or not self.IsImage(relpath):
+    if not is_binary:
       new_content = None
     return base_content, new_content, is_binary, status
 
@@ -1843,7 +1838,7 @@ class PerforceVCS(VersionControlSystem):
     is_binary = self.IsPendingBinary(filename)
     if status != "D" and status != "SKIP":
       relpath = self.GetLocalFilename(filename)
-      if is_binary and self.IsImage(relpath):
+      if is_binary:
         new_content = open(relpath, "rb").read()
 
     return base_content, new_content, is_binary, status
