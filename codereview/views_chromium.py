@@ -202,6 +202,10 @@ def inner_handle(base_url, timestamp, packet, result, properties):
     buildername = properties['buildername']
     buildnumber = int(properties['buildnumber'])
     slavename = properties['slavename']
+    # The try job key property will only be present for try jobs started from
+    # rietveld itself.
+    try_job_key = properties.get('try_job_key')
+
     # Keep them last.
     issue = int(properties['issue'])
     patchset = int(properties['patchset'])
@@ -220,12 +224,22 @@ def inner_handle(base_url, timestamp, packet, result, properties):
     logging.warn('Bad issue/patch id: %s/%s' % (issue, patchset))
     return
 
+  # Used only for logging.
   keyname = '%s-%s-%s-%s' % (issue, patchset, buildername, buildnumber)
+
   def tx_try_job_result():
-    try_obj = models.TryJobResult.all(
-        ).ancestor(patchset_key
-        ).filter('builder =', buildername
-        ).filter('buildnumber =', buildnumber).get()
+    if try_job_key:
+      try_obj = models.TryJobResult.get(try_job_key)
+      # If a key is given, then we must only update that try job.
+      if not try_obj:
+        logging.error('Try job not found by key=%s %s', try_job_key, keyname)
+        return False
+    else:
+      try_obj = models.TryJobResult.all(
+          ).ancestor(patchset_key
+          ).filter('builder =', buildername
+          ).filter('buildnumber =', buildnumber).get()
+
     url = '%sbuildstatus?builder=%s&number=%s' % (
         base_url, buildername, buildnumber)
     if try_obj is None:
@@ -247,7 +261,13 @@ def inner_handle(base_url, timestamp, packet, result, properties):
       # Update result only if relevant.
       if (models.TryJobResult.result_priority(result) >
           models.TryJobResult.result_priority(try_obj.result)):
+        logging.info('Setting result: new=%s old=%s %s', result, try_obj.result,
+                     keyname)
         try_obj.result = result
+      else:
+        logging.info('Result irrelevant: new=%s old=%s %s', result,
+                     try_obj.result, keyname)
+
       if try_obj.project and try_obj.project != project:
         logging.critical(
             'Project for %s didn\'t match: was %s, setting %s' % (keyname,
