@@ -1302,12 +1302,16 @@ class GitVCS(VersionControlSystem):
     # then the diff of everything except deleted files with rename and copy
     # support enabled.
     cmd = [
-        "git", "diff", "--no-color", "--no-ext-diff", "--full-index", "--ignore-submodules"
+        "git", "diff", "--no-color", "--no-ext-diff", "--full-index",
+        "--ignore-submodules",
     ]
-    diff = RunShell(cmd + ["--diff-filter=D"] + extra_args, env=env,
-        silent_ok=True)
-    diff += RunShell(cmd + ["-C", "--diff-filter=ACMRT"] + extra_args, env=env,
-        silent_ok=True)
+    diff = RunShell(
+        cmd + ["--diff-filter=D"] + extra_args, env=env, silent_ok=True)
+    diff += RunShell(
+        cmd + ["--find-copies-harder", "--diff-filter=ACMRT"] + extra_args,
+        env=env, silent_ok=True)
+    # The CL could be only file deletion or not. So accept silent diff for both
+    # commands then check for an empty diff manually.
     if not diff:
       ErrorExit("No output from %s" % (cmd + extra_args))
     return diff

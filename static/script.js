@@ -1916,9 +1916,7 @@ M_HookState.prototype.gotoLine = function(direction) {
   var tr = codeRows[hookIdx];
   if (tr) {
     this.updateIndicator_(tr);
-    if (!M_isElementVisible(this.win, tr)) {
-      M_scrollIntoView(this.win, tr, direction);
-    }
+    M_scrollIntoView(this.win, tr, direction);
   }
 }
 
