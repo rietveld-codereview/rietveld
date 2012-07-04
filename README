@@ -1,8 +1,10 @@
 Welcome to Rietveld
 -------------------
 
-This project shows how to create a somewhat substantial web application
-using Django on Google App Engine.  It requires Django version 1.2.
+This project shows how to create a somewhat substantial web
+application using Django on Google App Engine.  It requires Python 2.7
+and Django version 1.3 (although a previous version using Python 2.5
+and Django 1.2 can still be found in the repository).
 
 In addition, I hope it will serve as a practical tool for the Python
 developer community, and hopefully for other open source communities.
