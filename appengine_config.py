@@ -34,7 +34,7 @@ def appstats_normalize_path(path):
 # Segregate Appstats by runtime (python vs. python27).
 appstats_KEY_NAMESPACE = '__appstats_%s__' % os.getenv('APPENGINE_RUNTIME')
 
-# Django 1.2 requires DJANGO_SETTINGS_MODULE environment variable to be set
+# Django 1.2+ requires DJANGO_SETTINGS_MODULE environment variable to be set
 # http://code.google.com/appengine/docs/python/tools/libraries.html#Django 
 os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
 # NOTE: All "main" scripts must import webapp.template before django.
