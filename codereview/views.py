@@ -3487,14 +3487,14 @@ def search(request):
 def repos(request):
   """/repos - Show the list of known Subversion repositories."""
   # Clean up garbage created by buggy edits
-  bad_branches = list(models.Branch.gql('WHERE owner = :1', None))
+  bad_branches = models.Branch.gql('WHERE owner = :1', None).fetch(100)
   if bad_branches:
     db.delete(bad_branches)
   repo_map = {}
-  for repo in list(models.Repository.all()):
+  for repo in models.Repository.all().fetch(1000, batch_size=100):
     repo_map[str(repo.key())] = repo
   branches = []
-  for branch in models.Branch.all():
+  for branch in models.Branch.all().fetch(2000, batch_size=100):
     # Using ._repo instead of .repo returns the db.Key of the referenced entity.
     # Access to a protected member FOO of a client class
     # pylint: disable=W0212
