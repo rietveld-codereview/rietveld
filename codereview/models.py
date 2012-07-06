@@ -272,7 +272,7 @@ class PatchSet(db.Model):
           result = -1
         self._try_job_results.append(
             TryJobResult(
-              patchset=self,
+              parent=self,
               url=details_url,
               result=result,
               builder=platform_id,

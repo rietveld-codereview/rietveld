@@ -2201,7 +2201,7 @@ def delete(request):
   issue = request.issue
   tbd = [issue]
   for cls in [models.PatchSet, models.Patch, models.Comment,
-              models.Message, models.Content]:
+              models.Message, models.Content, models.TryJobResult]:
     tbd += cls.gql('WHERE ANCESTOR IS :1', issue)
   db.delete(tbd)
   _notify_issue(request, issue, 'Deleted')
@@ -2247,7 +2247,7 @@ def _patchset_delete(ps_delete, patches):
   if tbp:
     db.put(tbp)
   tbd = [ps_delete]
-  for cls in [models.Patch, models.Comment]:
+  for cls in [models.Patch, models.Comment, models.TryJobResult]:
     tbd += cls.gql('WHERE ANCESTOR IS :1', ps_delete)
   db.delete(tbd)
 
