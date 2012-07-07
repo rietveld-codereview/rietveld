@@ -54,14 +54,38 @@ class TestPublish(TestCase):
     def test_draft_details_no_base_file(self):
         request = MockRequest(User('foo@example.com'), issue=self.issue)
         # add a comment and render
-        cmt = models.Comment(patch=self.patches[0], parent=self.patches[0])
-        cmt.text = 'test comment'
-        cmt.lineno = 1
-        cmt.left = False
-        cmt.draft = True
-        cmt.author = self.user
-        cmt.save()
+        cmt1 = models.Comment(patch=self.patches[0], parent=self.patches[0])
+        cmt1.text = 'test comment'
+        cmt1.lineno = 1
+        cmt1.left = False
+        cmt1.draft = True
+        cmt1.author = self.user
+        cmt1.save()
+        # Add a second comment
+        cmt2 = models.Comment(patch=self.patches[1], parent=self.patches[1])
+        cmt2.text = 'test comment 2'
+        cmt2.lineno = 2
+        cmt2.left = False
+        cmt2.draft = True
+        cmt2.author = self.user
+        cmt2.save()
+        # Add fake content
+        content1 = models.Content(text="foo\nbar\nbaz\nline\n")
+        content1.put()
+        content2 = models.Content(text="foo\nbar\nbaz\nline\n")
+        content2.put()
+        cmt1.patch.content = content1
+        cmt1.patch.put()
+        cmt2.patch.content = content2
+        cmt2.patch.put()
+        # Mock get content calls. The first fails with an FetchError,
+        # the second succeeds (see issue384).
+        def raise_err():
+            raise models.FetchError()
+        cmt1.patch.get_content = raise_err
+        cmt2.patch.get_patched_content = lambda: content2
         tbd, comments = views._get_draft_comments(request, self.issue)
-        self.assertEqual(len(comments), 1)
-        # Try to render draft details:
-        views._get_draft_details(request, comments)
+        self.assertEqual(len(comments), 2)
+        # Try to render draft details using the patched Comment
+        # instances from here.
+        views._get_draft_details(request, [cmt1, cmt2])
