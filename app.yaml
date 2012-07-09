@@ -1,7 +1,8 @@
 application: chromiumcodereview
 version: use-version-arg
-runtime: python
+runtime: python27
 api_version: 1
+threadsafe: false
 
 default_expiration: 7d  # This is good for images, which never change
 
@@ -19,7 +20,7 @@ handlers:
   upload: static/robots.txt
 
 - url: /static/upload.py
-  script: main.py
+  script: main.application
 #  secure: always
 
 - url: /static/(script.js|styles.css)
@@ -32,8 +33,8 @@ handlers:
   static_dir: static
 #  secure: always
 
-- url: .*
-  script: main.py
+- url: /.*
+  script: main.application
 #  secure: always
 
 inbound_services:
@@ -43,6 +44,10 @@ inbound_services:
 
 builtins:
 - appstats: on
-- deferred: on
-- mapreduce: on
+#- deferred: on
+#- mapreduce: on
 - remote_api: on
+
+libraries:
+- name: django
+  version: 1.3
