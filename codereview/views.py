@@ -1681,7 +1681,7 @@ def add(request):
   issue = request.issue
   form = AddForm(request.POST, request.FILES)
   if not _add_patchset_from_form(request, issue, form):
-    return show(request, form)
+    return show(request, issue.key().id(), form)
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
@@ -3237,13 +3237,28 @@ def _get_draft_comments(request, issue, preview=False):
   return tbd, comments
 
 
+def _patchlines2cache(patchlines, left):
+  """Helper that converts return value of ParsePatchToLines for caching.
+
+  Each line in patchlines is (old_line_no, new_line_no, line).  When
+  comment is on the left we store the old_line_no, otherwise
+  new_line_no.
+  """
+  if left:
+    it = ((old, line) for old, _, line in patchlines)
+  else:
+    it = ((new, line) for _, new, line in patchlines)
+  return dict(it)
+
+
 def _get_draft_details(request, comments):
   """Helper to display comments with context in the email message."""
   last_key = None
   output = []
-  linecache = {}  # Maps (c.patch.key(), c.left) to list of lines
+  linecache = {}  # Maps (c.patch.key(), c.left) to mapping (lineno, line)
   modified_patches = []
   fetch_base_failed = False
+
   for c in comments:
     if (c.patch.key(), c.left) != last_key:
       url = request.build_absolute_uri(
@@ -3255,29 +3270,21 @@ def _get_draft_details(request, comments):
       last_key = (c.patch.key(), c.left)
       patch = c.patch
       if patch.no_base_file:
-        linecache[last_key] = patching.ParsePatchToLines(patch.lines)
+        linecache[last_key] = _patchlines2cache(
+          patching.ParsePatchToLines(patch.lines), c.left)
       else:
         try:
           if c.left:
             old_lines = patch.get_content().text.splitlines(True)
-            linecache[last_key] = old_lines
+            linecache[last_key] = dict(enumerate(old_lines, 1))
           else:
             new_lines = patch.get_patched_content().text.splitlines(True)
-            linecache[last_key] = new_lines
+            linecache[last_key] = dict(enumerate(new_lines, 1))
         except FetchError:
-          linecache[last_key] = patching.ParsePatchToLines(patch.lines)
+          linecache[last_key] = _patchlines2cache(
+            patching.ParsePatchToLines(patch.lines), c.left)
           fetch_base_failed = True
-    file_lines = linecache[last_key]
-    context = ''
-    if patch.no_base_file or fetch_base_failed:
-      for old_line_no, new_line_no, line_text in file_lines:
-        if ((c.lineno == old_line_no and c.left) or
-            (c.lineno == new_line_no and not c.left)):
-          context = line_text.strip()
-          break
-    else:
-      if 1 <= c.lineno <= len(file_lines):
-        context = file_lines[c.lineno - 1].strip()
+    context = linecache[last_key].get(c.lineno, '').strip()
     url = request.build_absolute_uri(
       '%s#%scode%d' % (reverse(diff, args=[request.issue.key().id(),
                                            c.patch.patchset.key().id(),
@@ -3613,14 +3620,14 @@ def search(request):
 def repos(request):
   """/repos - Show the list of known Subversion repositories."""
   # Clean up garbage created by buggy edits
-  bad_branches = list(models.Branch.gql('WHERE owner = :1', None))
+  bad_branches = models.Branch.gql('WHERE owner = :1', None).fetch(100)
   if bad_branches:
     db.delete(bad_branches)
   repo_map = {}
-  for repo in list(models.Repository.all()):
+  for repo in models.Repository.all().fetch(1000, batch_size=100):
     repo_map[str(repo.key())] = repo
   branches = []
-  for branch in models.Branch.all():
+  for branch in models.Branch.all().fetch(2000, batch_size=100):
     # Using ._repo instead of .repo returns the db.Key of the referenced entity.
     # Access to a protected member FOO of a client class
     # pylint: disable=W0212
