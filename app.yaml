@@ -1,4 +1,4 @@
-application: chromiumcodereview
+application: chromiumcodereview-hr
 version: use-version-arg
 runtime: python27
 api_version: 1
