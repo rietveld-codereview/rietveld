@@ -47,6 +47,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render_to_response
 import django.template
 from django.template import RequestContext
+from django.utils import encoding
 from django.utils import simplejson
 from django.utils.html import strip_tags
 from django.utils.html import urlize
@@ -3381,6 +3382,14 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
                     'message': message, 'details': details,
                     'description': description, 'home': home,
                     })
+    for key, value in context.iteritems():
+      if isinstance(value, str):
+        try:
+          encoding.force_unicode(value)
+        except UnicodeDecodeError:
+          logging.error('Key %s is not valid unicode. value: %r' % (key, value))
+          # The content failed to be decoded as utf-8. Enforce it as ASCII.
+          context[key] = value.decode('ascii', 'replace')
     body = django.template.loader.render_to_string(
       template, context, context_instance=RequestContext(request))
     logging.warn('Mail: to=%s; cc=%s', ', '.join(to), ', '.join(cc))
