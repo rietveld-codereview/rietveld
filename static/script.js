@@ -538,20 +538,32 @@ function M_editFlags(issue) {
  * @param {String} patchset The patchset key.
  */
 function M_editPendingTryJobs(patchset) {
+  var rootElement = document.getElementById('#tryjobdiv-' + patchset);
+
   // find existing pending try jobs.
-  var existing_jobs = {};
-  jQuery('a[status="try-pending"]',
-         document.getElementById('#tryjobdiv-' + patchset)).each(function(i) {
+  var existingJobs = {};
+  jQuery('a[status="try-pending"]', rootElement).each(function(i) {
     var trimmed = jQuery.trim(jQuery(this).text());
-    existing_jobs[trimmed] = 1;
+    existingJobs[trimmed] = 1;
+  });
+
+  // find already running try jobs.
+  var runningJobs = {};
+  jQuery('a[status="pending"]', rootElement).each(function(i) {
+    var trimmed = jQuery.trim(jQuery(this).text());
+    runningJobs[trimmed] = 1;
   });
 
   // Set the state of the checkboxes as needed.
   var popup = jQuery('#trybot-popup');
   jQuery('input:checkbox', popup).each(function(i) {
     var self = jQuery(this);
-    self.attr('checked', self.attr('name') in existing_jobs); 
-    var value = self.attr('name') in existing_jobs ? 'true' : 'false';
+    self.attr('checked', self.attr('name') in existingJobs); 
+    if (self.attr('name') in runningJobs) {
+      self.attr('disabled', 'disabled');
+    } else {
+      self.removeAttr('disabled');
+    }
   });
 
   // Show the popup and position it near the link.

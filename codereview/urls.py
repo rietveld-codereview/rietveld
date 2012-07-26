@@ -108,4 +108,5 @@ urlpatterns += patterns(
     (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
     (r'^status_listener$', 'status_listener'),
     (r'^get_pending_try_patchsets$', 'get_pending_try_patchsets'),
+    (r'^restricted/update_default_builders', 'update_default_builders'),
     )

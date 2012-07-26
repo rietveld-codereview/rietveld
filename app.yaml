@@ -33,6 +33,11 @@ handlers:
   static_dir: static
 #  secure: always
 
+# URL of schedules tasks.  See cron.yaml.
+- url: /restricted/.*
+  script: main.application
+  login: admin
+
 - url: /.*
   script: main.application
 #  secure: always
