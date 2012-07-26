@@ -24,6 +24,7 @@ import sha
 
 from google.appengine.api import memcache
 from google.appengine.ext import db
+from google.appengine.runtime import DeadlineExceededError
 
 from django import forms
 from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
@@ -410,8 +411,7 @@ def conversions(request):
     return respond(request, 'conversions.html', {
             'rules': rules})
 
-  if (not request.user.email().endswith('@chromium.org') and
-      not request.user.email().endswith('@google.com')):
+  if (views.is_admin(request.user.email().lower())):
     # TODO(vbendeb) this domain name should be a configuration item. Or maybe
     # only admins should be allowed to modify the conversions table.
     warning = 'You are not authorized to modify the conversions table.'
@@ -538,6 +538,23 @@ def download_binary(request):
       r'[^\w\.]', '_', request.patch.filename.encode('ascii', 'replace'))
   response['Content-Disposition'] = 'attachment; filename="%s"' % filename
   return response
+
+
+def update_default_builders(request):
+  """/restricted/update_default_builders - Updates list of default builders."""
+  try:
+    (successful, failed) = models_chromium.DefaultBuilderList.update()
+    if failed:
+      logging.error('Failed to update default builders for: %s' %
+                    ','.join(failed))
+
+    content = 'Updated successfully: %s\nFailed to update: %s' % (
+        ','.join(successful), ','.join(failed))
+  except DeadlineExceededError:
+    content = 'Deadline exceeded'
+    logging.error(content)
+
+  return HttpResponse(content, content_type='text/plain')
 
 
 @views.json_response

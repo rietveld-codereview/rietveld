@@ -592,6 +592,24 @@ def _clean_int(value, default, min_value=None, max_value=None):
   return value
 
 
+def is_admin(user):
+  """Returns True if the specified user is an admin.
+  
+  Args:
+    user: A string holding the email address of the user.  Assumes string
+        is all lowercase.
+    
+  Returns:
+    True if the user is an admin, False otherwise.
+  """
+  # TODO(vbendeb) this domain name should be a configuration item. Or maybe
+  # only admins should be allowed to modify the conversions table.
+  # TODO(rogerta): should not hardcode email patterns but maybe use
+  # 'https://chromium-access.appspot.com/auto/users' to get full list.
+  return (user_email.endswith("@chromium.org") or
+          user_email.endswith("@google.com"))
+
+
 def _can_view_issue(user, issue):
   if user is None:
     return not issue.private
@@ -600,8 +618,7 @@ def _can_view_issue(user, issue):
           or issue.owner == user
           or user_email in issue.cc
           or user_email in issue.reviewers
-          or user_email.endswith("@chromium.org")
-          or user_email.endswith("@google.com"))
+          or is_admin(user_email))
 
 
 def _notify_issue(request, issue, message):
@@ -2022,12 +2039,6 @@ def show(request, form=None):
   issue.description = issue.description.replace('\n', '<br/>')
   src_url = _map_base_url(issue.base)
 
-  # TODO(rogerta): build this list dynamically.  
-  default_builders = ['win_rel', 'mac_rel', 'linux_rel', 'linux_chromeos',
-                      'linux_view', 'win', 'mac', 'linux',
-                      'linux_clang', 'linux_chromeos_aura', 'win_shared',
-                      'linux_shared']
-  
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
@@ -2036,7 +2047,11 @@ def show(request, form=None):
                   'first_patch': first_patch,
                   'has_draft_message': has_draft_message,
                   'src_url': src_url,
-                  'default_builders': default_builders,
+                  # TODO(rogerta): don't hard code build master server name
+                  # here.  Need to map it correctly from the issue's base URL.
+                  'default_builders':
+                      models_chromium.DefaultBuilderList.get_builders(
+                          'tryserver.chromium'),
                   })
 
 

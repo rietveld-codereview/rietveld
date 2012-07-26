@@ -97,7 +97,6 @@
 
   </table>
   <div id="tryjobdiv-{{patchset.key.id}}"
-    {%if patchset.try_job_results%}
          style="background: transparent; margin: 4px 0px">
       <span><i>Trybot&nbsp;results:</i></span>
       {%for try_job in patchset.try_job_results%}
@@ -117,17 +116,15 @@
          href="#" onclick="M_showTryJobResult('tryjobdiv-{{patchset.key.id}}', false); return false">
          &lt;&lt;&lt;Less</a>
 
-      {%comment%}
-      This block is commented until the try bots are changed to look for the pending-try
-      job results.
+      |
       {%if user%}
       {%ifequal last_patchset.key.id patchset.key.id%}
-      | <a id="tryjobchange-{{patchset.key.id}}" href="#"
+      <a id="tryjobchange-{{patchset.key.id}}" href="#"
            onclick="M_editPendingTryJobs('{{patchset.key.id}}'); return false">Try more bots</a>
       {%endifequal%}
+      {%else%}
+      <a href="{{sign_in}}">Sign in</a> to try more bots
       {%endif%}
-      {%endcomment%}
-    {%endif%}
   </div>
 
   {%ifequal last_patchset.key.id patchset.key.id%}

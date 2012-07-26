@@ -227,19 +227,21 @@
     <form method="POST" action="" id="trybotform">
       <input type="hidden" name="xsrf_token" value="{{xsrf_token}}"/>
       <div class="trybot-popup-column">
-      {%for builder in default_builders%}
-        <div class="trybot-popup-input">
-          <input type="checkbox" name="{{builder}}" id="cb_{{builder}}"
-                 checked="checked">{{builder}}</input>
-        </div>
-        {%cycle '' '' '' '</div><div class="trybot-popup-column">'%} 
-      {%endfor%}
+        {%for builder in default_builders%}
+          <div class="trybot-popup-input">
+            <input type="checkbox" name="{{builder}}" id="cb_{{builder}}"
+                   checked="checked">{{builder}}</input>
+          </div>
+          {%cycle '' '' '' '' '' '' '</div><div class="trybot-popup-column">'%} 
+        {%endfor%}
       </div>
-      <div style="clear: all;"/>
-      <input type="button" value="Update"
-             onclick="M_updatePendingTrybots('{{issue.key.id}}', '{{last_patchset.key.id}}', '{{xsrf_token}}')"/>
-      <input type="button" value="Close"
-             onclick="M_closePendingTrybots()"/>
+      <div style="clear: both;"/>
+      <div class="trybot-button-div">
+        <input type="button" value="Update"
+               onclick="M_updatePendingTrybots('{{issue.key.id}}', '{{last_patchset.key.id}}', '{{xsrf_token}}')"/>
+        <input type="button" value="Close"
+               onclick="M_closePendingTrybots()"/>
+      </div>
     </form>
   </div>
 {%endif%}
