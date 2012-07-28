@@ -383,6 +383,39 @@ class SettingsForm(forms.Form):
     return nickname
 
 
+class MigrateEntitiesForm(forms.Form):
+
+  account = forms.CharField(label='Your previous email address')
+  _user = None
+
+  def set_user(self, user):
+    """Sets the _user attribute.
+
+    A user object is needed for validation. This method has to be
+    called before is_valid() is called to allow us to validate if a
+    email address given in account belongs to the same user.
+    """
+    self._user = user
+
+  def clean_account(self):
+    """Verifies that an account with this emails exists and returns it.
+
+    This method is executed by Django when Form.is_valid() is called.
+    """
+    if self._user is None:
+      raise forms.ValidationError('No user given.')
+    account = models.Account.get_account_for_email(self.cleaned_data['account'])
+    if account is None:
+      raise forms.ValidationError('No such email.')
+    if account.user.email() == self._user.email():
+      raise forms.ValidationError(
+        'Nothing to do. This is your current email address.')
+    if account.user.user_id() != self._user.user_id():
+      raise forms.ValidationError(
+        'This email address isn\'t related to your account.')
+    return account
+
+
 class SearchForm(forms.Form):
 
   format = forms.ChoiceField(
@@ -3724,6 +3757,73 @@ def account_delete(_request):
   account = models.Account.current_user_account
   account.delete()
   return HttpResponseRedirect(users.create_logout_url(reverse(index)))
+
+
+@login_required
+@xsrf_required
+def migrate_entities(request):
+  msg = None
+  if request.method == 'POST':
+    form = MigrateEntitiesForm(request.POST)
+    form.set_user(request.user)
+    if form.is_valid():
+      # verify that the account belongs to the user
+      old_account = form.cleaned_data['account']
+      old_account_key = str(old_account.key())
+      new_account_key = str(models.Account.current_user_account.key())
+      for kind in ('Issue', 'Repository', 'Branch'):
+        taskqueue.add(url=reverse(task_migrate_entities),
+                      params={'kind': kind,
+                              'old': old_account_key,
+                              'new': new_account_key})
+      msg = (u'Migration job started. The issues, repositories and branches'
+             u' created with your old account (%s) will be moved to your'
+             u' current account (%s) in a background task and should'
+             u' be visible for your current account shortly.'
+             % (old_account.user.email(), request.user.email()))
+  else:
+    form = MigrateEntitiesForm()
+  return respond(request, 'migrate_entities.html', {'form': form, 'msg': msg})
+
+
+@post_required
+def task_migrate_entities(request):
+  """/tasks/migrate_entities - Migrates entities from one account to another."""
+  kind = request.POST.get('kind')
+  old = request.POST.get('old')
+  new = request.POST.get('new')
+  batch_size = 20
+  if kind is None or old is None or new is None:
+    logging.warning('Missing parameters')
+    return HttpResponse()
+  if kind not in ('Issue', 'Repository', 'Branch'):
+    logging.warning('Invalid kind: %s' % kind)
+    return HttpResponse()
+  old_account = models.Account.get(db.Key(old))
+  new_account = models.Account.get(db.Key(new))
+  if old_account is None or new_account is None:
+    logging.warning('Invalid accounts')
+    return HttpResponse()
+  # make sure that accounts match
+  if old_account.user.user_id() != new_account.user.user_id():
+    logging.warning('Accounts don\'t match')
+    return HttpResponse()
+  model = getattr(models, kind)
+  key = request.POST.get('key')
+  query = model.all().filter('owner =', old_account.user)
+  if key:
+    query = query.filter('__key__ >', db.Key(key))
+  query = query.order('__key__')
+  tbd = []
+  for entity in query.fetch(batch_size):
+    entity.owner = new_account.user
+    tbd.append(entity)
+  if tbd:
+    db.put(tbd)
+    taskqueue.add(url=reverse(task_migrate_entities),
+                  params={'kind': kind, 'old': old, 'new': new,
+                          'key': str(tbd[-1].key())})
+  return HttpResponse()
 
 
 @user_key_required
