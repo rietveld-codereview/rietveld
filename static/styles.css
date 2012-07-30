@@ -751,7 +751,7 @@ span.visualtab {
   margin-bottom: .8em;
 }
 
-/* Approved messages have light green header background and dark green border */
+/* Approval messages have light green header background and dark green border */
 .message.approval .header {
   background-color: #7FFF7F;
   border-color: green;
@@ -759,6 +759,16 @@ span.visualtab {
 .message.approval .message-body,
 .message.approval .message-actions {
   border-color: green;
+}
+
+/* Disapproval messages have light red header background and red border */
+.message.disapproval .header {
+  background-color: #FFAAAA;
+  border-color: red;
+}
+.message.disapproval .message-body,
+.message.disapproval .message-actions {
+  border-color: red;
 }
 
 .message.referenced .header {
