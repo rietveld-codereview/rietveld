@@ -118,7 +118,7 @@
     </div>
 
     {%for message in messages%}
-      <div class="message {%if message.approval%}approval{%endif%}"
+      <div class="message {%if message.approval%}approval{%endif%} {%if message.disapproval%}disapproval{%endif%}"
            id="msg{{forloop.counter}}"
            name="{{forloop.counter0}}">
         <div class="header">

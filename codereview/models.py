@@ -204,18 +204,29 @@ class Message(db.Model):
   in_reply_to = db.SelfReferenceProperty()
 
   _approval = None
+  _disapproval = None
+
+  def find(self, text):
+    """Returns True when the message says text and is not written by the issue owner."""
+    # Must not be issue owner.
+    # Must contain text in a line that doesn't start with '>'.
+    return self.issue.owner.email() != self.sender and any(
+        True for line in self.text.lower().splitlines()
+        if not line.strip().startswith('>') and text in line)
 
   @property
   def approval(self):
     """Is True when the message represents an approval of the review."""
     if self._approval is None:
-      # Must contain 'lgtm' in a line that doesn't start with '>'.
-      self._approval = any(
-            True for line in self.text.lower().splitlines()
-            if not line.strip().startswith('>') and 'lgtm' in line)
-      # Must not be issue owner.
-      self._approval &= self.issue.owner.email() != self.sender
+      self._approval = self.find('lgtm') and not self.find('not lgtm')
     return self._approval
+
+  @property
+  def disapproval(self):
+    """Is True when the message represents a disapproval of the review."""
+    if self._disapproval is None:
+      self._disapproval = self.find('not lgtm')
+    return self._disapproval
 
 
 class Content(db.Model):
