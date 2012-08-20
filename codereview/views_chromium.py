@@ -47,10 +47,16 @@ from codereview.views import respond, reverse, xsrf_required
 
 
 class EditFlagsForm(forms.Form):
-
   last_patchset = forms.IntegerField(widget=forms.HiddenInput())
   commit = forms.BooleanField(required=False)
   builders = forms.CharField(max_length=255, required=False)
+
+
+class TryPatchSetForm(forms.Form):
+  reason = forms.CharField(max_length=255)
+  revision = forms.CharField(max_length=40)
+  clobber = forms.BooleanField(required=False)
+  builders = forms.CharField(max_length=16*1024)
 
 
 ### Utility functions ###
@@ -165,14 +171,16 @@ def handle_build_started(base_url, timestamp, packet, payload):
   build = payload['build']
   # results should always be absent.
   result = build.get('results', [-1])
-  return inner_handle(base_url, timestamp, packet, result, build['properties'])
+  return inner_handle(build['reason'], base_url, timestamp, packet, result,
+                      build['properties'])
 
 
 def handle_build_finished(base_url, timestamp, packet, payload):
   build = payload['build']
   # results is omitted if success so insert it manually.
   result = build.get('results', [models.TryJobResult.SUCCESS])
-  return inner_handle(base_url, timestamp, packet, result, build['properties'])
+  return inner_handle(build['reason'], base_url, timestamp, packet, result,
+                      build['properties'])
 
 
 def handle_step_finished(base_url, timestamp, packet, payload):
@@ -181,10 +189,10 @@ def handle_step_finished(base_url, timestamp, packet, payload):
     # We don't want to mark the try job as success before it's completed!
     result = -1
   return inner_handle(
-      base_url, timestamp, packet, result, payload['properties'])
+      '', base_url, timestamp, packet, result, payload['properties'])
 
 
-def inner_handle(base_url, timestamp, packet, result, properties):
+def inner_handle(reason, base_url, timestamp, packet, result, properties):
   """Handles one event coming from HttpStatusPush and update the relevant
   TryJobResult object.
 
@@ -204,7 +212,7 @@ def inner_handle(base_url, timestamp, packet, result, properties):
     buildnumber = int(properties['buildnumber'])
     slavename = properties['slavename']
     # The try job key property will only be present for try jobs started from
-    # rietveld itself.
+    # rietveld itself, either from the webui or from the try_patchset endpoint.
     try_job_key = properties.get('try_job_key')
 
     # Keep them last.
@@ -246,17 +254,16 @@ def inner_handle(base_url, timestamp, packet, result, properties):
     if try_obj is None:
       try_obj = models.TryJobResult(
           parent=patchset_key,
+          reason=reason,
           url=url,
           result=result,
           builder=buildername,
           slave=slavename,
           buildnumber=buildnumber,
           revision=revision,
-          # TODO(maruel): Missing data.
-          reason='',
           project=project,
-          timestamp=timestamp,
-          )
+          clobber=bool(properties.get('clobber')),
+          tests=properties.get('testfilter'))
       logging.info('Creating instance %s' % keyname)
     else:
       # Update result only if relevant.
@@ -281,8 +288,7 @@ def inner_handle(base_url, timestamp, packet, result, properties):
       try_obj.slave = slavename
       try_obj.buildnumber = buildnumber
       logging.info(
-          'Updated %s-%s-%s-%s: %s' % (
-            issue, patchset, buildername, buildnumber, try_obj.result))
+          'Updated %s: %s' % (keyname, try_obj.result))
     try_obj.put()
     return True
   if not db.run_in_transaction(tx_try_job_result):
@@ -322,15 +328,24 @@ def process_status_push(packets_json, base_url):
 
 ### View handlers ###
 
+def _get_try_pending_jobs(patchset):
+  """Returns a dictionary containing the pending try jobs the patchset.
+
+  Args:
+    patchset: An instance of models.PatchSet to get the pending jobs from.
+
+  Returns:
+    A dictionary of pending try jobs, where the key is the name of the builder
+    and the value is the TryJobResult instance itself.
+  """
+  return dict((job.builder, job)
+              for job in models.TryJobResult.all().ancestor(patchset).filter(
+              'result =', models.TryJobResult.TRYPENDING))
+
 @issue_editor_required
 @xsrf_required
 def edit_flags(request):
   """/<issue>/edit_flags - Edit issue's flags."""
-  def get_try_pending_jobs(last_patchset):
-    return dict((job.builder, job)
-                for job in models.TryJobResult.all().ancestor(last_patchset)
-                if job.result == models.TryJobResult.TRYPENDING)
-
   last_patchset = models.PatchSet.all().ancestor(
       request.issue).order('-created').get()
   if not last_patchset:
@@ -338,7 +353,7 @@ def edit_flags(request):
         content_type='text/plain')
 
   if request.method == 'GET':
-    existing_builders = get_try_pending_jobs(last_patchset)
+    existing_builders = _get_try_pending_jobs(last_patchset)
     initial_builders = (', '.join(existing_builders.iterkeys()) or
                         'win, mac, linux')
 
@@ -370,7 +385,7 @@ def edit_flags(request):
 
       new_builders = filter(None, map(unicode.strip,
                                       form.cleaned_data['builders'].split(',')))
-      existing_builders = get_try_pending_jobs(last_patchset)
+      existing_builders = _get_try_pending_jobs(last_patchset)
 
       # Figure out which builders we need to remove.  Only remove any that are
       # still pending.
@@ -382,16 +397,11 @@ def edit_flags(request):
       for builder in new_builders:
         if builder not in existing_builders:
           try_job = models.TryJobResult(parent=last_patchset,
+                                        reason='',
                                         result=models.TryJobResult.TRYPENDING,
                                         builder=builder,
-                                        # The following later will be set
-                                        url='',
-                                        slave='',
-                                        buildnumber=0,
-                                        reason='',
                                         revision='',
-                                        project='',
-                                        timestamp=datetime.datetime.now())
+                                        clobber=False)
           jobs_to_save.append(try_job)
 
       # Commit everything.
@@ -556,6 +566,62 @@ def update_default_builders(request):
 
   return HttpResponse(content, content_type='text/plain')
 
+
+@post_required
+@xsrf_required
+@patchset_required
+def try_patchset(request):
+  """/<issue>/try/<patchset> - Add a try job for the given patchset."""
+  # Only allow trying the last patchset of an issue.
+  last_patchset_key = models.PatchSet.all(keys_only=True).ancestor(
+      request.issue).order('-created').get()
+  if last_patchset_key != request.patchset.key():
+    content = (
+        'Patchset %d/%d invalid: Can only try the last patchset of an issue.' %
+        (request.issue.key().id(), request.patchset.key().id()))
+    logging.info(content)
+    return HttpResponseBadRequest(content, content_type='text/plain')
+
+  form = TryPatchSetForm(request.POST)
+  if not form.is_valid():
+    return HttpResponseBadRequest('Invalid POST arguments',
+                                  content_type='text/plain')
+  reason = form.cleaned_data['reason']
+  revision = form.cleaned_data['revision']
+  clobber = form.cleaned_data['clobber']
+
+  try:
+    builders = json.loads(form.cleaned_data['builders'])
+  except json.JSONDecodeError:
+    content = 'Invalid builder spec: ' + form.cleaned_data['builders']
+    logging.info(content)
+    return HttpResponseBadRequest(content, content_type='text/plain')
+
+  def txn():
+    # Get list of existing pending try jobs for this patchset.  Don't create
+    # duplicates here.
+    patchset = models.PatchSet.get(last_patchset_key)
+    pending_jobs = _get_try_pending_jobs(patchset)
+
+    jobs_to_save = []
+    for builder, tests in builders.iteritems():
+      if builder not in pending_jobs:
+        try_job = models.TryJobResult(parent=patchset,
+                                      result=models.TryJobResult.TRYPENDING,
+                                      builder=builder,
+                                      revision=revision,
+                                      clobber=clobber,
+                                      tests=tests,
+                                      reason=reason)
+        jobs_to_save.append(try_job)
+
+    if jobs_to_save:
+      db.put(jobs_to_save)
+    return len(jobs_to_save)
+  count = db.run_in_transaction(txn)
+  content = 'Started %d jobs.' % count
+
+  return HttpResponse(content, content_type='text/plain')
 
 @views.json_response
 def get_pending_try_patchsets(request):
