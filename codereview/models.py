@@ -191,7 +191,9 @@ class TryJobResult(db.Model):
   buildnumber = db.IntegerProperty()
   reason = db.StringProperty()
   revision = db.StringProperty()
-  timestamp = db.DateTimeProperty()
+  timestamp = db.DateTimeProperty(auto_now_add=True)
+  clobber = db.BooleanProperty()
+  tests = db.StringListProperty(default=[])
   # Should be an entity.
   project = db.StringProperty()
 
