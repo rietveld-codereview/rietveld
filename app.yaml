@@ -38,6 +38,10 @@ handlers:
   script: main.application
   login: admin
 
+- url: /tasks/migrate_entities
+  script: main.application
+  login: admin
+
 - url: /.*
   script: main.application
 #  secure: always

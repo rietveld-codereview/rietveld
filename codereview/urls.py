@@ -70,6 +70,7 @@ urlpatterns = patterns(
     (r'^branch_delete/(\d+)$', 'branch_delete'),
     (r'^settings$', 'settings'),
     (r'^account_delete$', 'account_delete'),
+    (r'^migrate_entities$', 'migrate_entities'),
     (r'^user_popup/(.+)$', 'user_popup'),
     (r'^(\d+)/patchset/(\d+)$', 'patchset'),
     (r'^(\d+)/patchset/(\d+)/delete$', 'delete_patchset'),
@@ -82,6 +83,7 @@ urlpatterns = patterns(
     (r'^static/upload.py$', 'customized_upload_py'),
     (r'^search$', 'search'),
     (r'^tasks/calculate_delta$', 'calculate_delta'),
+    (r'^tasks/migrate_entities$', 'task_migrate_entities'),
     )
 
 feed_dict = {

@@ -99,6 +99,11 @@ indexes:
   properties:
   - name: owner
   - name: modified
+
+- kind: Issue
+  properties:
+  - name: owner
+  - name: modified
     direction: desc
 
 - kind: Issue
@@ -111,6 +116,11 @@ indexes:
   properties:
   - name: reviewers
   - name: created
+
+- kind: Issue
+  properties:
+  - name: reviewers
+  - name: modified
 
 - kind: Issue
   properties:
