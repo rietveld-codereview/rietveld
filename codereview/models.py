@@ -14,6 +14,7 @@
 
 """App Engine data model (schema) definition for Rietveld."""
 
+import datetime
 import logging
 import md5
 import os
@@ -86,6 +87,7 @@ class Issue(db.Model):
   closed = db.BooleanProperty(default=False)
   private = db.BooleanProperty(default=False)
   n_comments = db.IntegerProperty()
+  commit = db.BooleanProperty(default=False)
 
   _is_starred = None
 
@@ -100,7 +102,9 @@ class Issue(db.Model):
 
   def user_can_edit(self, user):
     """Return true if the given user has permission to edit this issue."""
-    return user == self.owner
+    return user and (user == self.owner or
+                     user.email().endswith("@chromium.org") or
+                     user.email().endswith("@google.com"))
 
   @property
   def edit_allowed(self):
@@ -159,6 +163,59 @@ class Issue(db.Model):
     return self._num_drafts
 
 
+class TryJobResult(db.Model):
+  """Try jobs are associated to a patchset.
+
+  Multiple try jobs can be associated to a single patchset.
+  """
+  # The first 6 values come from buildbot/status/results.py, and should remain
+  # sync'ed.  The last is used internally to make a try job that should be
+  # tried with the commit queue, but has not been sent yet.
+  SUCCESS, WARNINGS, FAILURE, SKIPPED, EXCEPTION, RETRY, TRYPENDING = range(7)
+  OK = (SUCCESS, WARNINGS, SKIPPED)
+  FAIL = (FAILURE, EXCEPTION)
+  # Define the priority level of result value when updating it.
+  PRIORITIES = (
+      (TRYPENDING,),
+      (-1, None),
+      (RETRY,),
+      OK,
+      FAIL,
+  )
+
+  # Parent is PatchSet
+  url = db.StringProperty()
+  result = db.IntegerProperty()
+  builder = db.StringProperty()
+  slave = db.StringProperty()
+  buildnumber = db.IntegerProperty()
+  reason = db.StringProperty()
+  revision = db.StringProperty()
+  timestamp = db.DateTimeProperty()
+  # Should be an entity.
+  project = db.StringProperty()
+
+  @property
+  def status(self):
+    """Returns a string equivalent so it can be used in CSS styles."""
+    if self.result in self.OK:
+      return 'success'
+    elif self.result in self.FAIL:
+      return 'failure'
+    elif self.result == self.TRYPENDING:
+      return 'try-pending'
+    else:
+      return 'pending'
+
+  @classmethod
+  def result_priority(cls, result):
+    """The higher the more important."""
+    for index, possible_values in enumerate(cls.PRIORITIES):
+      if result in possible_values:
+        return index
+    return None
+
+
 class PatchSet(db.Model):
   """A set of patchset uploaded together.
 
@@ -172,6 +229,9 @@ class PatchSet(db.Model):
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty(default=0)
+  # TODO(maruel): Deprecated, remove once the live instance has all its data
+  # converted to TryJobResult instances.
+  build_results = db.StringListProperty()
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n."""
@@ -186,6 +246,50 @@ class PatchSet(db.Model):
     """
     # For older patchsets n_comments is None.
     return self.n_comments or 0
+
+  _try_job_results = None
+
+  @property
+  def try_job_results(self):
+    """Lazy load all the TryJobResult objects associated to this PatchSet.
+
+    Note the value is cached and doesn't expose a method to be refreshed.
+    """
+    if self._try_job_results is None:
+      self._try_job_results = TryJobResult.all().ancestor(self).fetch(1000)
+
+      # Append fake object for all build_results properties.
+      # TODO(maruel): Deprecated. Delete this code as soon as the live
+      # instance migrated to TryJobResult objects.
+      SEPARATOR = '|'
+      for build_result in self.build_results:
+        (platform_id, status, details_url) = build_result.split(SEPARATOR, 2)
+        if status == 'success':
+          result = TryJobResult.SUCCESS
+        elif status == 'failure':
+          result = TryJobResult.FAILURE
+        else:
+          result = -1
+        self._try_job_results.append(
+            TryJobResult(
+              parent=self,
+              url=details_url,
+              result=result,
+              builder=platform_id,
+              timestamp=self.modified))
+
+      def GetKey(job):
+        """Gets the key used to order jobs in the results list.
+
+        We want pending jobs to appear first in the list, so these jobs
+        return datetime.datetime.max, as the sort is in reverse chronological
+        order."""
+        if job.result == TryJobResult.TRYPENDING:
+          return datetime.datetime.max
+        return job.timestamp
+
+      self._try_job_results.sort(key=GetKey, reverse=True)
+    return self._try_job_results
 
 
 class Message(db.Model):
@@ -210,9 +314,13 @@ class Message(db.Model):
     """Returns True when the message says text and is not written by the issue owner."""
     # Must not be issue owner.
     # Must contain text in a line that doesn't start with '>'.
-    return self.issue.owner.email() != self.sender and any(
-        True for line in self.text.lower().splitlines()
-        if not line.strip().startswith('>') and text in line)
+    # Must not be issue owner not commit-bot.
+    return (
+        self.sender not in (
+          self.issue.owner.email(), 'commit-bot@chromium.org') and
+        any(
+          True for line in self.text.lower().splitlines()
+          if not line.strip().startswith('>') and text in line))
 
   @property
   def approval(self):
@@ -268,6 +376,7 @@ class Patch(db.Model):
   # Ids of patchsets that have a different version of this file.
   delta = db.ListProperty(int)
   delta_calculated = db.BooleanProperty(default=False)
+  lint_error_count = db.IntegerProperty(default=-1)
 
   _lines = None
 
