@@ -21,7 +21,7 @@ from google.appengine.runtime import apiproxy_errors
 from google.appengine.runtime import DeadlineExceededError
 
 from django.conf import settings
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect
 from django.template import Context, loader
 
 from codereview import models
@@ -81,3 +81,44 @@ class PropagateExceptionMiddleware(object):
       content = tpl.render(ctx)
       content_type = 'text/html'
     return HttpResponse(content, status=status, content_type=content_type)
+
+
+class RedirectChromiumToAppspotMiddleware(object):
+  """Redirect codereview.chromium.org to https://chromiumcodereview.appspot.com.
+  """
+  def process_view(self, request, view_func, view_args, view_kwargs):
+    if request.method == 'POST':
+      # For example, when GAE sends a request to /_ah/xmpp/message/error/, it
+      # doesn't follow HTTP 301 redirect.
+      logging.warn('POST post redirect would discard payload data')
+      return
+    # Discard the port number.
+    if request.get_host().split(':')[0] == 'codereview.chromium.org':
+      return HttpResponsePermanentRedirect(
+          'https://chromiumcodereview.appspot.com' + request.get_full_path())
+
+
+class RedirectDotVersionMiddleware(object):
+  """Work around the -dot- version problem with HTTPS-SNI certificate."""
+  def process_request(self, request):
+    if request.method == 'POST':
+      return
+    host = request.get_host().split(':')[0]
+    parts = host.split('.')
+    if (len(parts) > 3 and
+        parts[-1] == 'com' and
+        parts[-2] in ('appspot', 'googleplex')):
+      host = '-dot-'.join(parts[:-3] + ['.'.join(parts[-3:])])
+      return HttpResponsePermanentRedirect(
+          'https://%s%s' % (host, request.get_full_path()))
+
+
+class RedirectToHTTPSMiddleware(object):
+  """Redirect HTTP requests to the equivalent HTTPS resource."""
+  def process_request(self, request):
+    if request.method == 'POST':
+      return
+    if not request.is_secure():
+      host = request.get_host().split(':')[0]
+      return HttpResponsePermanentRedirect(
+          'https://%s%s' % (host, request.get_full_path()))
