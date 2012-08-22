@@ -625,7 +625,7 @@ def _clean_int(value, default, min_value=None, max_value=None):
   return value
 
 
-def is_admin(user):
+def is_admin(user_email):
   """Returns True if the specified user is an admin.
   
   Args:
