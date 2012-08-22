@@ -86,7 +86,7 @@ class PropagateExceptionMiddleware(object):
 class RedirectChromiumToAppspotMiddleware(object):
   """Redirect codereview.chromium.org to https://chromiumcodereview.appspot.com.
   """
-  def process_view(self, request, view_func, view_args, view_kwargs):
+  def process_request(self, request):
     if request.method == 'POST':
       # For example, when GAE sends a request to /_ah/xmpp/message/error/, it
       # doesn't follow HTTP 301 redirect.
