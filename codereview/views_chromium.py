@@ -639,11 +639,13 @@ def get_pending_try_patchsets(request):
     # The job description is the basically the job itself with some extra
     # data from the patchset and issue.
     description = job.to_dict()
-    description['issue'] = issue.key().id()
-    description['patchset'] = patchset.key().id()
-    description['name'] = owner.nickname()
-    description['user'] = owner.email()
+    description['name'] = '%d-%d: %s' % (issue.key().id(), patchset.key().id(),
+                                         patchset.message)
+    description['user'] = owner.nickname()
+    description['email'] = owner.email()
     description['root'] = 'src'  # TODO(rogerta): figure out how to get it
+    description['patchset'] = patchset.key().id()
+    description['issue'] = issue.key().id()
     return description
 
   q = models.TryJobResult.all().filter(
