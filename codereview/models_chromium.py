@@ -98,11 +98,11 @@ class DefaultBuilderList(db.Model):
       A list of strings where each string is the name of one builder.  The
       names are sorted alphabetically.
     """
-    builders = memcache.get(cls._DEFAULT_BUILDER_MEMCACHE_KEY + name)
+    key = cls._DEFAULT_BUILDER_MEMCACHE_KEY + name
+    builders = memcache.get(key)
     if builders is None:
       builders = cls._get_instance(name).default_builders
-      memcache.set(cls._DEFAULT_BUILDER_MEMCACHE_KEY, builders,
-                   cls._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS)
+      memcache.set(key, builders, cls._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS)
     return builders
 
   @classmethod
