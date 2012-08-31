@@ -1,0 +1,33 @@
+{%extends "issue_base.html"%}
+
+{%block body%}
+<h1>Tired of uploading files through the form?</h1>
+<p>Download <a href="{%url codereview.views.customized_upload_py%}">upload.py</a>, a simple tool for
+uploading diffs from a version control system to the codereview app.</p>
+
+<p><strong>Usage summary:</strong>
+<pre>upload.py [options] [-- diff_options]</pre></p>
+
+<p>Diff options are passed to the diff command of the underlying system.</p>
+
+<p><strong>Supported version control systems:</strong></p>
+<ul>
+  <li>Subversion</li>
+  <li>Git</li>
+  <li>Mercurial</li>
+</ul>
+
+<p><a href="http://code.google.com/p/rietveld/wiki/UploadPyUsage"
+      target="_blank">Read more</a> about this script.</p>
+
+<div style="margin-top: 1.5em;">
+<form method="POST" action="{%url codereview.views.use_uploadpy%}">
+  <p>
+  <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+  <input name="disable_msg" value="1" id="disable_msg" type="checkbox" />
+  <label for="disable_msg">Don't show this message again</label></p>
+  <input type="submit" name="download" value="Download upload.py" />
+  <input type="submit" name="create" value="Go to the Create Issue Form" />
+</form>
+</div>
+{%endblock%}
