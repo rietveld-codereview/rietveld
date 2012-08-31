@@ -538,7 +538,7 @@ function M_editFlags(issue) {
  * @param {String} patchset The patchset key.
  */
 function M_editPendingTryJobs(patchset) {
-  var rootElement = document.getElementById('#tryjobdiv-' + patchset);
+  var rootElement = document.getElementById('tryjobdiv-' + patchset);
 
   // find existing pending try jobs.
   var existingJobs = {};
@@ -571,9 +571,23 @@ function M_editPendingTryJobs(patchset) {
   var offset = alink.offset();
   offset.top += alink.height() + 1 - window.pageYOffset;
 
-  popup.css('left', offset.left);
   popup.css('top', offset.top);
+  popup.css('left', offset.left);
   popup.css('display', '');
+  
+  // If the popup would show off-screen, move it.
+  var bottomOfPopup = offset.top + popup.innerHeight(); 
+  var bottomOfWindow = window.innerHeight; 
+  if (bottomOfPopup > bottomOfWindow) {
+    // Move the popup to the left if it would be offset to the right.  This
+    // readjusts the height of the popup though, so calculate it again.
+    if (offset.left > (window.innerWidth / 2))
+      popup.css('left', window.innerWidth / 3);
+    
+    bottomOfPopup = offset.top + popup.innerHeight(); 
+    if (bottomOfPopup > bottomOfWindow)
+      popup.css('top', offset.top - bottomOfPopup + bottomOfWindow - 5);
+  }
 }
 
 /**

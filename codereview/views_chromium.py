@@ -326,6 +326,36 @@ def process_status_push(packets_json, base_url):
     logging.info('Processed %d packets' % done)
 
 
+def _is_job_valid(job):
+  """Determines if a pending try job result is valid or not.
+
+  Pending try job results are those with result is set to
+  models.TryJobResult.TRYPENDING.  These jobs are invalid if:
+
+  - their associated issue is already committed, and
+  - their associated PatchSet is no longer the latest in the issue.
+
+  Args:
+    job: an instance of models.TryJobResult.
+
+  Returns:
+    True if the pending try job is invalid, False otherwise.
+  """
+  if job.result == models.TryJobResult.TRYPENDING:
+    patchset = job.parent()
+    issue = patchset.issue
+
+    if issue.commit:
+      return False
+
+    last_patchset_key = models.PatchSet.all(keys_only=True).ancestor(
+        issue).order('-created').get()
+    if last_patchset_key != patchset.key():
+      return False
+
+  return True
+
+
 ### View handlers ###
 
 def _get_try_pending_jobs(patchset):
@@ -567,6 +597,27 @@ def update_default_builders(request):
   return HttpResponse(content, content_type='text/plain')
 
 
+def delete_old_pending_jobs(request):
+  """/restricted/delete_old_pending_jobs - Deletes old pending jobs.
+
+  We will only delete invalid pending try jobs older than a week.
+  """
+  one_week_ago = datetime.datetime.now() - datetime.timedelta(days=7)
+  count = 0
+
+  q = models.TryJobResult.all().filter(
+      'result =', models.TryJobResult.TRYPENDING).order('timestamp')
+  for job in q:
+    if not _is_job_valid(job):
+      # If job is older than a week, get rid of it.
+      if job.timestamp < one_week_ago:
+        job.delete()
+        count += 1
+
+  return HttpResponse('%d pending jobs purged' % count,
+                      content_type='text/plain')
+
+
 @post_required
 @xsrf_required
 @patchset_required
@@ -653,5 +704,6 @@ def get_pending_try_patchsets(request):
   if cursor:
     q.with_cursor(cursor)
 
-  jobs = [MakeJobDescription(job) for job in q.fetch(limit)]
+  jobs = [MakeJobDescription(job) for job in q.fetch(limit)
+          if _is_job_valid(job)]
   return {'cursor': q.cursor(), 'jobs': jobs}

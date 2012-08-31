@@ -112,4 +112,5 @@ urlpatterns += patterns(
     (r'^status_listener$', 'status_listener'),
     (r'^get_pending_try_patchsets$', 'get_pending_try_patchsets'),
     (r'^restricted/update_default_builders', 'update_default_builders'),
+    (r'^restricted/delete_old_pending_jobs', 'delete_old_pending_jobs'),
     )
