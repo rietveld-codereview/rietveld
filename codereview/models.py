@@ -196,6 +196,9 @@ class TryJobResult(db.Model):
   tests = db.StringListProperty(default=[])
   # Should be an entity.
   project = db.StringProperty()
+  # The user that requested this try job, which may not be the same person
+  # that owns the issue.
+  requester = db.UserProperty(auto_current_user_add=True)
 
   @property
   def status(self):
