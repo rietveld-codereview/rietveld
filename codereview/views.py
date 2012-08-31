@@ -27,6 +27,7 @@ import random
 import re
 import urllib
 from cStringIO import StringIO
+from email.header import decode_header
 from xml.etree import ElementTree
 
 from google.appengine.api import mail
@@ -3908,6 +3909,9 @@ def _process_incoming_mail(raw_message, recipients):
     raise InvalidIncomingEmailError('Mail sent by App Engine')
 
   subject = incoming_msg.subject or ''
+  decoded_subject = decode_header(subject)
+  if decoded_subject[0][1]:
+    subject = decoded_subject[0][0].decode(decoded_subject[0][1])
   match = re.search(r'\(issue *(?P<id>\d+)\)$', subject)
   if match is None:
     raise InvalidIncomingEmailError('No issue id found: %s', subject)
