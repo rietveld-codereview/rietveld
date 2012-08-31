@@ -1,0 +1,69 @@
+Bugs
+----
+
+If a user never logs in, someone else can grab their nickname
+See the issue tracker at code.google.com/p/rietveld for more bugs
+
+Data Cleaning
+-------------
+
+Email addresses should be lowercased before comparing
+Nicknames too???
+Nicknames should not be allowed to contain multiple internal spaces
+    nor internal whitespace other than space
+
+Issues
+------
+
+Archive issues (that's per user rather than per issue)
+
+Patch Sets
+----------
+
+Edit patch set message
+Delete patch sets
+
+Repositories and Branches
+-------------------------
+
+Get rid of the repository feature in favor of always using upload.py?
+Edit/Delete Repository?
+Automatically add Repository entries when a new project uploads stuff?
+
+Searching, Organizing
+---------------------
+
+View all open issues by base, or by repository
+View all closed issues (issue 15 in the tracker)
+
+Commenting
+----------
+
+Add stars
+Add non-inline comments per file, per patchset
+
+Diffs and Patches
+-----------------
+
+Deprecate the upload form (and repositories) and do it all with upload.py
+Improve UI for selecting patch set deltas; handle missing files better
+Make delta calculation a background task when uploading patch sets.
+Syntax colorization
+Record revision and show in UI; indicate action (add/edit/delete)
+Handle binary files?!  (Progress: fewer crashes related to binary files)
+Add line length option
+Support more diff formats  (Better: let upload.py normlize these)
+Need a more powerful way to specify the URL for finding a revision (?)
+
+User Experience
+---------------
+
+Make Edit Issue show the form inline instead of opening a new page?
+Fields "SVN Base" and "Base" have hard-to-guess names
+Better UI for adding branches?  (Low priority now we have upload.py)
+Right-justify the "Id" and "Drafts (mine)" headings in the Issues list table
+
+Software Engineering
+--------------------
+
+Unittests
