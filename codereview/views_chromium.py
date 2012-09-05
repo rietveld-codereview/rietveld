@@ -54,7 +54,7 @@ class EditFlagsForm(forms.Form):
 
 class TryPatchSetForm(forms.Form):
   reason = forms.CharField(max_length=255)
-  revision = forms.CharField(max_length=40)
+  revision = forms.CharField(max_length=40, required=False)
   clobber = forms.BooleanField(required=False)
   builders = forms.CharField(max_length=16*1024)
 
@@ -94,13 +94,16 @@ def binary_required(func):
 
   @patch_required
   def binary_wrapper(request, content_type, *args, **kwds):
-    content = None
     if content_type == "0":
       content = request.patch.content
     elif content_type == "1":
       content = request.patch.patched_content
-    # Other values are erroneous so request.content won't be set.
-    if not content or not content.data:
+      if not content or not content.data:
+        # The file was not modified. It was likely moved without modification.
+        # Return the original file.
+        content = request.patch.content
+    else:
+      # Other values are erroneous so request.content won't be set.
       return views.HttpTextResponse(
           'Invalid content type: %s, expected 0 or 1' % content_type,
           status=404)
@@ -171,16 +174,18 @@ def handle_build_started(base_url, timestamp, packet, payload):
   build = payload['build']
   # results should always be absent.
   result = build.get('results', [-1])
-  return inner_handle(build['reason'], base_url, timestamp, packet, result,
-                      build['properties'])
+  return inner_handle(
+      build.get('reason', ''), base_url, timestamp, packet, result,
+      build.get('properties', []))
 
 
 def handle_build_finished(base_url, timestamp, packet, payload):
   build = payload['build']
   # results is omitted if success so insert it manually.
   result = build.get('results', [models.TryJobResult.SUCCESS])
-  return inner_handle(build['reason'], base_url, timestamp, packet, result,
-                      build['properties'])
+  return inner_handle(
+      build.get('reason', ''), base_url, timestamp, packet, result,
+      build.get('properties', []))
 
 
 def handle_step_finished(base_url, timestamp, packet, payload):
@@ -249,8 +254,11 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
           ).filter('builder =', buildername
           ).filter('buildnumber =', buildnumber).get()
 
-    url = '%sbuildstatus?builder=%s&number=%s' % (
-        base_url, buildername, buildnumber)
+    if buildername and buildnumber >= 0:
+      url = '%sbuildstatus?builder=%s&number=%s' % (
+          base_url, buildername, buildnumber)
+    else:
+      url = ''
     if try_obj is None:
       try_obj = models.TryJobResult(
           parent=patchset_key,
@@ -621,6 +629,7 @@ def delete_old_pending_jobs(request):
 @post_required
 @xsrf_required
 @patchset_required
+@views.json_response
 def try_patchset(request):
   """/<issue>/try/<patchset> - Add a try job for the given patchset."""
   # Only allow trying the last patchset of an issue.
@@ -644,15 +653,25 @@ def try_patchset(request):
   try:
     builders = json.loads(form.cleaned_data['builders'])
   except json.JSONDecodeError:
-    content = 'Invalid builder spec: ' + form.cleaned_data['builders']
-    logging.info(content)
+    content = 'Invalid json for builder spec: ' + form.cleaned_data['builders']
+    logging.error(content)
     return HttpResponseBadRequest(content, content_type='text/plain')
+
+  if not isinstance(builders, dict):
+    content = 'Invalid builder spec: ' + form.cleaned_data['builders']
+    logging.error(content)
+    return HttpResponseBadRequest(content, content_type='text/plain')
+
+  logging.debug(
+      'clobber=%s\nrevision=%s\nreason=%s\nbuilders=%s',
+      clobber, revision, reason, builders)
 
   def txn():
     # Get list of existing pending try jobs for this patchset.  Don't create
     # duplicates here.
     patchset = models.PatchSet.get(last_patchset_key)
     pending_jobs = _get_try_pending_jobs(patchset)
+    logging.debug('Pending builders: %s', pending_jobs.keys())
 
     jobs_to_save = []
     for builder, tests in builders.iteritems():
@@ -665,14 +684,18 @@ def try_patchset(request):
                                       tests=tests,
                                       reason=reason)
         jobs_to_save.append(try_job)
+      else:
+        logging.warn('Skipping %s', builder)
 
     if jobs_to_save:
       db.put(jobs_to_save)
-    return len(jobs_to_save)
-  count = db.run_in_transaction(txn)
-  content = 'Started %d jobs.' % count
-
-  return HttpResponse(content, content_type='text/plain')
+    return dict((j.builder, j.key().id()) for j in jobs_to_save)
+  job_saved = db.run_in_transaction(txn)
+  content = 'Started %d jobs.' % len(job_saved)
+  logging.info('%s\n%s', content, job_saved)
+  return {
+    'jobs': job_saved,
+  }
 
 @views.json_response
 def get_pending_try_patchsets(request):
