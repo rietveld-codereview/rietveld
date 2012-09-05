@@ -20,6 +20,7 @@ import sys
 
 from google.appengine.api import memcache
 from google.appengine.api import urlfetch
+from google.appengine.api import users
 from google.appengine.ext import db
 
 
@@ -40,7 +41,16 @@ def to_dict(self):
 
   Useful for json serialization.
   """
-  result = dict([(p, unicode(getattr(self, p))) for p in self.properties()])
+  def convert(item):
+    if isinstance(item, (int, float, None.__class__, bool)):
+      return item
+    elif isinstance(item, (list, tuple)):
+      return [convert(i) for i in item]
+    elif isinstance(item, users.User):
+      return item.email()
+    else:
+      return unicode(item)
+  result = dict([(p, convert(getattr(self, p))) for p in self.properties()])
   try:
     result['key'] = str(self.key())
   except db.NotSavedError:
