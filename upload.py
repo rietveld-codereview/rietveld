@@ -181,7 +181,7 @@ class AbstractRpcServer(object):
 
   def __init__(self, host, auth_function, host_override=None, extra_headers={},
                save_cookies=False, account_type=AUTH_ACCOUNT_TYPE):
-    """Creates a new HttpRpcServer.
+    """Creates a new AbstractRpcServer.
 
     Args:
       host: The host to send requests to.
@@ -602,6 +602,48 @@ group.add_option("--p4_user", action="store", dest="p4_user",
                  metavar="P4_USER", default=None,
                  help=("Perforce user"))
 
+
+class KeyringCreds(object):
+  def __init__(self, server, host, email):
+    self.server = server
+    self.host = host
+    self.email = email
+    self.accounts_seen = set()
+
+  def GetUserCredentials(self):
+    """Prompts the user for a username and password.
+
+    Only use keyring on the initial call. If the keyring contains the wrong
+    password, we want to give the user a chance to enter another one.
+    """
+    # Create a local alias to the email variable to avoid Python's crazy
+    # scoping rules.
+    global keyring
+    email = self.email
+    if email is None:
+      email = GetEmail("Email (login for uploading to %s)" % self.server)
+    password = None
+    if keyring and not email in self.accounts_seen:
+      try:
+        password = keyring.get_password(self.host, email)
+      except:
+        # Sadly, we have to trap all errors here as
+        # gnomekeyring.IOError inherits from object. :/
+        print "Failed to get password from keyring"
+        keyring = None
+    if password is not None:
+      print "Using password from system keyring."
+      self.accounts_seen.append(email)
+    else:
+      password = getpass.getpass("Password for %s: " % email)
+      if keyring:
+        answer = raw_input("Store password in system keyring?(y/N) ").strip()
+        if answer == "y":
+          keyring.set_password(host, email, password)
+          self.accounts_seen.append(email)
+    return (email, password)
+
+
 def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
                  account_type=AUTH_ACCOUNT_TYPE):
   """Returns an instance of an AbstractRpcServer.
@@ -616,10 +658,8 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
       or 'HOSTED'. Defaults to AUTH_ACCOUNT_TYPE.
 
   Returns:
-    A new AbstractRpcServer, on which RPC calls can be made.
+    A new HttpRpcServer, on which RPC calls can be made.
   """
-
-  rpc_server_class = HttpRpcServer
 
   # If this is the dev_appserver, use fake authentication.
   host = (host_override or server).lower()
@@ -627,7 +667,7 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
     if email is None:
       email = "test@example.com"
       logging.info("Using debug user %s.  Override with --email" % email)
-    server = rpc_server_class(
+    server = HttpRpcServer(
         server,
         lambda: (email, "password"),
         host_override=host_override,
@@ -639,37 +679,10 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
     server.authenticated = True
     return server
 
-  def GetUserCredentials():
-    """Prompts the user for a username and password."""
-    # Create a local alias to the email variable to avoid Python's crazy
-    # scoping rules.
-    global keyring
-    local_email = email
-    if local_email is None:
-      local_email = GetEmail("Email (login for uploading to %s)" % server)
-    password = None
-    if keyring:
-      try:
-        password = keyring.get_password(host, local_email)
-      except:
-        # Sadly, we have to trap all errors here as
-        # gnomekeyring.IOError inherits from object. :/
-        print "Failed to get password from keyring"
-        keyring = None
-    if password is not None:
-      print "Using password from system keyring."
-    else:
-      password = getpass.getpass("Password for %s: " % local_email)
-      if keyring:
-        answer = raw_input("Store password in system keyring?(y/N) ").strip()
-        if answer == "y":
-          keyring.set_password(host, local_email, password)
-    return (local_email, password)
-
-  return rpc_server_class(server,
-                          GetUserCredentials,
-                          host_override=host_override,
-                          save_cookies=save_cookies)
+  return HttpRpcServer(server,
+                       KeyringCreds(server, host, email).GetUserCredentials,
+                       host_override=host_override,
+                       save_cookies=save_cookies)
 
 
 def EncodeMultipartFormData(fields, files):
