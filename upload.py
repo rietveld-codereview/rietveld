@@ -633,14 +633,14 @@ class KeyringCreds(object):
         keyring = None
     if password is not None:
       print "Using password from system keyring."
-      self.accounts_seen.append(email)
+      self.accounts_seen.add(email)
     else:
       password = getpass.getpass("Password for %s: " % email)
       if keyring:
         answer = raw_input("Store password in system keyring?(y/N) ").strip()
         if answer == "y":
           keyring.set_password(host, email, password)
-          self.accounts_seen.append(email)
+          self.accounts_seen.add(email)
     return (email, password)
 
 
