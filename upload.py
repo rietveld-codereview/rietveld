@@ -1315,21 +1315,24 @@ class GitVCS(VersionControlSystem):
     # this by overriding the environment (but there is still a problem if the
     # git config key "diff.external" is used).
     env = os.environ.copy()
-    if 'GIT_EXTERNAL_DIFF' in env: del env['GIT_EXTERNAL_DIFF']
+    if "GIT_EXTERNAL_DIFF" in env:
+      del env["GIT_EXTERNAL_DIFF"]
     # -M/-C will not print the diff for the deleted file when a file is renamed.
     # This is confusing because the original file will not be shown on the
-    # review when a file is renamed. So first get the diff of all deleted files,
-    # then the diff of everything except deleted files with rename and copy
-    # support enabled.
+    # review when a file is renamed. So, get a diff with ONLY deletes, then
+    # append a diff (with rename detection), without deletes.
     cmd = [
         "git", "diff", "--no-color", "--no-ext-diff", "--full-index",
         "--ignore-submodules",
     ]
     diff = RunShell(
-        cmd + ["--diff-filter=D"] + extra_args, env=env, silent_ok=True)
-    diff += RunShell(
-        cmd + ["--find-copies-harder", "--diff-filter=ACMRT"] + extra_args,
+        cmd + ["--no-renames", "--diff-filter=D"] + extra_args,
         env=env, silent_ok=True)
+    diff += RunShell(
+        cmd + ["--find-copies-harder", "-l100000", "--diff-filter=AMCRT"]
+            + extra_args,
+        env=env, silent_ok=True)
+
     # The CL could be only file deletion or not. So accept silent diff for both
     # commands then check for an empty diff manually.
     if not diff:
