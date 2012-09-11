@@ -639,7 +639,7 @@ class KeyringCreds(object):
       if keyring:
         answer = raw_input("Store password in system keyring?(y/N) ").strip()
         if answer == "y":
-          keyring.set_password(host, email, password)
+          keyring.set_password(self.host, email, password)
           self.accounts_seen.add(email)
     return (email, password)
 
