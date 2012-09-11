@@ -23,7 +23,7 @@ Links
 
 Mondrian video: http://www.youtube.com/watch?v=sMql3Di4Kgc
 Google App Engine: http://code.google.com/appengine/
-Live app: http://codereview.appspot.com
+Live app: http://codereview.chromium.org
 About code review: http://en.wikipedia.org/wiki/Code_review
 Django: http://djangoproject.com
 Python: http://python.org
@@ -58,7 +58,7 @@ not been hardened for security and may contain vulnerabilities."
 To deploy your own instance of the app to Google App Engine:
 
   1. Register your own application ID on the App Engine admin site.
-  2. Edit app.yaml to use this app ID instead of 'codereview-hr'.
+  2. Edit app.yaml to use this app ID instead of 'chromiumcodereview'.
   3. Upload using
 
     make update VERSION=123
@@ -74,7 +74,7 @@ http://code.google.com/p/rietveld/issues/detail?id=348).
 
 The VERSION=xxx argument sets the version; the version from the
 app.yaml is not used.  This is to support a convention used for the
-main Rietveld instance (codereview.appspot.com) whereby we never
+main Rietveld instance (codereview.chromium.org) whereby we never
 deploy to the same version twice; the version must be manually picked
 by the developer doing the deployment.  If you don't like this, just
 edit the Makefile to remove "--version $(VERSION)" and edit app.yaml
