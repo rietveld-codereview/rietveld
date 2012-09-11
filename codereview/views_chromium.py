@@ -210,6 +210,10 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
   """
   issue = None
   patchset = None
+  parent_buildername = None
+  parent_buildnumber = None
+  buildername = None
+  buildnumber = None
   try:
     properties = dict((name, value) for name, value, _ in properties)
     revision = str(properties['revision'])
@@ -221,11 +225,41 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
     try_job_key = properties.get('try_job_key')
 
     # Keep them last.
-    issue = int(properties['issue'])
-    patchset = int(properties['patchset'])
+    # The parent_XXX means that this is a build triggered from another build,
+    # for example a build that would create builds artifacts trigger another
+    # build that run test on a separate slave.
+    if (properties.get('parent_buildername') and
+        properties.get('parent_buildnumber')):
+      parent_buildnumber = int(properties['parent_buildnumber'])
+      parent_buildername = properties['parent_buildername']
+      logging.info(
+          'Dereferencing from %s/%d' % (parent_buildername, parent_buildnumber))
+    else:
+      issue = int(properties['issue'])
+      patchset = int(properties['patchset'])
     project = packet['project']
   except (KeyError, TypeError, ValueError), e:
-    logging.error('Failure when parsing properties: %s' % e)
+    logging.error(
+        'Failure when parsing properties: %s; i:%s/%s b:%s/%s' %
+        (e, issue, patchset, buildername, buildnumber))
+
+  # When parent_XXX build properties are specified, we need to grab the parent
+  # build to figure out the child build. This is not super efficient since this
+  # adds yet another datastore request.
+  if parent_buildername:
+    parent_build_key = models.TryJobResult.all(keys_only=True
+          ).filter('builder =', parent_buildername
+          ).filter('buildnumber =', parent_buildnumber).get()
+    if parent_build_key:
+      # Dereference the parent Patchset object. Luckily, this is in the key.
+      patchset_key = parent_build_key.parent()
+      patchset = patchset_key.id()
+      issue = patchset_key.parent().id()
+      logging.info('Dereferenced %d/%d' % (issue, patchset))
+      try_job_key = None
+    else:
+      logging.warn('Failed to find deferenced build')
+
   if not issue or not patchset:
     logging.error('Bad packet, no issue or patchset: %r' % properties)
     return
@@ -271,7 +305,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
           revision=revision,
           project=project,
           clobber=bool(properties.get('clobber')),
-          tests=properties.get('testfilter'))
+          tests=properties.get('testfilter', []))
       logging.info('Creating instance %s' % keyname)
     else:
       # Update result only if relevant.
