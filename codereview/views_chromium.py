@@ -353,7 +353,7 @@ def _is_job_valid(job):
     patchset = job.parent()
     issue = patchset.issue
 
-    if issue.commit:
+    if issue.closed:
       return False
 
     last_patchset_key = models.PatchSet.all(keys_only=True).ancestor(
@@ -727,6 +727,8 @@ def get_pending_try_patchsets(request):
   if cursor:
     q.with_cursor(cursor)
 
-  jobs = [MakeJobDescription(job) for job in q.fetch(limit)
-          if _is_job_valid(job)]
+  jobs = q.fetch(limit)
+  total = len(jobs)
+  jobs = [MakeJobDescription(job) for job in jobs if _is_job_valid(job)]
+  logging.info('Found %d entries, returned %d' % (total, len(jobs)))
   return {'cursor': q.cursor(), 'jobs': jobs}
