@@ -149,7 +149,9 @@ class DefaultBuilderList(db.Model):
     # builder names and the values are information about the corresponding
     # builder.  We only need the names.
     # TODO(rogerta): may want to trim this list a bit, its pretty big.
-    self.default_builders = sorted(json.loads(result.content))
+    builders = sorted(json.loads(result.content))
+    # Exclude triggered bots: these cannot succeed with a associated build
+    self.default_builders = [b for b in builders if not 'triggered' in b]
     memcache.set(self._DEFAULT_BUILDER_MEMCACHE_KEY + self.key().name(),
                  self.default_builders,
                  self._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS)
