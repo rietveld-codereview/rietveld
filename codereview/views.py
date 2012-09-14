@@ -1878,6 +1878,12 @@ def _get_patchset_info(request, patchset_id):
         for patch in patchset.patches:
           pkey = patch.key()
           patch._num_comments = sum(c.parent_key() == pkey for c in comments)
+          if request.user:
+            patch._num_my_comments = sum(
+                c.parent_key() == pkey and c.author == request.user
+                for c in comments)
+          else:
+            patch._num_my_comments = 0
           patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
           if not patch.delta_calculated:
             if attempt > 2:

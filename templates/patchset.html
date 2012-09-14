@@ -68,6 +68,9 @@
         <td style="white-space: nowrap">
           {%if patch.num_comments or patch.num_drafts%}<b>{%endif%}
             {{patch.num_comments}} comment{{patch.num_comments|pluralize}}
+            {%if patch.num_my_comments%}
+              ({{patch.num_my_comments}} by me)
+            {%endif%}
             {%if patch.num_drafts%}
             <span style="color:red">+
               {{patch.num_drafts}} draft{{patch.num_drafts|pluralize}}
