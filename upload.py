@@ -586,6 +586,12 @@ group.add_option("--vcs", action="store", dest="vcs",
 group.add_option("--emulate_svn_auto_props", action="store_true",
                  dest="emulate_svn_auto_props", default=False,
                  help=("Emulate Subversion's auto properties feature."))
+# Git-specific
+group = parser.add_option_group("Git-specific options")
+group.add_option("--git_similarity", action="store", dest="git_similarity",
+                 metavar="SIM", type="int", default=50,
+                 help=("Set the minimum similarity index for detecting renames "
+                       "and copies. See `git diff -C`. (default 50)."))
 # Perforce-specific
 group = parser.add_option_group("Perforce-specific options "
                                 "(overrides P4 environment variables)")
@@ -1329,8 +1335,8 @@ class GitVCS(VersionControlSystem):
         cmd + ["--no-renames", "--diff-filter=D"] + extra_args,
         env=env, silent_ok=True)
     diff += RunShell(
-        cmd + ["--find-copies-harder", "-l100000", "--diff-filter=AMCRT"]
-            + extra_args,
+        cmd + ["--find-copies-harder", "-l100000", "--diff-filter=AMCRT",
+               "-C%s" % self.options.git_similarity ] + extra_args,
         env=env, silent_ok=True)
 
     # The CL could be only file deletion or not. So accept silent diff for both

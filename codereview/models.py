@@ -469,6 +469,24 @@ class Patch(db.Model):
                                self).count()
     return self._num_comments
 
+  _num_my_comments = None
+
+  def num_my_comments(self):
+    """The number of non-draft comments for this patch by the logged in user.
+
+    The value is cached.
+    """
+    if self._num_my_comments is None:
+      account = Account.current_user_account
+      if account is None:
+        self._num_my_comments = 0
+      else:
+        query = gql(Comment,
+                    'WHERE patch = :1 AND draft = FALSE AND author = :2',
+                    self, account.user)
+        self._num_my_comments = query.count()
+    return self._num_my_comments
+
   _num_drafts = None
 
   @property
