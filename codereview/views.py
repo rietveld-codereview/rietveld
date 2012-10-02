@@ -417,6 +417,13 @@ class MigrateEntitiesForm(forms.Form):
     return account
 
 
+ORDER_CHOICES = (
+    '__key__',
+    'owner',
+    'created',
+    'modified',
+)
+
 class SearchForm(forms.Form):
 
   format = forms.ChoiceField(
@@ -459,6 +466,11 @@ class SearchForm(forms.Form):
   modified_before = forms.DateTimeField(required=False, label='Modified before')
   modified_after = forms.DateTimeField(
       required=False, label='Modified on or after')
+  order = forms.ChoiceField(
+      required=False, help_text='Order: Name of one of the datastore keys',
+      choices=sum(
+        ([(x, x), ('-' + x, '-' + x)] for x in ORDER_CHOICES),
+        [('', '(default)')]))
 
   def _clean_accounts(self, key):
     """Cleans up autocomplete field.
@@ -3491,19 +3503,22 @@ def search(request):
     q.filter('base = ', form.cleaned_data['base'])
 
   # Default sort by ascending key to save on indexes.
-  sorted_by = '__key__'
-  if form.cleaned_data['modified_before']:
-    q.filter('modified < ', form.cleaned_data['modified_before'])
-    sorted_by = 'modified'
-  if form.cleaned_data['modified_after']:
-    q.filter('modified >= ', form.cleaned_data['modified_after'])
-    sorted_by = 'modified'
-  if form.cleaned_data['created_before']:
-    q.filter('created < ', form.cleaned_data['created_before'])
-    sorted_by = 'created'
-  if form.cleaned_data['created_after']:
-    q.filter('created >= ', form.cleaned_data['created_after'])
-    sorted_by = 'created'
+  sorted_by = form.cleaned_data['order']
+  if not sorted_by:
+    # Calculate a default value depending on the query parameter.
+    sorted_by = '__key__'
+    if form.cleaned_data['modified_before']:
+      q.filter('modified < ', form.cleaned_data['modified_before'])
+      sorted_by = 'modified'
+    if form.cleaned_data['modified_after']:
+      q.filter('modified >= ', form.cleaned_data['modified_after'])
+      sorted_by = 'modified'
+    if form.cleaned_data['created_before']:
+      q.filter('created < ', form.cleaned_data['created_before'])
+      sorted_by = 'created'
+    if form.cleaned_data['created_after']:
+      q.filter('created >= ', form.cleaned_data['created_after'])
+      sorted_by = 'created'
 
   q.order(sorted_by)
 
