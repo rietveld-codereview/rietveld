@@ -239,7 +239,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
       patchset = int(properties['patchset'])
     project = packet['project']
   except (KeyError, TypeError, ValueError), e:
-    logging.error(
+    logging.warn(
         'Failure when parsing properties: %s; i:%s/%s b:%s/%s' %
         (e, issue, patchset, buildername, buildnumber))
 
@@ -261,7 +261,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
       logging.warn('Failed to find deferenced build')
 
   if not issue or not patchset:
-    logging.error('Bad packet, no issue or patchset: %r' % properties)
+    logging.warn('Bad packet, no issue or patchset: %r' % properties)
     return
 
   result = unpack_result(result)
