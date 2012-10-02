@@ -44,6 +44,19 @@ indexes:
 - kind: Issue
   properties:
   - name: closed
+  - name: commit
+  - name: modified
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: commit
+  - name: private
+  - name: modified
+
+- kind: Issue
+  properties:
+  - name: closed
   - name: owner
   - name: created
 
