@@ -21,8 +21,8 @@
      href="javascript:M_toggleSection('issue-description')"
      class="toggled-section opentriangle">
     Description</a></h3>
-  <div id="issue-description" style="margin-left:15px;">
-    <pre>{{issue.description|wordwrap:80|urlizetrunc:80}}</pre>
+  <div id="issue-description" style="margin-left:15px;font-family:monospace;font-size:12px;">
+    {{issue.description|safe}}
   </div>
 {%endif%}
 
@@ -188,9 +188,11 @@
 <script language="JavaScript" type="text/javascript">
   <!--
     document.onkeydown = M_changelistKeyDown;
+    document.onmousedown = M_changelistMouseDown;
     var dashboardState = new M_DashboardState(window, 'patch', 'M_CLPatchMarker');
     var issueId = {{issue.key.id}};
     M_toggleIssueOverviewByAnchor();
+    M_showTryJobResult('tryjobdiv-{{last_patchset.key.id}}', false);
   // -->
 </script>
 
@@ -207,13 +209,41 @@
       <input type="submit" value="Send Message" />
       <input type="button" value="Discard" name="discard" />
       <input type="checkbox" name="send_mail" value="1" 
-             id="message-reply-send-mail" checked="checked" />
-      <label>Send mail to reviewers</label>
+        id="message-reply-send-mail" checked="checked" />
+      <label for="message-reply-send-mail">Send mail to reviewers</label>
+      <input type="hidden" name="add_as_reviewer" value="0" />
+      <input type="checkbox" name="add_as_reviewer" value="1"
+        id="message-reply-add-as-reviewer" />
+        <label for="message-reply-add-as-reviewer">
+          Add yourself as a reviewer</label>
     </form>
   </div>
   <a id="resizer" class="resizer" style="display:none;cursor:pointer">
     <img src="{{media_url}}zippyplus.gif">
   </a>
+
+  <!-- Popup display to add and remove trybots from last patchset -->  
+  <div id="trybot-popup" style="display:none;">
+    <form method="POST" action="" id="trybotform">
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}"/>
+      <div class="trybot-popup-column">
+        {%for builder in default_builders%}
+          <div class="trybot-popup-input">
+            <input type="checkbox" name="{{builder}}" id="cb_{{builder}}"
+                   checked="checked">{{builder}}</input>
+          </div>
+          {%cycle '' '' '' '' '' '' '</div><div class="trybot-popup-column">'%} 
+        {%endfor%}
+      </div>
+      <div style="clear: both;"/>
+      <div class="trybot-button-div">
+        <input type="button" value="Update"
+               onclick="M_updatePendingTrybots('{{issue.key.id}}', '{{last_patchset.key.id}}', '{{xsrf_token}}')"/>
+        <input type="button" value="Close"
+               onclick="M_closePendingTrybots()"/>
+      </div>
+    </form>
+  </div>
 {%endif%}
 
-{%endblock%}
+{%endblock issue_body%}
