@@ -305,7 +305,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
           revision=revision,
           project=project,
           clobber=bool(properties.get('clobber')),
-          tests=properties.get('testfilter', []))
+          tests=properties.get('testfilter') or [])
       logging.info('Creating instance %s' % keyname)
     else:
       # Update result only if relevant.
