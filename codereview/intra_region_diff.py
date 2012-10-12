@@ -44,6 +44,7 @@ the end of the sequence and retain it.
 
 import cgi
 import difflib
+import patiencediff
 import re
 
 # Tag to begin a diff chunk.
@@ -126,13 +127,13 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
 
   To break the text, insert brk, which does not count toward
   the column count of the next line and is assumed to be valid HTML.
-  
+
   During the text breaking process, replaces tabs with spaces up
   to the next column that is a multiple of tabsize.
-  
+
   If mark_tabs is true, replace the first space of each expanded
   tab with TAB_TAG.
-  
+
   Input and output are assumed to be in UTF-8; the computation is done
   in Unicode.  (Still not good enough if zero-width characters are
   present.) If the input is not valid UTF-8, then the encoding is
@@ -291,7 +292,7 @@ def WordDiff(line1, line2, diff_params):
 
   a = re.findall(exp, line1, re.U)
   b = re.findall(exp, line2, re.U)
-  s = difflib.SequenceMatcher(None, a, b)
+  s = patiencediff.PseudoPatienceSequenceMatcher(None, a, b)
   matching_blocks = s.get_matching_blocks()
   ratio = s.ratio()
   # Don't show intra region diffs if both lines are too different and there is
