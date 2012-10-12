@@ -45,7 +45,9 @@ class PseudoPatienceSequenceMatcher(difflib.SequenceMatcher):
     if matches[0].a != matches[0].b:
       match_length = 0
       index = matches[0].a
-      while self.a[index + match_length] == self.b[index + match_length]:
+      while (index + match_length < len(self.a) and
+          index + match_length < len(self.b) and
+          self.a[index + match_length] == self.b[index + match_length]):
         match_length += 1
 
       if match_length:
