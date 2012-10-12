@@ -20,6 +20,7 @@ http://www.artima.com/weblogs/viewpost.jsp?thread=164293
 
 import difflib
 import logging
+import patiencediff
 import re
 import sys
 
@@ -79,7 +80,7 @@ def PatchChunks(old_lines, chunks):
       yield ("error: old chunk mismatch", old_lines[old_i:old_j], old_chunk)
       return
     # TODO(guido): ParsePatch knows the diff details, but throws the info away
-    sm = difflib.SequenceMatcher(None, old_chunk, new_chunk)
+    sm = patiencediff.PseudoPatienceSequenceMatcher(None, old_chunk, new_chunk)
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
       yield tag, old_chunk[i1:i2], new_chunk[j1:j2]
     old_pos = old_j
