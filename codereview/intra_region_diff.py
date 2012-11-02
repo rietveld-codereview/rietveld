@@ -44,7 +44,6 @@ the end of the sequence and retain it.
 
 import cgi
 import difflib
-import patiencediff
 import re
 
 # Tag to begin a diff chunk.
@@ -292,7 +291,7 @@ def WordDiff(line1, line2, diff_params):
 
   a = re.findall(exp, line1, re.U)
   b = re.findall(exp, line2, re.U)
-  s = patiencediff.PseudoPatienceSequenceMatcher(None, a, b)
+  s = difflib.SequenceMatcher(None, a, b)
   matching_blocks = s.get_matching_blocks()
   ratio = s.ratio()
   # Don't show intra region diffs if both lines are too different and there is
