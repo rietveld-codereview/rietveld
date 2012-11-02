@@ -16,7 +16,6 @@
 
 import cgi
 import difflib
-import patiencediff
 import re
 
 from google.appengine.api import users
@@ -260,7 +259,7 @@ def _GenerateTriples(old_lines, new_lines):
     difflib.SequenceMatchser.get_opcodes(), and old_slice and new_slice
     are lists of lines taken from old_lines and new_lines.
   """
-  sm = patiencediff.PseudoPatienceSequenceMatcher(None, old_lines, new_lines)
+  sm = difflib.SequenceMatcher(None, old_lines, new_lines)
   for tag, i1, i2, j1, j2 in sm.get_opcodes():
     yield tag, old_lines[i1:i2], new_lines[j1:j2]
 
