@@ -2120,6 +2120,68 @@ M_HookState.prototype.gotoPrevHook = function(opt_findComment) {
 };
 
 /**
+ * Finds the list of comments attached to the current hook, if any.
+ *
+ * @param self The calling object.
+ * @return The list of comment DOM elements.
+ */
+function M_findCommentsForCurrentHook_(self) {
+  var hooks = self.visibleHookCache;
+  var hasHook = (self.hookPos >= 0 && self.hookPos < hooks.length &&
+		 M_isElementVisible(self.win, hooks[self.hookPos].cells[0]));
+  if (!hasHook)
+    return [];
+
+  // Go through this tr and collect divs.
+  var comments = hooks[self.hookPos].getElementsByTagName("div");
+  if (comments && comments.length == 0) {
+    // Don't give up too early and look a bit forward
+    var sibling = hooks[self.hookPos].nextSibling;
+    while (sibling && sibling.tagName != "TR") {
+      sibling = sibling.nextSibling;
+    }
+    comments = sibling.getElementsByTagName("div");
+  }
+  return comments;
+}
+
+/**
+ * If the currently selected hook is a comment, either respond to it or edit
+ * the draft if there is one already. Prefer the right side of the table.
+ */
+M_HookState.prototype.markAsDone = function() {
+  var comments = M_findCommentsForCurrentHook_(this);
+  var commentsLength = comments.length;
+  if (!comments || !commentsLength)
+    return;
+
+  var last = null;
+  // Try responding to the last comment. The general hope is that
+  // these are returned in DOM order.
+  for (var i = commentsLength - 1; i >= 0; i--) {
+    if (comments[i].getAttribute("name") == "comment-border") {
+      last = comments[i];
+      break;
+    }
+  }
+  if (!last)
+    return;
+
+  var links = last.getElementsByTagName("a");
+  if (links) {
+    for (var i = links.length - 1; i >= 0; i--) {
+      if (links[i].getAttribute("name") == "comment-done" &&
+          links[i].style.display != "none") {
+        document.location.href = links[i].href;
+	// Prevent done from being posted again.
+	links[i].setAttribute("name", "");
+        return;
+      }
+    }
+  }
+};
+
+/**
  * If the currently selected hook is a comment, either respond to it or edit
  * the draft if there is one already. Prefer the right side of the table.
  */
@@ -2127,46 +2189,38 @@ M_HookState.prototype.respond = function() {
   if (this.indicated_element &&
       ! this.indicated_element.getAttribute("name") != "hook") {
     // Turn indicated element into a "real" hook so we can add comments.
-    this.indicated_element.setAttribute("name", "hook")
+    this.indicated_element.setAttribute("name", "hook");
   }
   this.updateHooks();
   var hooks = this.visibleHookCache;
-  if (this.hookPos >= 0 && this.hookPos < hooks.length &&
-      M_isElementVisible(this.win, hooks[this.hookPos].cells[0])) {
-    // Go through this tr and try responding to the last comment. The general
-    // hope is that these are returned in DOM order
-    var comments = hooks[this.hookPos].getElementsByTagName("div");
-    var commentsLength = comments.length;
-    if (comments && commentsLength == 0) {
-      // Don't give up too early and look a bit forward
-      var sibling = hooks[this.hookPos].nextSibling;
-      while (sibling && sibling.tagName != "TR") {
-        sibling = sibling.nextSibling;
+  var hasHook = (this.hookPos >= 0 && this.hookPos < hooks.length &&
+                 M_isElementVisible(this.win, hooks[this.hookPos].cells[0]));
+  if (!hasHook)
+    return;
+
+  var comments = M_findCommentsForCurrentHook_(this);
+  var commentsLength = comments.length;
+  if (comments && commentsLength > 0) {
+    var last = null;
+    for (var i = commentsLength - 1; i >= 0; i--) {
+      if (comments[i].getAttribute("name") == "comment-border") {
+        last = comments[i];
+        break;
       }
-      comments = sibling.getElementsByTagName("div");
-      commentsLength = comments.length;
     }
-    if (comments && commentsLength > 0) {
-      var last = null;
-      for (var i = commentsLength - 1; i >= 0; i--) {
-        if (comments[i].getAttribute("name") == "comment-border") {
-          last = comments[i];
-          break;
-        }
-      }
-      if (last) {
-        var links = last.getElementsByTagName("a");
-        if (links) {
-          for (var i = links.length - 1; i >= 0; i--) {
-            if (links[i].getAttribute("name") == "comment-reply" &&
-                links[i].style.display != "none") {
-              document.location.href = links[i].href;
-              return;
-            }
+    if (last) {
+      var links = last.getElementsByTagName("a");
+      if (links) {
+        for (var i = links.length - 1; i >= 0; i--) {
+          if (links[i].getAttribute("name") == "comment-reply" &&
+              links[i].style.display != "none") {
+            document.location.href = links[i].href;
+            return;
           }
         }
       }
-    } else {
+    }
+  } else {
     // Create a comment at this line
     // TODO: Implement this in a sane fashion, e.g. opens up a comment
     // at the end of the diff chunk.
@@ -2179,7 +2233,6 @@ M_HookState.prototype.respond = function() {
         M_createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'a');
         return;
       }
-    }
     }
   }
 };
@@ -2492,6 +2545,9 @@ function M_keyDown(evt) {
     } else if (key == 'Enter') {
       // respond to current comment
       if (hookState) hookState.respond();
+    } else if (key == 'D') {
+      // mark current comment as done
+      if (hookState) hookState.markAsDone();
     } else {
       return true;
     }
