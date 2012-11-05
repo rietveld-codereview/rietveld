@@ -68,7 +68,10 @@ class PseudoPatienceSequenceMatcher(difflib.SequenceMatcher):
       first = matches[index]
       second = matches[index + 1]
       while True:
-        if (self.a[first.a + first.size] == self.b[first.b + first.size] and
+        if (first.a + first.size < len(self.a) and
+            first.b + first.size < len(self.b) and
+            second.a < len(self.a) and second.b < len(self.b) and
+            self.a[first.a + first.size] == self.b[first.b + first.size] and
             self.a[second.a] == self.b[second.b]):
           first = difflib.Match(first.a, first.b, first.size + 1)
           second = difflib.Match(second.a + 1, second.b + 1, second.size - 1)
