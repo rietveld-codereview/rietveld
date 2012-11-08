@@ -3501,24 +3501,24 @@ def search(request):
   if form.cleaned_data['base']:
     q.filter('base = ', form.cleaned_data['base'])
 
-  # Default sort by ascending key to save on indexes.
-  sorted_by = form.cleaned_data['order']
-  if not sorted_by:
-    # Calculate a default value depending on the query parameter.
-    sorted_by = '__key__'
-    if form.cleaned_data['modified_before']:
-      q.filter('modified < ', form.cleaned_data['modified_before'])
-      sorted_by = 'modified'
-    if form.cleaned_data['modified_after']:
-      q.filter('modified >= ', form.cleaned_data['modified_after'])
-      sorted_by = 'modified'
-    if form.cleaned_data['created_before']:
-      q.filter('created < ', form.cleaned_data['created_before'])
-      sorted_by = 'created'
-    if form.cleaned_data['created_after']:
-      q.filter('created >= ', form.cleaned_data['created_after'])
-      sorted_by = 'created'
+  # Calculate a default value depending on the query parameter.
+  # Prefer sorting by modified date over created date and showing
+  # newest first over oldest.
+  default_sort = '-modified'
+  if form.cleaned_data['created_after']:
+    q.filter('created >= ', form.cleaned_data['created_after'])
+    default_sort = 'created'
+  if form.cleaned_data['modified_after']:
+    q.filter('modified >= ', form.cleaned_data['modified_after'])
+    default_sort = 'modified'
+  if form.cleaned_data['created_before']:
+    q.filter('created < ', form.cleaned_data['created_before'])
+    default_sort = '-created'
+  if form.cleaned_data['modified_before']:
+    q.filter('modified < ', form.cleaned_data['modified_before'])
+    default_sort = '-modified'
 
+  sorted_by = form.cleaned_data['order'] or default_sort
   q.order(sorted_by)
 
   # Update the cursor value in the result.
