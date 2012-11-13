@@ -15,6 +15,11 @@
 """Minimal Django settings."""
 
 import os
+import re
+
+DISALLOWED_USER_AGENTS = (
+    re.compile(r'^Googlebot'),
+)
 
 from google.appengine.api import app_identity
 
@@ -38,6 +43,10 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.http.ConditionalGetMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',
     'codereview.middleware.PropagateExceptionMiddleware',
+    # TODO: figure how/when to re-enable these redirects.
+    #'codereview.middleware.RedirectChromiumToAppspotMiddleware',
+    #'codereview.middleware.RedirectDotVersionMiddleware',
+    #'codereview.middleware.RedirectToHTTPSMiddleware',
 )
 ROOT_URLCONF = 'urls'
 TEMPLATE_CONTEXT_PROCESSORS = (
