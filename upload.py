@@ -592,6 +592,9 @@ group.add_option("--git_similarity", action="store", dest="git_similarity",
                  metavar="SIM", type="int", default=50,
                  help=("Set the minimum similarity index for detecting renames "
                        "and copies. See `git diff -C`. (default 50)."))
+group.add_option("--git_no_find_copies", action="store_false", default=True,
+                 dest="git_find_copies",
+                 help=("Prevents git from looking for copies (default off)."))
 # Perforce-specific
 group = parser.add_option_group("Perforce-specific options "
                                 "(overrides P4 environment variables)")
@@ -1334,9 +1337,13 @@ class GitVCS(VersionControlSystem):
     diff = RunShell(
         cmd + ["--no-renames", "--diff-filter=D"] + extra_args,
         env=env, silent_ok=True)
+    if self.options.git_find_copies:
+      similarity_options = ["--find-copies-harder", "-l100000",
+                            "-C%s" % self.options.git_similarity ]
+    else:
+      similarity_options = ["-M%s" % self.options.git_similarity ]
     diff += RunShell(
-        cmd + ["--find-copies-harder", "-l100000", "--diff-filter=AMCRT",
-               "-C%s" % self.options.git_similarity ] + extra_args,
+        cmd + ["--diff-filter=AMCRT"] + similarity_options + extra_args,
         env=env, silent_ok=True)
 
     # The CL could be only file deletion or not. So accept silent diff for both
