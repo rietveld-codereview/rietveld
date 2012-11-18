@@ -3946,6 +3946,13 @@ def _process_incoming_mail(raw_message, recipients):
     # As a workaround we try to decode the payload ourselves.
     if payload.encoding == '8bit' and payload.charset:
       body = payload.payload.decode(payload.charset)
+    # If neither encoding not charset is set, but payload contains
+    # non-ASCII chars we can't use payload.decode() because it returns
+    # payload.payload unmodified. The later type cast to db.Text fails
+    # with a UnicodeDecodeError then.
+    elif payload.encoding is None and payload.charset is None:
+      # assume utf-8 but set replace flag to go for sure.
+      body = payload.payload.decode('utf-8', 'replace')
     else:
       body = payload.decode()
     break
