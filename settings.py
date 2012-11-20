@@ -33,9 +33,11 @@ DEBUG = os.environ['SERVER_SOFTWARE'].startswith('Dev')
 INSTALLED_APPS = (
     'codereview',
 )
+HSTS_MAX_AGE = 60*60*24*365  # 1 year in seconds.
 MIDDLEWARE_CLASSES = (
     'django.middleware.common.CommonMiddleware',
     'django.middleware.http.ConditionalGetMiddleware',
+    'codereview.middleware.AddHSTSHeaderMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',
     'codereview.middleware.PropagateExceptionMiddleware',
 )

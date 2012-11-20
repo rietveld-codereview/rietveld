@@ -21,10 +21,26 @@ from google.appengine.runtime import apiproxy_errors
 from google.appengine.runtime import DeadlineExceededError
 
 from django.conf import settings
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect
 from django.template import Context, loader
 
 from codereview import models
+
+
+class AddHSTSHeaderMiddleware(object):
+  """Add HTTP Strict Transport Security header."""
+
+  def process_request(self, request):
+    if not request.is_secure():
+      request_url = request.build_absolute_uri(request.get_full_path())
+      return HttpResponsePermanentRedirect(
+          request_url.replace('http://', 'https://'))
+
+  def process_response(self, request, response):
+    if request.is_secure():
+      response['Strict-Transport-Security'] = (
+          'max-age=%d' % settings.HSTS_MAX_AGE)
+    return response
 
 
 class AddUserToRequestMiddleware(object):
