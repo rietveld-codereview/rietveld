@@ -37,6 +37,9 @@ appstats_KEY_NAMESPACE = '__appstats_%s__' % os.getenv('APPENGINE_RUNTIME')
 # Enable Interactive Playground.
 appstats_SHELL_OK = True
 
+# Enable RPC cost calculation.
+appstats_CALC_RPC_COSTS = True
+
 # Django 1.2+ requires DJANGO_SETTINGS_MODULE environment variable to be set
 # http://code.google.com/appengine/docs/python/tools/libraries.html#Django
 os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'

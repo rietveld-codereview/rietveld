@@ -27,6 +27,22 @@ from django.template import Context, loader
 from codereview import models
 
 
+class AddHSTSHeaderMiddleware(object):
+  """Add HTTP Strict Transport Security header."""
+
+  def process_request(self, request):
+    if not request.is_secure():
+      request_url = request.build_absolute_uri(request.get_full_path())
+      return HttpResponsePermanentRedirect(
+          request_url.replace('http://', 'https://'))
+
+  def process_response(self, request, response):
+    if request.is_secure():
+      response['Strict-Transport-Security'] = (
+          'max-age=%d' % settings.HSTS_MAX_AGE)
+    return response
+
+
 class AddUserToRequestMiddleware(object):
   """Add a user object and a user_is_admin flag to each request."""
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright 2011 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -185,3 +186,24 @@ class TestIncomingMail(TestCase):
     views._process_incoming_mail(msg.as_string(), 'reply@example.com')
     imsg = models.Message.all().ancestor(self.issue).get()
     self.assertEqual(imsg.text.encode(jcode), jtxt)
+
+  def test_missing_encoding(self):
+    # make sure that incoming mails with missing encoding and
+    # charset are handled correctly.
+    body = 'Âfoo'
+    msg = ('From: sender@example.com',
+           'Subject: subject (issue%s)' % self.issue.key().id(),
+           '',
+           body)
+    views._process_incoming_mail('\r\n'.join(msg), 'reply@example.com')
+    imsg = models.Message.all().ancestor(self.issue).get()
+    self.assertEqual(imsg.text, u'Âfoo')
+    imsg.delete()
+    body = '\xf6'
+    msg = ('From: sender@example.com',
+           'Subject: subject (issue%s)' % self.issue.key().id(),
+           '',
+           body)
+    views._process_incoming_mail('\r\n'.join(msg), 'reply@example.com')
+    imsg = models.Message.all().ancestor(self.issue).get()
+    self.assertEqual(imsg.text, u'\ufffd')
