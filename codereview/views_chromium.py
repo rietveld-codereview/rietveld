@@ -423,6 +423,9 @@ def edit_flags(request):
   if not last_patchset:
     return HttpResponseForbidden('Can only modify flags on last patchset',
         content_type='text/plain')
+  if request.issue.closed:
+    return HttpResponseForbidden('Can not modify flags for a closed issue',
+        content_type='text/plain')
 
   if request.method == 'GET':
     existing_builders = _get_try_pending_jobs(last_patchset)

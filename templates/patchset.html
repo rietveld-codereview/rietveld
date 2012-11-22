@@ -119,16 +119,18 @@
          href="#" onclick="M_showTryJobResult('tryjobdiv-{{patchset.key.id}}', false); return false">
          &lt;&lt;&lt;Less</a>
 
-      {%if user%}
-        {%if not patchset.issue.commit%}
-          {%ifequal last_patchset.key.id patchset.key.id%}
-            |
-            <a id="tryjobchange-{{patchset.key.id}}" href="#"
-                 onclick="M_editPendingTryJobs('{{patchset.key.id}}'); return false">Try more bots</a>
-          {%endifequal%}
+      {%if not issue.closed %}
+        {%if user%}
+          {%if not patchset.issue.commit %}
+            {%ifequal last_patchset.key.id patchset.key.id%}
+              |
+              <a id="tryjobchange-{{patchset.key.id}}" href="#"
+                  onclick="M_editPendingTryJobs('{{patchset.key.id}}'); return false">Try more bots</a>
+            {%endifequal%}
+          {%endif%}
+        {%else%}
+          <a href="{{sign_in}}">Sign in</a> to try more bots
         {%endif%}
-      {%else%}
-      <a href="{{sign_in}}">Sign in</a> to try more bots
       {%endif%}
   </div>
 
