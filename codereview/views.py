@@ -1350,6 +1350,9 @@ def upload(request):
           form.errors['user'] = ['You (%s) don\'t own this issue (%s)' %
                                  (request.user, issue_id)]
           issue = None
+        elif issue.closed:
+          form.errors['issue'] = ['This issue is closed (%s)' % (issue_id)]
+          issue = None
         else:
           patchset = _add_patchset_from_form(request, issue, form, 'subject',
                                              emails_add_only=True)
