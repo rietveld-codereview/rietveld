@@ -3271,7 +3271,8 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
                          sender=my_email,
                          recipients=reply_to,
                          text=db.Text(text),
-                         parent=issue)
+                         parent=issue,
+                         issue_was_closed=issue.closed)
   else:
     msg = draft
     msg.subject = subject
@@ -3279,6 +3280,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     msg.text = db.Text(text)
     msg.draft = False
     msg.date = datetime.datetime.now()
+    msg.issue_was_closed = issue.closed
 
   if in_reply_to:
     try:

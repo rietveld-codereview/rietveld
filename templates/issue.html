@@ -118,7 +118,7 @@
     </div>
 
     {%for message in messages%}
-      <div class="message {%if message.approval%}approval{%endif%} {%if message.disapproval%}disapproval{%endif%}"
+      <div class="message {%if message.issue_was_closed%}issue_was_closed{%endif%} {%if message.approval%}approval{%endif%} {%if message.disapproval%}disapproval{%endif%}"
            id="msg{{forloop.counter}}"
            name="{{forloop.counter0}}">
         <div class="header">
@@ -154,6 +154,11 @@
         <div id="cl-comment-{{forloop.counter0}}"
              {%if forloop.last%}{%else%}style="display: none;"{%endif%}>
           <div class="message-body">
+            {%if message.issue_was_closed%}
+              <span class="extra-note">
+                Message was sent while issue was closed.
+              </span>
+            {%endif%}
             <pre name="cl-message-{{forloop.counter0}}"
             >{{message.text|wordwrap:80|urlizetrunc:80}}</pre>
           </div>
