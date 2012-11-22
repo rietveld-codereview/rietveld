@@ -255,6 +255,11 @@ a:visited.noul, a:visited.noulv {
   color: #777;
 }
 
+.extra-note {
+  color: #777;
+  font-style:italic;
+}
+
 .date {
   white-space: nowrap;
 }
@@ -754,7 +759,7 @@ span.visualtab {
   border-left: 1px solid lightgray;
   border-right: 1px solid lightgray;
 }
-.message-body pre {
+.message-body span, .message-body pre {
   margin: 0px;
   margin-left: 5px;
   margin-right: 5px;
@@ -799,6 +804,16 @@ span.visualtab {
   border-color: yellow;
 }
 
+/* Messages sent while issue was closed have a light blue header background
+   and a blue border */
+.message.issue_was_closed .header {
+  background-color: #AAAAFF;
+  border-color: blue;
+}
+.message.issue_was_closed .message-body,
+.message.issue_was_closed .message-actions {
+  border-color: blue;
+}
 
 .popup {
   visibility: hidden;
