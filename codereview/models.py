@@ -311,6 +311,7 @@ class Message(db.Model):
   text = db.TextProperty()
   draft = db.BooleanProperty(default=False)
   in_reply_to = db.SelfReferenceProperty()
+  issue_was_closed = db.BooleanProperty(default=False)
 
   _approval = None
   _disapproval = None
