@@ -976,7 +976,7 @@ def index(request):
     return mine(request)
 
 
-DEFAULT_LIMIT = 10
+DEFAULT_LIMIT = 20
 
 
 def _url(path, **kwargs):
