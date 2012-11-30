@@ -187,6 +187,7 @@ class TryJobResult(db.Model):
   url = db.StringProperty()
   result = db.IntegerProperty()
   builder = db.StringProperty()
+  parent_name = db.StringProperty()
   slave = db.StringProperty()
   buildnumber = db.IntegerProperty()
   reason = db.StringProperty()
