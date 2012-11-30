@@ -300,6 +300,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
           url=url,
           result=result,
           builder=buildername,
+          parent_name=parent_builder_name,
           slave=slavename,
           buildnumber=buildnumber,
           revision=revision,
