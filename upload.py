@@ -691,7 +691,8 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
   return HttpRpcServer(server,
                        KeyringCreds(server, host, email).GetUserCredentials,
                        host_override=host_override,
-                       save_cookies=save_cookies)
+                       save_cookies=save_cookies,
+                       account_type=account_type)
 
 
 def EncodeMultipartFormData(fields, files):
