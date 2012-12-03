@@ -401,20 +401,6 @@ def _is_job_valid(job):
 
 ### View handlers ###
 
-def _get_try_pending_jobs(patchset):
-  """Returns a dictionary containing the pending try jobs the patchset.
-
-  Args:
-    patchset: An instance of models.PatchSet to get the pending jobs from.
-
-  Returns:
-    A dictionary of pending try jobs, where the key is the name of the builder
-    and the value is the TryJobResult instance itself.
-  """
-  return dict((job.builder, job)
-              for job in models.TryJobResult.all().ancestor(patchset).filter(
-              'result =', models.TryJobResult.TRYPENDING))
-
 @issue_editor_required
 @xsrf_required
 def edit_flags(request):
@@ -429,10 +415,8 @@ def edit_flags(request):
         content_type='text/plain')
 
   if request.method == 'GET':
-    existing_builders = _get_try_pending_jobs(last_patchset)
-    initial_builders = (', '.join(existing_builders.iterkeys()) or
-                        'win, mac, linux')
-
+    # TODO(maruel): Have it set per project.
+    initial_builders = 'win_rel, mac_rel, linux_rel'
     form = EditFlagsForm(initial={
         'last_patchset': last_patchset.key().id(),
         'commit': request.issue.commit,
@@ -457,31 +441,20 @@ def edit_flags(request):
   if 'builders' in request.POST:
     def txn():
       jobs_to_save = []
-      jobs_to_delete = []
-
       new_builders = filter(None, map(unicode.strip,
                                       form.cleaned_data['builders'].split(',')))
-      existing_builders = _get_try_pending_jobs(last_patchset)
-
-      # Figure out which builders we need to remove.  Only remove any that are
-      # still pending.
-      for existing_builder, existing_job in existing_builders.iteritems():
-        if (existing_builder not in new_builders):
-          jobs_to_delete.append(existing_job)
 
       # Add any new builders.
       for builder in new_builders:
-        if builder not in existing_builders:
-          try_job = models.TryJobResult(parent=last_patchset,
-                                        reason='',
-                                        result=models.TryJobResult.TRYPENDING,
-                                        builder=builder,
-                                        revision='',
-                                        clobber=False)
-          jobs_to_save.append(try_job)
+        try_job = models.TryJobResult(parent=last_patchset,
+                                      reason='',
+                                      result=models.TryJobResult.TRYPENDING,
+                                      builder=builder,
+                                      revision='',
+                                      clobber=False)
+        jobs_to_save.append(try_job)
 
       # Commit everything.
-      db.delete(jobs_to_delete)
       db.put(jobs_to_save)
     db.run_in_transaction(txn)
 
@@ -708,22 +681,17 @@ def try_patchset(request):
     # Get list of existing pending try jobs for this patchset.  Don't create
     # duplicates here.
     patchset = models.PatchSet.get(last_patchset_key)
-    pending_jobs = _get_try_pending_jobs(patchset)
-    logging.debug('Pending builders: %s', pending_jobs.keys())
 
     jobs_to_save = []
     for builder, tests in builders.iteritems():
-      if builder not in pending_jobs:
-        try_job = models.TryJobResult(parent=patchset,
-                                      result=models.TryJobResult.TRYPENDING,
-                                      builder=builder,
-                                      revision=revision,
-                                      clobber=clobber,
-                                      tests=tests,
-                                      reason=reason)
-        jobs_to_save.append(try_job)
-      else:
-        logging.warn('Skipping %s', builder)
+      try_job = models.TryJobResult(parent=patchset,
+                                    result=models.TryJobResult.TRYPENDING,
+                                    builder=builder,
+                                    revision=revision,
+                                    clobber=clobber,
+                                    tests=tests,
+                                    reason=reason)
+      jobs_to_save.append(try_job)
 
     if jobs_to_save:
       db.put(jobs_to_save)

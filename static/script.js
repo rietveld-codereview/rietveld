@@ -547,23 +547,12 @@ function M_editPendingTryJobs(patchset) {
     existingJobs[trimmed] = 1;
   });
 
-  // find already running try jobs.
-  var runningJobs = {};
-  jQuery('a[status="pending"]', rootElement).each(function(i) {
-    var trimmed = jQuery.trim(jQuery(this).text());
-    runningJobs[trimmed] = 1;
-  });
-
   // Set the state of the checkboxes as needed.
   var popup = jQuery('#trybot-popup');
   jQuery('input:checkbox', popup).each(function(i) {
     var self = jQuery(this);
     self.attr('checked', self.attr('name') in existingJobs); 
-    if (self.attr('name') in runningJobs) {
-      self.attr('disabled', 'disabled');
-    } else {
-      self.removeAttr('disabled');
-    }
+    self.removeAttr('disabled');
   });
 
   // Show the popup and position it near the link.
