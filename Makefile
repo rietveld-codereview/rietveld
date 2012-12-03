@@ -11,6 +11,15 @@ DEV_APPSERVER_FLAGS?=
 APPCFG?= $(if $(SDK_PATH), $(SDK_PATH)/,)appcfg.py
 APPCFG_FLAGS?=
 
+# Set dirty suffix depending on output of "hg status".
+dirty=
+ifneq ($(shell hg status),)
+        dirty="-tainted"
+endif
+VERSION_TAG= `hg parents --template='{rev}:{node|short}'`$(dirty)
+# AppEngine version cannot use ':' in its name so use a '-' instead.
+VERSION?= `hg parents --template='{rev}-{node|short}'`$(dirty)
+
 PYTHON?= python2.7
 COVERAGE?= coverage
 
@@ -38,7 +47,7 @@ serve_remote_email: update_revision
 
 update_revision:
 	@echo "---[Updating REVISION]---"
-	@echo "`hg id -n`:`hg id -i`" >REVISION
+	@echo "$(VERSION_TAG)" >REVISION
 
 update: update_revision
 	@echo "---[Updating $(APPID)]---"
