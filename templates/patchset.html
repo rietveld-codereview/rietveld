@@ -111,7 +111,7 @@
            style="display:none;"
         {%endifequal%}
            target="_blank">
-           &nbsp;{%if try_job.parent_name%}{{try_job_parent_name}}:{%endif%}{{try_job.builder}}&nbsp;</a>
+           &nbsp;{%if try_job.parent_name%}{{try_job.parent_name}}:{%endif%}{{try_job.builder}}&nbsp;</a>
       {%endfor%}
       <a id="tryjobdiv-{{patchset.key.id}}-morelink" style="display: none;"
          href="#" onclick="M_showTryJobResult('tryjobdiv-{{patchset.key.id}}', true); return false">
