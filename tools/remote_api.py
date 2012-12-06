@@ -66,7 +66,7 @@ def setup_env(app_id, host=None, auth_func=None):
   from google.appengine.api.users import User
   from google.appengine.ext import db
   remote_api_stub.ConfigureRemoteDatastore(
-      app_id, '/_ah/remote_api', auth_func, host)
+      None, '/_ah/remote_api', auth_func, host)
 
   # Initialize environment.
   os.environ['SERVER_SOFTWARE'] = ''
