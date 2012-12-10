@@ -30,12 +30,6 @@ from codereview import models
 class AddHSTSHeaderMiddleware(object):
   """Add HTTP Strict Transport Security header."""
 
-  def process_request(self, request):
-    if not request.is_secure():
-      request_url = request.build_absolute_uri(request.get_full_path())
-      return HttpResponsePermanentRedirect(
-          request_url.replace('http://', 'https://'))
-
   def process_response(self, request, response):
     if request.is_secure():
       response['Strict-Transport-Security'] = (
@@ -97,3 +91,14 @@ class PropagateExceptionMiddleware(object):
       content = tpl.render(ctx)
       content_type = 'text/html'
     return HttpResponse(content, status=status, content_type=content_type)
+
+
+class RedirectToHTTPSMiddleware(object):
+  """Redirect HTTP requests to the equivalent HTTPS resource."""
+  def process_request(self, request):
+  if request.method == 'POST':
+    return
+  if not request.is_secure():
+    host = request.get_host().split(':')[0]
+    return HttpResponsePermanentRedirect(
+        'https://%s%s' % (host, request.get_full_path()))
