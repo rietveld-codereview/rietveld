@@ -2090,6 +2090,19 @@ def show(request, form=None):
   issue.description = issue.description.replace('\n', '<br/>')
   src_url = _map_base_url(issue.base)
 
+  # Generate the set of possible parents for every builder name, if a
+  # builder could have 2 different parents, then append the parent name to
+  # the builder to differentiate them.
+  builds_to_parents = {}
+  for try_job in last_patchset.try_job_results:
+    if try_job.parent_name:
+      builds_to_parents.setdefault(try_job.builder,
+                                   set()).add(try_job.parent_name)
+
+  for try_job in last_patchset.try_job_results:
+    if try_job.parent_name and len(builds_to_parents[try_job.builder]) > 1:
+      try_job.builder = try_job.parent_name + ':' + try_job.builder
+
   return respond(request, 'issue.html',
                  {'issue': issue, 'patchsets': patchsets,
                   'messages': messages, 'form': form,
