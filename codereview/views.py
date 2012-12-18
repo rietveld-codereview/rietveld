@@ -479,8 +479,7 @@ class SearchForm(forms.Form):
       required=False,
       min_value=1,
       max_value=1000,
-      initial=10,
-      widget=forms.HiddenInput(attrs={'value': '10'}))
+      widget=forms.HiddenInput(attrs={'value': '30'}))
   closed = forms.NullBooleanField(required=False)
   owner = forms.CharField(required=False,
                           max_length=MAX_REVIEWERS,
