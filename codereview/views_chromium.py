@@ -289,7 +289,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
           ).filter('buildnumber =', buildnumber).get()
 
     if buildername and buildnumber >= 0:
-      url = '%sbuildstatus?builder=%s&number=%s' % (
+      url = '%sbuilders/%s/builds/%s' % (
           base_url, buildername, buildnumber)
     else:
       url = ''
