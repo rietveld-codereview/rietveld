@@ -17,14 +17,14 @@
         <span class="disabled">(Patch set is too large to download)</span>
       {% endif %}
       {%ifnotequal 1 num_patchsets%}
-        {%ifequal issue.owner user%}
+        {%if is_editor %}
         <form method="post" action="{%url codereview.views.delete_patchset issue.key.id patchset.key.id %}">
           <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
           <input type="hidden" name="_method" value="delete" />
           |<input onclick="return confirm('Are you sure?');"
             type="submit" value="Delete patch set" class="link-to"/>
         </form>
-        {%endifequal%}
+        {%endif%}
       {%endifnotequal%}
     </div>
     <div style="clear:both;"></div>
@@ -43,7 +43,7 @@
 
     {%for patch in patchset.patches%}
       <tr name="patch">
-        <td class="first" width="14"><img src="{{media_url}}closedtriangle.gif" 
+        <td class="first" width="14"><img src="{{media_url}}closedtriangle.gif"
     style="visibility: hidden;" width="12" height="9" /></td>
         <td style="white-space: nowrap">{%if patch.status%}{{patch.status}}{%endif%}</td>
         <td>
