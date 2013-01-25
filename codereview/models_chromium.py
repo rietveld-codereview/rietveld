@@ -120,17 +120,17 @@ class DefaultBuilderList(db.Model):
     """Updates all default builder lists for all build master servers.
 
     Returns:
-      A tuple with two lists of strings.  The first list contains the names
-      of build master servers successfully updated.  The second list contains
-      the names of build master servers that failed to update.
+      A tuple with two lists. The first list is a dict containing the names
+      of build master servers successfully updated with values of changes.
+      The second list contains the names of build master servers that failed
+      to update.
     """
-    successful = []
+    successful = {}
     failed = []
 
     for obj in cls.all():
       try:
-        obj._update_builders()
-        successful.append(obj.key().name())
+        successful[obj.key().name()] = obj._update_builders()
       except (ValueError, urlfetch.Error):
         logging.error(sys.exc_info()[1])
         failed.append(obj.key().name())
@@ -142,9 +142,13 @@ class DefaultBuilderList(db.Model):
 
     This function makes a network request so should not be called while
     processing user requests.  This function also clears the memcache.
+
+    Returns: dict of changes to trybot list.
     """
     url = 'http://build.chromium.org/p/%s/json/builders' % self.key().name()
     result = urlfetch.fetch(url, deadline=60)
+
+    old_builders = set(self.default_builders)
     # The returned data is a json encoded dictionary, where the keys are the
     # builder names and the values are information about the corresponding
     # builder.  We only need the names.
@@ -156,3 +160,8 @@ class DefaultBuilderList(db.Model):
                  self.default_builders,
                  self._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS)
     self.put()
+
+    new_builders = set(self.default_builders)
+    changes = [('added', list(new_builders - old_builders)),
+               ('removed', list(old_builders - new_builders))]
+    return dict((desc, items) for (desc, items) in changes if items)

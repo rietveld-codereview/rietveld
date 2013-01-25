@@ -608,11 +608,11 @@ def update_default_builders(request):
                     ','.join(failed))
 
     content = 'Updated successfully: %s\nFailed to update: %s' % (
-        ','.join(successful), ','.join(failed))
+        successful, ','.join(failed))
   except DeadlineExceededError:
     content = 'Deadline exceeded'
-    logging.error(content)
 
+  logging.info(content)
   return HttpResponse(content, content_type='text/plain')
 
 
@@ -633,8 +633,9 @@ def delete_old_pending_jobs(request):
         job.delete()
         count += 1
 
-  return HttpResponse('%d pending jobs purged' % count,
-                      content_type='text/plain')
+  result_summary = '%d pending jobs purged' % count
+  logging.info(result_summary)
+  return HttpResponse(result_summary, content_type='text/plain')
 
 
 @post_required
