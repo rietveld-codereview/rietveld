@@ -1,0 +1,19 @@
+{%extends "base.html"%}
+{%block mainmenu%}
+<a href="{%url codereview.views.index%}" class="active">Issues</a>
+<a href="{%url codereview.views.repos%}">Repositories</a>
+<a href="{%url codereview.views.search%}">Search</a>
+{%endblock%}
+
+{%block title1%}Block an user -{%endblock%}
+{%block head%}{{form.media}}{%endblock%}
+{%block body%}
+<h2>Blocking {{account.email}} ({{account.nickname}})</h2>
+
+<form action="{%url codereview.views.block_user account.email%}" method="post">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Update"></td></tr>
+</table>
+</form>
+{%endblock%}

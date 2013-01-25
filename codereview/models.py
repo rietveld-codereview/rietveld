@@ -762,6 +762,8 @@ class Account(db.Model):
   uploadpy_hint = db.BooleanProperty(default=True)
   notify_by_email = db.BooleanProperty(default=True)
   notify_by_chat = db.BooleanProperty(default=False)
+  # Spammer; only blocks sending messages, not uploading issues.
+  blocked = db.BooleanProperty(default=False)
 
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
