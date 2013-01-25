@@ -613,7 +613,8 @@ def _can_view_issue(user, issue):
   return (not issue.private
           or issue.owner == user
           or user_email in issue.cc
-          or user_email in issue.reviewers)
+          or user_email in issue.reviewers
+          or user.email() in issue.collaborator_emails())
 
 
 def _notify_issue(request, issue, message):
@@ -822,7 +823,8 @@ def owner_required(func):
 
   @login_required
   def owner_wrapper(request, *args, **kwds):
-    if request.issue.owner != request.user:
+    if not (request.issue.owner == request.user or
+            request.issue.is_collaborator(request.user)):
       return HttpTextResponse('You do not own this issue', status=403)
     return func(request, *args, **kwds)
 
@@ -1380,7 +1382,7 @@ def upload(request):
         form.errors['issue'] = ['Base files upload required for that issue.']
         issue = None
       else:
-        if request.user != issue.owner:
+        if not issue.user_can_edit(request.user):
           form.errors['user'] = ['You (%s) don\'t own this issue (%s)' %
                                  (request.user, issue_id)]
           issue = None
@@ -1478,7 +1480,7 @@ def upload_content(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if request.user != request.issue.owner:
+  if not request.issue.user_can_edit(request.user):
     return HttpTextResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                             (request.user, request.issue.key().id()))
   patch = request.patch
@@ -1528,7 +1530,7 @@ def upload_patch(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if request.user != request.issue.owner:
+  if not request.issue.user_can_edit(request.user):
     return HttpTextResponse(
         'ERROR: You (%s) don\'t own this issue (%s).' %
         (request.user, request.issue.key().id()))
@@ -1744,7 +1746,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   account = models.Account.get_account_for_user(request.user)
   if account.blocked:
     return None
-  if request.user != issue.owner:
+  if not issue.user_can_edit(request.user):
     # This check is done at each call site but check again as a safety measure.
     return None
   data, url, separate_patches = data_url
@@ -2020,6 +2022,7 @@ def show(request, form=None):
                   'num_patchsets': num_patchsets,
                   'first_patch': first_patch,
                   'has_draft_message': has_draft_message,
+                  'is_editor': issue.user_can_edit(request.user),
                   })
 
 
@@ -2037,6 +2040,7 @@ def patchset(request):
                  {'issue': issue,
                   'patchset': patchset,
                   'patchsets': patchsets,
+                  'is_editor': issue.user_can_edit(request.user),
                   })
 
 
@@ -2259,7 +2263,7 @@ def mailissue(request):
   This URL is deprecated and shouldn't be used anymore.  However,
   older versions of upload.py or wrapper scripts still may use it.
   """
-  if request.issue.owner != request.user:
+  if not request.issue.user_can_edit(request.user):
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
   issue = request.issue
@@ -3083,8 +3087,9 @@ def publish(request):
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
     cc = issue.cc[:]
-    if request.user != issue.owner and (request.user.email()
-                                        not in issue.reviewers):
+    if (request.user != issue.owner and
+        request.user.email() not in issue.reviewers and
+        not issue.is_collaborator(request.user)):
       reviewers.append(request.user.email())
       if request.user.email() in cc:
         cc.remove(request.user.email())
@@ -3122,7 +3127,9 @@ def publish(request):
     reviewers = _get_emails(form, 'reviewers')
   else:
     reviewers = issue.reviewers
-    if request.user != issue.owner and request.user.email() not in reviewers:
+    if (request.user != issue.owner and
+        request.user.email() not in reviewers and
+        not issue.is_collaborator(request.user)):
       reviewers.append(db.Email(request.user.email()))
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
@@ -3284,7 +3291,9 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   template, context = _get_mail_template(request, issue, full_diff=attach_patch)
   # Decide who should receive mail
   my_email = db.Email(request.user.email())
-  to = [db.Email(issue.owner.email())] + issue.reviewers
+  to = ([db.Email(issue.owner.email())] +
+        issue.reviewers +
+        [db.Email(email) for email in issue.collaborator_emails()])
   cc = issue.cc[:]
   if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
     cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
@@ -4027,7 +4036,10 @@ def _process_incoming_mail(raw_message, recipients):
 
   # Add sender to reviewers if needed.
   all_emails = [str(x).lower()
-                for x in [issue.owner.email()]+issue.reviewers+issue.cc]
+                for x in ([issue.owner.email()] +
+                          issue.reviewers +
+                          issue.cc +
+                          issue.collaborator_emails())]
   if sender.lower() not in all_emails:
     query = models.Account.all().filter('lower_email =', sender.lower())
     account = query.get()
