@@ -100,7 +100,7 @@ class Issue(db.Model):
 
   def user_can_edit(self, user):
     """Return true if the given user has permission to edit this issue."""
-    return user == self.owner
+    return user and (user == self.owner or self.is_collaborator(user))
 
   @property
   def edit_allowed(self):
@@ -157,6 +157,42 @@ class Issue(db.Model):
             self, account.user)
         self._num_drafts = query.count()
     return self._num_drafts
+
+  @staticmethod
+  def _collaborator_emails_from_description(description):
+    """Parses a description, returning collaborator email addresses.
+
+    Broken out for unit testing.
+    """
+    collaborators = []
+    for line in description.splitlines():
+      m = re.match(
+        r'\s*COLLABORATOR\s*='
+        r'\s*([a-zA-Z0-9._]+@[a-zA-Z0-9_]+\.[a-zA-Z0-9._]+)\s*',
+        line)
+      if m:
+        collaborators.append(m.group(1))
+    return collaborators
+
+  def collaborator_emails(self):
+    """Returns a possibly empty list of emails specified in
+    COLLABORATOR= lines.
+
+    Note that one COLLABORATOR= lines is required per address.
+    """
+    if not self.description:
+      return []
+    return Issue._collaborator_emails_from_description(self.description)
+
+  def is_collaborator(self, user):
+    """Returns true if the given user is a collaborator on this issue.
+
+    This is determined by checking if the user's email is listed as a
+    collaborator email.
+    """
+    if not user:
+      return False
+    return user.email() in self.collaborator_emails()
 
 
 class PatchSet(db.Model):
