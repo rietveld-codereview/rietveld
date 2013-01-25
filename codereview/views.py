@@ -334,6 +334,12 @@ class MiniPublishForm(forms.Form):
                                    widget=forms.HiddenInput())
 
 
+class BlockForm(forms.Form):
+  blocked = forms.BooleanField(
+      required=False,
+      help_text='Should this user be blocked')
+
+
 FORM_CONTEXT_VALUES = [(x, '%d lines' % x) for x in models.CONTEXT_CHOICES]
 FORM_CONTEXT_VALUES.append(('', 'Whole file'))
 
@@ -1228,8 +1234,11 @@ def _show_user(request):
     query = query.filter('author =', request.user).fetch(100)
     draft_keys = set(d.parent_key().parent().parent() for d in query)
     draft_issues = models.Issue.get(draft_keys)
+    # Reduce the chance of someone trying to block himself.
+    show_block = False
   else:
     draft_issues = draft_keys = []
+    show_block = request.user_is_admin
   my_issues = [
       issue for issue in db.GqlQuery(
           'SELECT * FROM Issue '
@@ -1268,14 +1277,40 @@ def _show_user(request):
   all_issues = my_issues + review_issues + closed_issues + cc_issues
   _load_users_for_issues(all_issues)
   _optimize_draft_counts(all_issues)
+  account = models.Account.get_account_for_user(request.user_to_show)
   return respond(request, 'user.html',
-                 {'email': user.email(),
+                 {'account': account,
                   'my_issues': my_issues,
                   'review_issues': review_issues,
                   'closed_issues': closed_issues,
                   'cc_issues': cc_issues,
                   'draft_issues': draft_issues,
+                  'show_block': show_block,
                   })
+
+
+@admin_required
+@user_key_required
+def block_user(request):
+  """/user/<user>/block - Blocks a specific user."""
+  account = models.Account.get_account_for_user(request.user_to_show)
+  if request.method == 'POST':
+    form = BlockForm(request.POST)
+    if form.is_valid():
+      account.blocked = form.cleaned_data['blocked']
+      logging.debug(
+          'Updating block bit to %s for user %s',
+          account.blocked,
+          account.email)
+      account.put()
+  else:
+    form = BlockForm()
+  form.initial['blocked'] = account.blocked
+  templates = {
+    'account': account,
+    'form': form,
+  }
+  return respond(request, 'block_user.html', templates)
 
 
 @login_required
@@ -1581,6 +1616,10 @@ def _make_new(request, form):
   """
   if not form.is_valid():
     return (None, None)
+  account = models.Account.get_account_for_user(request.user)
+  if account.blocked:
+    # Early exit for blocked accounts.
+    return (None, None)
 
   data_url = _get_data_url(form)
   if data_url is None:
@@ -1701,6 +1740,9 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   if form.is_valid():
     data_url = _get_data_url(form)
   if not form.is_valid():
+    return None
+  account = models.Account.get_account_for_user(request.user)
+  if account.blocked:
     return None
   if request.user != issue.owner:
     # This check is done at each call site but check again as a safety measure.
@@ -3069,7 +3111,10 @@ def publish(request):
                                              })
 
   form = form_class(request.POST)
-  if not form.is_valid():
+  # If the user is blocked, intentionally redirects him to the form again to
+  # confuse him.
+  account = models.Account.get_account_for_user(request.user)
+  if account.blocked or not form.is_valid():
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
   if request.user == issue.owner:
     issue.subject = form.cleaned_data['subject']
