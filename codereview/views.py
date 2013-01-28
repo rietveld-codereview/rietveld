@@ -644,11 +644,11 @@ def _clean_int(value, default, min_value=None, max_value=None):
 
 def is_admin(user_email):
   """Returns True if the specified user is an admin.
-  
+
   Args:
     user: A string holding the email address of the user.  Assumes string
         is all lowercase.
-    
+
   Returns:
     True if the user is an admin, False otherwise.
   """
@@ -3234,12 +3234,6 @@ def publish(request):
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
     cc = issue.cc[:]
-    if (request.user != issue.owner and
-        request.user.email() not in issue.reviewers and
-        not issue.is_collaborator(request.user)):
-      reviewers.append(request.user.email())
-      if request.user.email() in cc:
-        cc.remove(request.user.email())
     reviewers = [models.Account.get_nickname_for_email(reviewer,
                                                        default=reviewer)
                  for reviewer in reviewers]
@@ -3274,10 +3268,12 @@ def publish(request):
     reviewers = _get_emails(form, 'reviewers')
   else:
     reviewers = issue.reviewers
-    if (request.user != issue.owner and
-        request.user.email() not in reviewers and
-        not issue.is_collaborator(request.user)):
-      reviewers.append(db.Email(request.user.email()))
+  if (form.is_valid() and form.cleaned_data.get('add_as_reviewer', True) and
+      request.user != issue.owner and
+      request.user.email() not in reviewers and
+      not issue.is_collaborator(request.user)):
+    reviewers.append(db.Email(request.user.email()))
+
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
   else:
