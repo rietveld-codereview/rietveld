@@ -134,8 +134,20 @@ indexes:
 
 - kind: Issue
   properties:
+  - name: repo_guid
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
   - name: reviewers
   - name: created
+
+- kind: Issue
+  properties:
+  - name: reviewers
+  - name: created
+    direction: desc
 
 - kind: Issue
   properties:
