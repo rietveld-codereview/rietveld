@@ -1799,7 +1799,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   account = models.Account.get_account_for_user(request.user)
   if account.blocked:
     return None
-  if not request.issue.user_can_edit(request.user):
+  if not issue.user_can_edit(request.user):
     # This check is done at each call site but check again as a safety measure.
     return None
   data, url, separate_patches = data_url
