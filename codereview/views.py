@@ -3115,12 +3115,9 @@ def publish(request):
                                              'draft_message': draft_message,
                                              })
 
-  form = form_class(request.POST)
-  message_only = form.cleaned_data.get('message_only', False)
-  if message_only and form_class is not MiniPublishForm:
-    # If this is message_only, switch to mini form, since the validations on
-    # PublishForm don't work for simple POSTs (i.e. there is no Subject).
-    form = MiniPublishForm(request.POST)
+  # Supply subject so that if this is a bare request to /publish, it won't
+  # fail out if we've selected PublishForm (which requires a subject).
+  form = form_class(request.POST, initial={'subject': issue.subject})
 
   # If the user is blocked, intentionally redirects him to the form again to
   # confuse him.
@@ -3129,7 +3126,7 @@ def publish(request):
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
   if request.user == issue.owner:
     issue.subject = form.cleaned_data['subject']
-  if form.is_valid() and not message_only:
+  if form.is_valid() and not form.cleaned_data.get('message_only', False):
     reviewers = _get_emails(form, 'reviewers')
   else:
     reviewers = issue.reviewers
@@ -3137,7 +3134,7 @@ def publish(request):
         request.user.email() not in reviewers and
         not issue.is_collaborator(request.user)):
       reviewers.append(db.Email(request.user.email()))
-  if form.is_valid() and not message_only:
+  if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
   else:
     cc = issue.cc
@@ -3148,7 +3145,7 @@ def publish(request):
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
   issue.reviewers = reviewers
   issue.cc = cc
-  if not message_only:
+  if not form.cleaned_data.get('message_only', False):
     tbd, comments = _get_draft_comments(request, issue)
   else:
     tbd = []
