@@ -103,6 +103,7 @@ class Issue(db.Model):
   def user_can_edit(self, user):
     """Return true if the given user has permission to edit this issue."""
     return user and (user == self.owner or self.is_collaborator(user) or
+                     users.is_current_user_admin() or
                      user.email().endswith("@chromium.org") or
                      user.email().endswith("@google.com"))
 
