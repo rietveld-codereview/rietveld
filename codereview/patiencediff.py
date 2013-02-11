@@ -44,16 +44,18 @@ class PseudoPatienceSequenceMatcher(difflib.SequenceMatcher):
     # insert a new Match object at the beginning of |matches| if necessary.
     if matches[0].a != matches[0].b:
       match_length = 0
-      index = matches[0].a
+      is_a = matches[0].a < matches[0].b
+      index = matches[0].a if is_a else matches[0].b
       while (index + match_length < len(self.a) and
           index + match_length < len(self.b) and
           self.a[index + match_length] == self.b[index + match_length]):
         match_length += 1
 
       if match_length:
-        matches[0] = difflib.Match(index + match_length,
-                                   matches[0].b + match_length,
-                                   matches[0].size - match_length)
+        matches[0] = difflib.Match(
+            (index if is_a else matches[0].a) + match_length,
+            (matches[0].b if is_a else index) + match_length,
+            matches[0].size - match_length)
         if matches[0].size == 0:
           matches[0] = difflib.Match(index, index, match_length)
         else:
