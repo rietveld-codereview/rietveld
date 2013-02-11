@@ -535,6 +535,25 @@ table#queues td, table#clfiles td {
   padding: 2px;
 }
 
+div#trybot-popup {
+  position: fixed;
+  padding: 8px;
+  background-color: #E5ECF9;
+  border: 1px solid  #93b7fa;
+  border-radius: 4px;
+  -webkit-border-radius: 4px;
+  -moz-border-radius: 4px;
+}
+
+div.trybot-popup-column {
+  float: left;
+  margin-bottom: 8px;
+}
+
+div.trybot-popup-input {
+  margin-right: 8px;
+}
+
 div#help {
   position: fixed;
   right: 4%;
@@ -842,6 +861,27 @@ ul.errorlist {
 ul.errorlist li {
   color: red;
   font-weight: bold;
+}
+
+.build-result {
+  text-decoration: none;
+  color: #333333;
+}
+
+.build-status-color-failure {
+  background-color: rgb(233, 128, 128);
+}
+
+.build-status-color-pending {
+  background-color: rgb(255, 252,108);
+}
+
+.build-status-color-success {
+  background-color: rgb(143, 223, 95);
+}
+
+.build-status-color-try-pending {
+  background-color: rgb(223, 223, 223);
 }
 
 
