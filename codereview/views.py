@@ -3117,7 +3117,10 @@ def publish(request):
 
   # Supply subject so that if this is a bare request to /publish, it won't
   # fail out if we've selected PublishForm (which requires a subject).
-  form = form_class(request.POST, initial={'subject': issue.subject})
+  augmented_POST = request.POST.copy()
+  if issue.subject:
+    augmented_POST.setdefault('subject', issue.subject)
+  form = form_class(augmented_POST)
 
   # If the user is blocked, intentionally redirects him to the form again to
   # confuse him.
