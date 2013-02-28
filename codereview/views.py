@@ -2159,7 +2159,9 @@ def show(request, form=None):
                   # here.  Need to map it correctly from the issue's base URL.
                   'default_builders':
                       models_chromium.DefaultBuilderList.get_builders(
-                          'tryserver.chromium'),
+                          'tryserver.chromium') +
+                      models_chromium.DefaultBuilderList.get_builders(
+                          'tryserver.chromium.linux'),
                   })
 
 
