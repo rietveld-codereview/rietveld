@@ -22,11 +22,11 @@ import time
 
 from google.appengine.api import memcache
 from google.appengine.api import urlfetch
-from google.appengine.api import users
 from google.appengine.ext import db
 
 from django.conf import settings
 
+from codereview import auth_utils
 from codereview import patching
 from codereview import utils
 from codereview.exceptions import FetchError
@@ -898,8 +898,8 @@ class Account(db.Model):
   def get_xsrf_token(self, offset=0):
     """Return an XSRF token for the current user."""
     # This code assumes that
-    # self.user.email() == users.get_current_user().email()
-    current_user = users.get_current_user()
+    # self.user.email() == auth_utils.get_current_user().email()
+    current_user = auth_utils.get_current_user()
     if self.user.user_id() != current_user.user_id():
       # Mainly for Google Account plus conversion.
       logging.info('Updating user_id for %s from %s to %s' % (
