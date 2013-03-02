@@ -65,7 +65,7 @@ def get_oauth_token_from_env():
   """
   auth_header = os.getenv('HTTP_AUTHORIZATION')
   if auth_header is None:
-    logging.warning('No authorization header sent with request.')
+    logging.debug('No authorization header sent with request.')
     return
 
   for auth_scheme in _ALLOWED_AUTH_SCHEMES:
@@ -87,7 +87,7 @@ def get_token_info(token):
         response is not a 200, the response body can't be decoded as JSON or
         it isn't decoded as a dictionary, returns None.
   """
-  logging.warning('Getting token info for OAuth token: %r:', token)
+  logging.debug('Getting token info for OAuth token: %r:', token)
 
   tokeninfo_result = urlfetch.fetch(
       '%s?%s' % (TOKENINFO_URL, urllib.urlencode({'access_token': token})))
@@ -185,7 +185,7 @@ def get_current_rietveld_oauth_user():
   try:
     current_oauth_user = oauth.get_current_user(EMAIL_SCOPE)
   except oauth.Error:
-    logging.warning('No OAuth user was found.')
+    logging.debug('No OAuth user was found.')
     return
 
   token = get_oauth_token_from_env()
@@ -215,7 +215,7 @@ def get_current_user():
   if current_cookie_user is not None:
     return current_cookie_user
 
-  logging.warning('No user found from session cookies.')
+  logging.debug('No user found from session cookies.')
 
   return get_current_rietveld_oauth_user()
 
