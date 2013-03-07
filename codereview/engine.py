@@ -18,11 +18,10 @@ import cgi
 import difflib
 import re
 
-from google.appengine.api import users
-
 from django.conf import settings
 from django.template import loader, RequestContext
 
+from codereview import auth_utils
 from codereview import intra_region_diff
 from codereview import models
 from codereview import patching
@@ -476,7 +475,7 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
             intra_region_diff.COLOR_SCHEME['new']['match'])
   oend = intra_region_diff.END_TAG
   nend = oend
-  user = users.get_current_user()
+  user = auth_utils.get_current_user()
 
   for i in xrange(len(old_buff)):
     tg = tag

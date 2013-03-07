@@ -23,6 +23,7 @@ import django.template
 import django.utils.safestring
 from django.core.urlresolvers import reverse
 
+from codereview import auth_utils
 from codereview import models
 
 register = django.template.Library()
@@ -34,7 +35,7 @@ def get_links_for_users(user_emails):
   """Return a dictionary of email->link to user page and fill caches."""
   link_dict = {}
   remaining_emails = set(user_emails)
-  
+
   # initialize with email usernames
   for email in remaining_emails:
     nick = email.split('@', 1)[0]
@@ -68,7 +69,7 @@ def get_links_for_users(user_emails):
              (reverse('codereview.views.show_user', args=[account.nickname]),
               cgi.escape(account.nickname)))
       link_dict[account.email] = ret
-    
+
   datastore_results = dict((e, link_dict[e]) for e in remaining_emails)
   memcache.set_multi(datastore_results, 300, key_prefix='show_user:')
   user_cache.update(datastore_results)
@@ -88,7 +89,7 @@ def show_user(email, arg=None, _autoescape=None, _memcache_results=None):
   if isinstance(email, users.User):
     email = email.email()
   if not arg:
-    user = users.get_current_user()
+    user = auth_utils.get_current_user()
     if user is not None and email == user.email():
       return 'me'
 
@@ -109,10 +110,10 @@ def show_users(email_list, arg=None):
   links = get_links_for_users(new_email_list)
 
   if not arg:
-    user = users.get_current_user()
+    user = auth_utils.get_current_user()
     if user is not None:
       links[user.email()] = 'me'
-      
+
   return django.utils.safestring.mark_safe(', '.join(
       links[email] for email in email_list))
 
@@ -181,7 +182,7 @@ def get_nickname(email, never_me=False, request=None):
     if request is not None:
       user = request.user
     else:
-      user = users.get_current_user()
+      user = auth_utils.get_current_user()
     if user is not None and email == user.email():
       return 'me'
 

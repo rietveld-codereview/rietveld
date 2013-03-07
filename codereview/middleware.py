@@ -16,7 +16,6 @@
 
 import logging
 
-from google.appengine.api import users
 from google.appengine.runtime import apiproxy_errors
 from google.appengine.runtime import DeadlineExceededError
 
@@ -24,6 +23,7 @@ from django.conf import settings
 from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect
 from django.template import Context, loader
 
+from codereview import auth_utils
 from codereview import models
 
 
@@ -41,8 +41,8 @@ class AddUserToRequestMiddleware(object):
   """Add a user object and a user_is_admin flag to each request."""
 
   def process_request(self, request):
-    request.user = users.get_current_user()
-    request.user_is_admin = users.is_current_user_admin()
+    request.user = auth_utils.get_current_user()
+    request.user_is_admin = auth_utils.is_current_user_admin()
 
     # Update the cached value of the current user's Account
     account = None
