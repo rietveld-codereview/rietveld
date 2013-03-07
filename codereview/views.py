@@ -3633,8 +3633,10 @@ def repos(request):
     # Using ._repo instead of .repo returns the db.Key of the referenced entity.
     # Access to a protected member FOO of a client class
     # pylint: disable=W0212
-    branch.repository = repo_map[str(branch._repo)]
-    branches.append(branch)
+    repo = str(branch._repo)
+    if repo in repo_map:
+      branch.repository = repo_map[repo]
+      branches.append(branch)
   branches.sort(key=lambda b: map(
     unicode.lower, (b.repository.name, b.category, b.name)))
   return respond(request, 'repos.html', {'branches': branches})
