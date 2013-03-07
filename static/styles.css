@@ -1,0 +1,886 @@
+/*
+ * Copyright 2008 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 83%;
+  background-color: #fff;
+}
+
+.home {
+  font-size: 200%;
+  font-weight: bold;
+  color: #000;
+  /* text-decoration: none; */
+}
+
+tt, code, pre {
+  font-size: 12px;
+}
+
+/* Looks like a no-op, but inputs don't inherit font-size otherwise. */
+input {
+  font-size: 100%;
+}
+
+form {
+  margin: 0px;
+}
+
+ul {
+  margin-top: 0px;
+  margin-bottom: 0px;
+}
+
+.gaia {
+  text-align: right;
+  padding: 2px;
+  white-space: nowrap;
+}
+
+.search {
+  text-align: left;
+  padding: 2px;
+  white-space: nowrap;
+}
+
+.bluebg {
+  background-color: #ccf;
+}
+
+a {
+  color: #4182fa;
+}
+
+a.novisit {
+  color: #2a55a3;
+}
+
+a.redlink {
+  color: red;
+  font-weight: bold;
+}
+
+.anchor {
+  visibility: hidden;
+}
+
+div.header:hover a.anchor,
+h3:hover .anchor {
+  visibility: visible;
+}
+
+h3:hover .anchor {
+  color: #2a55a3;
+  text-decoration: underline;
+}
+
+a.noul, a.noulv {
+  color: #4182fa; /* #93b7fa; */
+  text-decoration: none;
+}
+
+a:hover.noul, a:hover.noulv {
+  text-decoration: underline;
+}
+
+a:visited.noul, a:visited.noulv {
+  color: #a32a91; /* #2a55a3; */
+}
+
+.filegone, .filegone a, .filegone a:visited {
+  color: gray;
+}
+
+/* Old/new styles for replace, delete, insert, equal, blank (no text) */
+.olddark, .newdark, .oldreplace, .olddelete, .oldinsert, .oldequal, .oldblank,
+.oldlight, .newlight, .oldreplace1, .newreplace1,
+.newreplace, .newdelete, .newinsert, .newequal, .newblank,
+.oldmove, .oldchangemove, .oldchangemove1, .oldmove_out, .oldchangemove_out,
+.newmove, .newchangemove, .newchangemove1,
+.udiffadd, .udiffremove, .udiff, .debug-info {
+  white-space: pre;
+  font-family: monospace;
+  font-size: 12px;
+  vertical-align: top;
+}
+
+.oldlight {
+  background-color: #fee;
+  font-size: 100%;
+}
+
+.newlight {
+  background-color: #dfd;
+  font-size: 100%;
+}
+
+.olddark {
+  background-color: #faa;
+  font-size: 100%;
+}
+
+.newdark {
+  background-color: #9f9;
+  font-size: 100%;
+}
+
+.oldblank, .newblank {
+  background-color: #eee;
+}
+
+.oldreplace1 {
+  background-color: #faa;
+}
+
+.newreplace1 {
+  background-color: #9f9;
+}
+
+.newchangemove1 {
+  background-color: #9f9;
+}
+
+.oldreplace {
+  background-color: #fee;
+}
+
+.olddelete {
+  background-color: #faa;
+}
+
+.newreplace {
+  background-color: #dfd;
+}
+
+.newchangemove {
+  background-color: #dfd;
+}
+
+.newinsert {
+  background-color: #9f9;
+}
+
+.oldinsert, newdelete {
+  background-color: #ddd;
+}
+
+.oldequal, .newequal, .newmove {
+  background-color: #fff;
+}
+
+.oldmove, .oldchangemove, .oldchangemove1, .moved_header, .moved_lno {
+  background-color: #ff9;
+}
+
+.oldmove_out, .oldchangemove_out, .moved_out_header {
+  background-color: #fc8;
+}
+
+.movelight {
+  background-color: #ff9;
+  font-size: 100%;
+}
+
+.oldmovedark {
+  background-color: #faa;
+  font-size: 100%;
+}
+
+.newmovedark {
+  background-color: #9f9;
+  font-size: 100%;
+}
+
+/* Message above a side-by-side view */
+.info {
+  width: 250px;
+  text-align: center;
+  padding-bottom: 0.6em;
+  color: #777;
+}
+
+/* Header sections for moved regions */
+.moved_header {
+  white-space: nowrap;
+  font-size: 80%;
+  color: #777;
+}
+
+.moved_out_header {
+  white-space: nowrap;
+  font-size: 80%;
+  cursor: pointer;
+  color: #777;
+}
+
+.moved_lno {
+  color: #777;
+}
+
+.udiffadd {
+  color: blue;
+}
+
+.udiffremove {
+  color: red;
+}
+
+/* CL summary formatting styles */
+
+.users {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.subject {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.extra {
+  color: #777;
+}
+
+.extra-note {
+  color: #777;
+  font-style:italic;
+}
+
+.date {
+  white-space: nowrap;
+}
+
+span.dump {
+  margin-left: 4px;
+  padding-left: 1em;
+  border-left: 1px solid silver;
+}
+
+/* Subheaders have standard Google light blue bg. */
+
+h2, h3 {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+/* Make h1, h2 headers lighter */
+h1, h2 {
+ font-weight: normal;
+}
+
+/* Make h1 header smaller */
+h1 {
+  margin-top: 0px;
+  font-size: 180%;
+}
+
+/* Comment title, make it seem clickable, single line, hidden overflow */
+div.comment_title {
+  overflow: hidden;
+  white-space: nowrap;
+  border-top: thin solid;
+  text-overflow: ellipsis; /* An IE-only feature */
+  cursor: pointer;
+}
+
+div.comment-draft-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis; /* An IE-only feature */
+  cursor: pointer;
+}
+
+/* Equivalent of pre */
+div.comment {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+div.comment-text {
+  white-space: pre;
+}
+
+div.comment-text-quoted {
+  white-space: pre;
+  color: #777;
+}
+
+a.comment-hide-link {
+  font-size: small;
+  text-decoration: none;
+}
+
+tr.inline-comments {
+  background-color: #e5ecf9;
+}
+
+div.linter {
+  background-color: #f9f9c0;
+}
+
+div.bugbot {
+  background-color: #f9f9c0;
+}
+
+div.comment-border {
+  border-top: thin solid;
+  border-left: thin solid;
+  border-right: thin solid;
+  padding: 2px;
+}
+
+div.inline-comment-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis; /* An IE-only feature */
+  cursor: pointer;
+}
+
+/* Equivalent of pre */
+div.inline-comment {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+#hook-sel {
+  position: absolute;
+  background: #06c;
+  width: 1px;
+  height: 2px;
+  font-size: 0; /* Work-around for an IE bug */
+}
+
+span.moved_body {
+  white-space: pre;
+  font-family: monospace;
+  font-size: 12px;
+  vertical-align: top;
+  background-color: #fa6;
+}
+
+/* CL# color-coding */
+
+.cl-unreviewed {
+  background: #ff7; /* Yellow */
+}
+
+.cl-overdue {
+  background: #faa; /* Red */
+}
+
+.cl-approved {
+  background: #bfb; /* Green */
+}
+
+.cl-aged {
+  background: #ddd; /* Gray */
+}
+
+/* Debugging information */
+.debug-info {
+  background: lightgrey;
+}
+
+.toggled-section {
+  padding-left: 15px;
+  background-image: url('closedtriangle.gif');
+  background-position: center left;
+  background-repeat: no-repeat;
+  background-align: left;
+  text-decoration: none;
+  color: black;
+}
+.opentriangle {
+  background-image: url('opentriangle.gif');
+}
+
+.fat-button {
+  height: 2em;
+}
+
+.error {
+  color: red;
+  border: 1px solid red;
+  margin: 1em;
+  margin-top: 0px;
+  padding: 0.5em;
+  font-size: 110%;
+}
+
+div.fileresult {
+  margin-left: 1em;
+}
+
+div.result {
+  margin-left: 2em;
+}
+
+div.errorbox-bad {
+  border: 2px solid #990000;
+  padding: 2px;
+}
+
+div.errorbox-bad-msg {
+  text-align: center;
+  color: red;
+  font-weight: bold;
+}
+
+.vivid-msg, .calm-msg {
+  margin: 0 2em 0.5em 2em;
+}
+
+.vivid-msg {
+  font-size:125%;
+  background: #ffeac0;
+  border: 1px solid #ff9900;
+}
+
+.leftdiffbg {
+  background: #d9d9d9;
+}
+
+.rightdiffbg {
+  background: #ffff63;
+}
+
+/* Styles for the history table */
+.header-right {
+  float: right;
+  padding-top: 0.2em;
+  margin-right: 2px;
+}
+
+table.history {
+  border-width: 0px;
+  border-spacing: 0px;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.history td, th {
+  padding: 3px;
+}
+
+table.history td.triangle {
+  width: 11px;
+}
+
+table.history div.triangle-open {
+  padding-left: 15px;
+  width: 11px;
+  height: 11px;
+/*background: url('softopentriangle.gif') no-repeat scroll center;*/
+}
+
+table.history div.triangle-closed {
+  padding-left: 15px;
+  width: 11px;
+  height: 11px;
+/*background: url('softclosedtriangle.gif') no-repeat scroll center;*/
+}
+
+/* Make the diff background colors slightly lighter for the table.*/
+table.history .leftdiffbg {
+  background: #e8e8e8;
+}
+
+table.history .leftdiffbg-light {
+  background: #f2f2f2;
+}
+
+table.history .rightdiffbg-light {
+  background: #ffffaa;
+}
+
+table.history .sep {
+  border-top: 1px solid #f2f2f2;
+}
+
+table.property_changes {
+  color: #333333;
+  background-color: #eeeeec;
+  border: 1px solid lightgray;
+  border-radius: 5px;
+  -moz-border-radius: 5px;
+  -webkit-border-radius: 5px;
+  padding: 5px;
+  margin-bottom: 1em;
+}
+
+table#queues, table#clfiles {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+table#queues tr, table#clfiles tr {
+  border-bottom: thin solid lightgray;
+}
+
+table#queues td, table#clfiles td {
+  padding: 2px;
+}
+
+div#help {
+  position: fixed;
+  right: 4%;
+  left: 4%;
+  top: 5%;
+  opacity: 0.85;
+  -moz-opacity: 0.85;
+  -khtml-opacity: 0.85;
+  filter: alpha(opacity=85);
+  border-radius: 10px;
+  -webkit-border-radius: 10px;
+  -moz-border-radius: 10px;
+
+  background: black;
+  color: white;
+  font-weight: bold;
+
+  padding: 1em;
+  z-index: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+div#help th {
+  color: yellow;
+  text-align: left;
+}
+
+div#help td {
+  font-weight: normal;
+}
+
+td.shortcut {
+  text-align: right;
+}
+
+span.letter {
+  color: #88dd00;
+  font-weight: bold;
+  font-family: monospace;
+  font-size: medium;
+}
+
+/* Visual tab indication. */
+
+span.visualtab {
+  color: red;
+  font-weight: bold;
+}
+
+/* Disabled text. */
+.disabled {
+  color: gray;
+}
+
+/* Generation counter. */
+.counter {
+  float: right;
+  font-size: 80%;
+  color: gray;
+}
+
+/* Issue description. */
+.description {
+  background-color: #e5ecf9;
+  margin-top: 0;
+  padding: 3px;
+  overflow: auto;
+  border-radius: 9px;
+  -webkit-border-radius: 9px;
+  -moz-border-radius: 9px;
+}
+
+/* Main menu */
+.mainmenu {
+  margin-top: 1em;
+}
+.mainmenu a {
+  margin-right: .2em;
+  background-color: #f3f3f3;
+  border-bottom: none;
+  border-radius: 5px 5px 0px 0px;
+  -webkit-border-radius: 5px 5px 0px 0px;
+  -moz-border-radius: 5px 5px 0px 0px;
+  padding-left: .8em;
+  padding-right: .8em;
+  padding-top: 3px;
+  text-decoration: none;
+  color: #666666;
+  font-weight: bold;
+}
+.mainmenu a.active {
+  background-color: #e9f2df;
+  border-bottom: none;
+  color: black;
+}
+.mainmenu2 {
+  background-color: #e9f2df;
+  padding: 5px;
+  padding-left: .8em;
+  margin-bottom: 1.3em;
+  border-radius: 0px 5px 5px 5px;
+  -webkit-border-radius: 0px 5px 5px 5px;
+  -moz-border-radius: 0px 5px 5px 5px;
+}
+.mainmenu2 a {
+  color: black;
+}
+.mainmenu2 a.active {
+  text-decoration: none;
+  color: black;
+  font-weight: bold;
+}
+
+
+/* Issue lists */
+.issue-list {
+  background-color: #E5ECF9;
+  border: 1px solid  #93b7fa;
+  border-bottom: 2px solid #93b7fa;
+  padding: 3px;
+  border-radius: 5px 5px 0px 0px;
+  -webkit-border-radius: 5px 5px 0px 0px;
+  -moz-border-radius: 5px 5px 0px 0px;
+}
+.issue-list .header {
+  background-color: #E5ECF9;
+}
+.issue-list .header h3 {
+  font-size: 1.1em;
+  margin: 0px;
+  padding: 3px;
+  padding-left: 0px;
+  
+}
+
+.issue-list .pagination {
+  text-align: right;
+  padding: 3px;
+}
+.issue-list table{
+  background-color: white;
+}
+.issue-list table th {
+  background-color: #eeeeec;
+  border-right: 1px solid lightgray;
+  border-top: 1px solid lightgray;
+}
+
+.issue-list table td.last {
+  border-right: 1px solid lightgray;
+}
+
+.issue-list table .first {
+  border-left: 1px solid lightgray;
+}
+
+.issue-list form {
+  display: inline;
+}
+
+.issue-list input.link-to {
+  color: #4182fa;
+  border: 0px;
+  margin: 0px;
+  padding: 0px;
+  width: auto;
+  overflow: visible;
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+  display: inline-block;
+}
+
+.issue_details_sidebar div {
+  margin-top: .8em;
+}
+
+
+/* Issue details */
+.issue-header .h2 {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.issue-details .meta {
+  border-right: 2px solid #b7d993;
+  padding: 5px;
+}
+
+
+/* Messages */
+.message .header {
+  border: 1px solid lightgray;
+  border-bottom: none;
+  border-radius: 8px 8px 0px 0px;
+  -webkit-border-radius: 8px 8px 0px 0px;
+  -moz-border-radius: 8px 8px 0px 0px;
+  cursor: pointer;
+}
+.message-body {
+  border-left: 1px solid lightgray;
+  border-right: 1px solid lightgray;
+}
+.message-body span, .message-body pre {
+  margin: 0px;
+  margin-left: 5px;
+  margin-right: 5px;
+}
+.message-actions {
+  background-color: #dddddd;
+  font-size: .8em;
+  padding: 3px;
+  padding-left: 5px;
+  border-radius: 0px 0px 8px 8px;
+  -webkit-border-radius: 0px 0px 8px 8px;
+  -moz-border-radius: 0px 0px 8px 8px;
+  margin-bottom: .8em;
+}
+
+/* Approval messages have light green header background and dark green border */
+.message.approval .header {
+  background-color: #7FFF7F;
+  border-color: green;
+}
+.message.approval .message-body,
+.message.approval .message-actions {
+  border-color: green;
+}
+
+/* Disapproval messages have light red header background and red border */
+.message.disapproval .header {
+  background-color: #FFAAAA;
+  border-color: red;
+}
+.message.disapproval .message-body,
+.message.disapproval .message-actions {
+  border-color: red;
+}
+
+.message.referenced .header {
+  background-color: #FFFF7F;
+  border-color: yellow;
+}
+.message.referenced .message-body,
+.message.referenced .message-actions {
+  border-color: yellow;
+}
+
+/* Messages sent while issue was closed have a light blue header background
+   and a blue border */
+.message.issue_was_closed .header {
+  background-color: #AAAAFF;
+  border-color: blue;
+}
+.message.issue_was_closed .message-body,
+.message.issue_was_closed .message-actions {
+  border-color: blue;
+}
+
+.popup {
+  visibility: hidden;
+  background-color: #cdf2a5;
+  padding: 8px;
+  border: 1px solid #2e3436;
+  border-radius: 5px;
+  -webkit-border-radius: 5px;
+  -moz-border-radius: 5px;
+  opacity: 0.95;
+  filter: alpha(opacity=95);
+  position: absolute;
+}
+
+.code {
+  background-color: #eeeeec;
+  padding: 3px;
+  border: 1px solid lightgray;
+  margin-top: .8em;
+}
+
+#table-top {
+  background-color: white;
+  border-radius: 5px;
+  -webkit-border-radius: 5px;
+  -moz-border-radius: 5px;
+  border: 1px solid lightgray;
+}
+
+.codenav {
+  text-align:center;
+  padding: 3px;
+}
+
+.help {
+  font-size: .9em;
+}
+
+ul.errorlist {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+ul.errorlist li {
+  color: red;
+  font-weight: bold;
+}
+
+
+#reviewmsgdlg {
+  background-color: #E9F2DF;
+  border: 1px solid lightgray;
+  border-right: 1px solid darkgray;
+  border-bottom: 1px solid darkgray;
+  position: fixed;
+  left: 10px;
+  top: 10px;
+  padding: 5px;
+  opacity: 0.95;
+  -moz-opacity: 0.95;
+  -khtml-opacity: 0.95;
+  filter: alpha(opacity=95);
+  border-radius: 10px;
+  -webkit-border-radius: 10px;
+  -moz-border-radius: 10px;
+}
+#reviewmsgdlg textarea {
+  border: none;
+  width: 350px;
+  height: 350px;
+  opacity: 1;
+  -moz-opacity: 1;
+  -khtml-opacity: 1;
+  filter: alpha(opacity=100);
+}
+
+#repoview div.header {
+  margin-top: 1.5em;
+}
+
+#repoview div.header span {
+  font-size: 120%;
+  font-weight: bold;
+}
+
+#repoview table {
+  margin-top: 0.5em;
+}

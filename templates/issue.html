@@ -1,0 +1,224 @@
+{%extends "issue_base.html"%}
+
+{%block head%}{{form.media}}{%endblock%}
+{%block issue_body%}
+{%if issue.draft_count or has_draft_message%}
+  <div class="error">
+    You have {%if issue.draft_count%}<b>{{issue.draft_count}} draft</b>
+    comment{{issue.draft_count|pluralize}}{%endif%}
+    {%if has_draft_message%}{%if issue.draft_count%}and {%endif%}a draft
+    message{%endif%}.
+    Drafts are not viewable by others;
+    use <a class="novisit"
+	   href="{%url codereview.views.publish issue.key.id%}">
+    Publish+Mail Comments</a> ('m') to let others view them.
+  </div>
+{%endif%}
+
+
+{%if issue.description%}
+  <h3><a id="issue-description-pointer"
+     href="javascript:M_toggleSection('issue-description')"
+     class="toggled-section opentriangle">
+    Description</a></h3>
+  <div id="issue-description" style="margin-left:15px;">
+    <pre>{{issue.description|wordwrap:80|urlizetrunc:80}}</pre>
+  </div>
+{%endif%}
+
+
+{%for patchset in patchsets%}
+  <h3>
+    <a id="ps-{{patchset.key.id}}-pointer"
+       href="{%url codereview.views.show issue.key.id%}#ps{{patchset.key.id}}"
+       onclick="M_toggleSectionForPS('{{issue.key.id}}', '{{patchset.key.id}}')"
+       class="toggled-section {%if forloop.last%}opentriangle{%endif%}">
+      Patch Set {{forloop.counter}}
+      {%if patchset.message%}: {{patchset.message}}{%endif%}
+      <span class="anchor">#</span>
+    </a>
+  </h3>
+
+  {%if patchset.num_comments or patchset.n_drafts%}
+    <div>
+      <i>Total comments:</i> {{patchset.num_comments}}
+      {%if patchset.n_drafts%}
+        <span style="color:red">
+          <b>+ {{patchset.n_drafts}} draft{{patchset.n_drafts|pluralize}}</b>
+        </span>
+      {%endif%}
+    </div>
+  {%endif%}
+
+  <div id="ps-{{patchset.key.id}}"
+  {%if forloop.last%}
+       style="">
+    {%include "patchset.html"%}
+  {%else%}
+       style="display:none">
+  {%endif%}
+  </div>
+  {%if forloop.last%}
+    <script language="JavaScript" type="text/javascript">
+         <!--
+         var lastPSId = {{patchset.key.id}};
+         // -->
+       </script>
+  {%endif%}
+{%endfor%}
+
+
+{%ifequal user issue.owner%}
+  {%if not issue.local_base%}
+    <h3>
+      <a id="add-pointer"
+         href="javascript:M_toggleSection('add')"
+         class="toggled-section">
+        Add Another Patch Set
+      </a>
+    </h3>
+
+    <form id="add" style="{%if not form.errors%}display:none{%endif%}"
+          action="{%url codereview.views.add issue.key.id%}" method="post"
+          enctype="multipart/form-data">
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+      <table>
+        {{form}}
+        <tr>
+          <td><input type="submit" value="Add Patch Set" /></td>
+          <td>
+            You can also add a patch set to this issue using
+            <code>upload.py -i {{issue.key.id}}</code>
+          </td>
+        </tr>
+      </table>
+    </form>
+  {%endif%}
+{%endifequal%}
+
+
+{%if messages%}
+  <h3>
+    <a id="messages-pointer"
+       href="javascript:M_toggleSection('messages')"
+       class="toggled-section opentriangle">
+      Messages
+    </a>
+  </h3>
+
+  {%if messages%}<div><i>Total messages: {{messages|length}}</i></div>{%endif%}
+
+  <div id="messages">
+    <div style="margin-bottom: .5em;">
+      <a href="javascript:M_showAllComments('cl', {{messages|length}})">
+        Expand All Messages</a>
+      |
+      <a href="javascript:M_hideAllComments('cl', {{messages|length}})">
+        Collapse All Messages</a>
+    </div>
+
+    {%for message in messages%}
+      <div class="message {%if message.issue_was_closed%}issue_was_closed{%endif%} {%if message.approval%}approval{%endif%} {%if message.disapproval%}disapproval{%endif%}"
+           id="msg{{forloop.counter}}"
+           name="{{forloop.counter0}}">
+        <div class="header">
+          <table border="0" width="100%" cellspacing="0" cellpadding="0">
+            <tr class="comment_title"
+                onclick="M_switchChangelistComment({{forloop.counter0}})">
+              <td style="padding-left: 5px; white-space: nowrap;">
+                <b>{%nickname message.sender%}</b>
+              </td>
+              <td width="100%" style="overflow:hidden;">
+                <table style="table-layout:fixed; white-space: nowrap;"
+                       width="100%">
+                  <tr>
+                    <td>
+                      <span style="white-space: nowrap; overflow: hidden;{%if forloop.last%} display: none;{%endif%}"
+                           class="extra"
+                           id="cl-preview-{{forloop.counter0}}">
+                          {{message.text|truncatewords:15}}
+                      </span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+              <td align="right"
+                  style="white-space: nowrap; padding-right: 5px; padding-left: 3px;">
+                {{message.date|timesince}} ago
+                <a href="#msg{{forloop.counter}}">#{{forloop.counter}}</a>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <div id="cl-comment-{{forloop.counter0}}"
+             {%if forloop.last%}{%else%}style="display: none;"{%endif%}>
+          <div class="message-body">
+            {%if message.issue_was_closed%}
+              <span class="extra-note">
+                Message was sent while issue was closed.
+              </span>
+            {%endif%}
+            <pre name="cl-message-{{forloop.counter0}}"
+            >{{message.text|wordwrap:80|urlizetrunc:80}}</pre>
+          </div>
+          <div class="message-actions">
+            {%if user%}
+              <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{%nickname message.sender True%}', '{{message.key}}')"
+                 id="message-reply-href-{{forloop.counter0}}">Reply</a>
+              <textarea rows="7" cols="70" name="message" style="display:none"></textarea>
+              <div id="message-reply-{{forloop.counter0}}"
+                   style="display:none;"></div>
+            {%else%}
+              <a href="{{sign_in}}">Sign in</a> to reply to this message.
+            {%endif%}
+          </div>
+        </div>
+
+      </div>
+    {%endfor%}
+
+    <div>
+      <a href="javascript:M_showAllComments('cl', {{messages|length}})">
+      Expand All Messages</a>
+      |
+      <a href="javascript:M_hideAllComments('cl', {{messages|length}})">
+        Collapse All Messages</a>
+    </div>
+
+  </div>
+{%endif%}
+
+
+<script language="JavaScript" type="text/javascript">
+  <!--
+    document.onkeydown = M_changelistKeyDown;
+    var dashboardState = new M_DashboardState(window, 'patch', 'M_CLPatchMarker');
+    var issueId = {{issue.key.id}};
+    M_toggleIssueOverviewByAnchor();
+  // -->
+</script>
+
+
+{%if user%}
+  <div style="display:none;">
+    <form method="POST" action="{%url codereview.views.publish issue.key.id%}"
+          id="message-reply-form">
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+      <div></div>
+      <input type="hidden" name="in_reply_to" value="" />
+      <input type="hidden" name="subject" value="{{issue.subject}}" />
+      <input type="hidden" name="message_only" value="1" />
+      <input type="submit" value="Send Message" />
+      <input type="button" value="Discard" name="discard" />
+      <input type="checkbox" name="send_mail" value="1" 
+             id="message-reply-send-mail" checked="checked" />
+      <label>Send mail to reviewers</label>
+    </form>
+  </div>
+  <a id="resizer" class="resizer" style="display:none;cursor:pointer">
+    <img src="{{media_url}}zippyplus.gif">
+  </a>
+{%endif%}
+
+{%endblock%}

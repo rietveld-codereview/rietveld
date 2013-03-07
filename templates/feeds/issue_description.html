@@ -1,0 +1,7 @@
+{%if obj.owner%}
+  <a href="{%url codereview.views.download obj.issue.key.id,obj.key.id%}">
+    Download raw patch set
+  </a>
+{%else%}
+  {{obj.text}}
+{%endif%}

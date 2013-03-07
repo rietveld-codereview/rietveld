@@ -1,0 +1,273 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+  "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <title>
+    {%if is_dev%}
+      (DEV)
+    {%endif%}
+    {%block title1%}
+      {%if patch%}{{patch.filename}} -{%endif%}
+    {%endblock%}
+    {%block title2%}
+      {%if issue%}Issue {{issue.key.id}}: {{issue.subject}} -{%endif%}
+    {%endblock%}
+    Code Review
+  </title>
+  <link rel="icon" href="{{media_url}}favicon.ico" />
+  <link type="text/css" rel="stylesheet" href="{{media_url}}styles.css" />
+  <script type="text/javascript" src="{{media_url}}script.js"></script>
+  <link rel="alternate" type="application/atom+xml"
+   	title="Recent Issues"
+   	href="{%url django.contrib.syndication.views.feed url="all"%}" />
+   {%if user%}
+     <link rel="alternate" type="application/atom+xml"
+   	  title="Issues created by me"
+   	  href="{%url django.contrib.syndication.views.feed url="mine"%}/{%nickname user True%}" />
+     <link rel="alternate" type="application/atom+xml"
+   	  title="Issues reviewable by me" 
+   	  href="{%url django.contrib.syndication.views.feed url="reviews"%}/{%nickname user True%}" />
+     <link rel="alternate" type="application/atom+xml"
+   	  title="Issues closed by me"
+   	  href="{%url django.contrib.syndication.views.feed url="closed"%}/{%nickname user True%}" />
+   {%endif%}
+   {%if issue%}
+     <link rel="alternate" type="application/atom+xml"
+ 	    title="Issue {{issue.key.id}}"
+ 	    href="{%url django.contrib.syndication.views.feed url="issue"%}/{{issue.key.id}}" />
+   {%endif%}
+
+   <!-- head block to insert js/css for forms processing -->
+   {%block head%}{%endblock%}
+   <!-- /head -->
+</head>
+<body onunload="M_unloadPage();">
+
+<!-- Begin help window -->
+<script type="text/javascript"><!--
+var xsrfToken = '{{xsrf_token}}';
+var helpDisplayed = false;
+document.onclick = M_clickCommon;
+var media_url = "{{media_url}}";
+var base_url = "{%url codereview.views.index%}";
+{%if issue%}
+var publish_link = "{%url codereview.views.publish issue.key.id%}";
+{%endif%}
+// -->
+</script>
+<div id="help" style="display: none;">
+{%block help%}{%endblock%}
+<div style="font-size: medium; text-align: center;">Keyboard Shortcuts</div>
+<hr />
+<table width="100%">
+
+  <tr valign="top">
+    <td>
+      <table width="100%">
+        <tr>
+          <td></td><th>File</th>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">u</span> <b>:</b></td><td>up to issue</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">m</span> <b>:</b></td><td>publish + mail comments</td>
+        </tr>
+	<tr>
+	  <td class="shortcut"><span class="letter">M</span> <b>:</b></td><td>edit review message</td>
+	</tr>
+        <tr>
+          <td class="shortcut"><span class="letter">j</span> / <span class="letter">k</span> <b>:</b></td><td>jump to file after / before current file</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">J</span> / <span class="letter">K</span> <b>:</b></td><td>jump to next file with a comment after / before current file</td>
+        </tr>
+        <tr>
+          <td></td><th>Side-by-side diff</th>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">i</span> <b>:</b></td><td>toggle intra-line diffs</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">e</span> <b>:</b></td><td>expand all comments</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">c</span> <b>:</b></td><td>collapse all comments</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">s</span> <b>:</b></td><td>toggle showing all comments</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">n</span> / <span class="letter">p</span> <b>:</b></td><td>next / previous diff chunk or comment</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">N</span> / <span class="letter">P</span> <b>:</b></td><td>next / previous comment</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">&lt;Up&gt;</span> / <span class="letter">&lt;Down&gt;</span> <b>:</b></td><td>next / previous line</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">&lt;Enter&gt;</span> <b>:</b></td><td>respond to / edit current comment</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">d</span> <b>:</b></td><td>mark current comment as done</td>
+        </tr>
+      </table>
+    </td>
+    <td>
+      <table width="100%"> 
+        <tr>
+         <td></td><th>Issue</th>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">u</span> <b>:</b></td><td>up to list of issues</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">m</span> <b>:</b></td><td>publish + mail comments</td>
+        </tr>
+	<tr>
+	  <td class="shortcut"><span class="letter">j</span> / <span class="letter">k</span> <b>:</b></td><td>jump to patch after / before current patch</td>
+	</tr>
+	<tr>
+	  <td class="shortcut"><span class="letter">o</span> / <span class="letter">&lt;Enter&gt;</span> <b>:</b></td><td>open current patch in side-by-side view</td>
+	</tr>
+	<tr>
+	  <td class="shortcut"><span class="letter">i</span> <b>:</b></td><td>open current patch in unified diff view</td>
+	</tr>
+        <tr><td>&nbsp;</td></tr>
+        <tr><td></td><th>Issue List</th></tr>
+        <tr>
+          <td class="shortcut"><span class="letter">j</span> / <span class="letter">k</span> <b>:</b></td><td>jump to issue after / before current issue</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">o</span> / <span class="letter">&lt;Enter&gt;</span> <b>:</b></td><td>open current issue</td>
+        </tr>
+        <tr>
+	  <td class="shortcut"><span class="letter">#</span> <b>:</b></td>
+	  <td>close issue</td>
+	</tr>
+        <tr><td>&nbsp;</td></tr>
+        <tr>
+          <td></td><th>Comment/message editing</th>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">&lt;Ctrl&gt;</span> + <span class="letter">s</span> <b>:</b></td><td>save comment</td>
+        </tr>
+        <tr>
+          <td class="shortcut"><span class="letter">&lt;Esc&gt;</span> <b>:</b></td><td>cancel edit</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+</table>
+</div>
+<!-- End help window -->
+
+<div align="right">
+{%if is_dev%}
+<div style="float:left; color:green; font-weight:bold">DEVELOPMENT SERVER</div>
+{%else%}
+<div style="float:left; font-weight:bold"><i>Rietveld</i> Code Review Tool</div>
+{%endif%}
+{%if special_banner%}
+<div style="float:left;
+            border:solid; border-width:1px; border-color: black;
+            font-weight:bold; font-size:111%; color:red;
+            background-color:yellow;
+            margin-left:5px; padding:2px">
+  {{special_banner|safe}}
+</div>
+{%endif%}
+
+{%if user%}
+<b>{{user.email}} ({%nickname user True%})</b>
+|
+{%if must_choose_nickname%}
+<span style="color:red">Please choose your nickname with</span>{%endif%}
+<a class="novisit" href="{%url codereview.views.settings%}">Settings</a>
+|
+{%endif%}
+{%if is_dev%}
+<a class="novisit" target="_blank" href="/_ah/admin">Admin</a>
+|
+{%endif%}
+<a class="novisit" target="_blank"
+   href="http://code.google.com/p/rietveld/wiki/CodeReviewHelp">Help</a>
+|
+<a class="novisit" target="_blank"
+   href="http://code.google.com/p/rietveld/issues/list">Bug tracker</a>
+|
+<a class="novisit" target="_blank"
+   href="http://groups.google.com/group/codereview-discuss">Discussion group</a>
+|
+<a class="novisit" target="_blank"
+   href="http://code.google.com/p/rietveld">Source code</a>
+|
+{%if user%}
+<a class="novisit" href="{{sign_out}}">Sign out</a>
+{% else %}
+<a class="novisit" href="{{sign_in}}">Sign in</a>
+{%endif%}
+</div>
+
+<div class="counter">({{counter}})</div>
+<div class="mainmenu">
+  {%block mainmenu%}
+  <a href="{%url codereview.views.index %}">Issues</a>
+  <a href="{%url codereview.views.repos %}">Repositories</a>
+  <a href="{%url codereview.views.search%}">Search</a>
+  {%endblock%}
+</div>
+<div class="mainmenu2">
+  {%block mainmenu2%}{%endblock%}
+</div>
+
+<div>
+{%block body%}BODY GOES HERE{%endblock%}
+</div>
+{%block popup%}{%endblock%}
+
+<p></p>
+<div style="float: left;">
+  <a target="_blank" href="http://code.google.com/appengine/"><img border="0"
+   src="{{media_url}}appengine-noborder-120x30.gif"
+   alt="Powered by Google App Engine" /></a>
+</div>
+
+<div class="extra" style="font-size: 9pt; float: right; text-align: right;">
+  <div style="height:14px;">
+  <img src="{{media_url}}rss.gif" alt="RSS Feeds" width="14" height="14"
+       align="top" />
+  <a href="{%url django.contrib.syndication.views.feed url="all"%}">Recent Issues</a>
+  {%if user%}
+  |
+  <a href="{%url django.contrib.syndication.views.feed url="mine"%}/{%nickname user True%}">My Issues</a>
+  |
+  <a href="{%url django.contrib.syndication.views.feed url="reviews"%}/{%nickname user True%}">My Reviews</a>
+  |
+  <a href="{%url django.contrib.syndication.views.feed url="closed"%}/{%nickname user True%}">My Closed</a>
+  {%endif%}
+  {%if issue%}
+  |
+  <a href="{%url django.contrib.syndication.views.feed url="issue"%}/{{issue.key.id}}">This issue</a>
+  {%endif%}
+  </div>
+  <div style="margin-top: .3em;">This is Rietveld <a href='http://code.google.com/p/rietveld/source/list'>{{rietveld_revision}}</a></div>
+</div>
+
+{%if not is_dev%}
+<script type="text/javascript">
+var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+</script>
+<script type="text/javascript">
+var pageTracker = _gat._getTracker("UA-4803694-4");
+pageTracker._initData();
+pageTracker._trackPageview();
+</script>
+{%endif%}
+
+</body>
+</html>

@@ -1,0 +1,197 @@
+{%extends "issue_base.html"%}
+{%block body%}
+
+<script language="JavaScript" type="text/javascript"><!--
+document.onkeydown = M_keyDown;
+{%if user%}
+logged_in = true;
+{%else%}
+logged_in = false;
+login_warned = false;
+{%endif%}
+// -->
+</script>
+
+{%if user%}
+<!-- Form used by in-line comment JS; XXX filled in by JS code -->
+<form id="dainlineform" style="display: none;"
+      action="{%url codereview.views.inline_draft%}" method="post">
+  <div class="comment-border">
+    <input type="hidden" name="snapshot" value="XXX">
+    <input type="hidden" name="lineno" value="XXX">
+    <input type="hidden" name="side" value="XXX">
+    <input type="hidden" name="issue" value="{{issue.key.id}}">
+    <input type="hidden" name="patchset" value="{{patchset.key.id}}">
+    <input type="hidden" name="patch" value="{{patch.key.id}}">
+    <textarea name="text" cols="60" rows="5"></textarea><br>
+    <input type="submit" name="save" value="Save"
+           onclick="return M_submitInlineComment(this.form);">
+    <input type="reset" name="cancel" value="Cancel"
+           onclick="M_removeTempInlineComment(this.form)">
+  </div>
+  <div class="comment-border" style="padding: 0pt;"></div>
+</form>
+<a id="resizer" style="display:none;cursor:pointer"><img src="{{media_url}}zippyplus.gif"></a>
+{%endif%}
+
+<div style="float: left;">
+  <h2 style="margin-bottom: 0em; margin-top: 0em;">Side by Side Diff: {{patch.filename}}</h2>
+  <div style="margin-top: .2em;">{%include "issue_star.html"%}
+    <b>Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');" id="upCL">{{issue.key.id}}</a>:</b>
+  {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}
+  {%if issue.base%}<span class="extra">Base URL: {{issue.base}}</span>{%endif%}</div>
+  <div style="margin-top: .4em;">
+    <b>Patch Set: {%if patchset.message%}{{patchset.message}}{%endif%}</b>
+    <span class="extra">
+    Created {{patchset.created|timesince}} ago
+    {%if patchset.url%},
+    Downloaded from: <a href="{{patchset.url}}">{{patchset.url}}</a>
+    {%endif%}
+    </span>
+  </div>
+  <div style="margin-top: .4em">
+    <table>
+      <tr>
+        <td>Left:</td>
+        <td>
+          <select name="left" id="left">
+            <option value="-1">Base</option>
+            {%for p in patchsets%}
+            <option value="{{p.key.id}}">Patch Set {{forloop.counter}}: {{p.message}}</option>
+            {%endfor%}
+          </select>
+        </td>
+        <td rowspan="2"><input type="button" value="Go" onclick="M_navigateDiff({{issue.key.id}}, '{{patch.filename}}')"></td>
+      </tr>
+      <tr>
+        <td>Right:</td>
+        <td>
+          <select name="right" id="right">
+            {%for p in patchsets%}
+            <option value="{{p.key.id}}" {%ifequal patchset.key.id p.key.id%}selected="selected"{%endifequal%}>Patch Set {{forloop.counter}}: {{p.message}}</option>
+            {%endfor%}
+          </select>
+        </td>
+      </tr>
+    </table>
+  </div>
+  <div style="margin-top: .4em;" class="help">
+    Use n/p to move between diff chunks;
+    N/P to move between comments.
+    {%if user%}
+    Double-click a line to add a draft in-line comment.
+    <br><span style="color:red">Draft comments are only viewable by you;</span>
+    use <a href="{%url codereview.views.publish issue.key.id%}" class="novisit">Publish+Mail Comments</a> ('m') to let others view them.
+    {%else%}
+    Please Sign in to add in-line comments.
+    {%endif%}
+  </div>
+</div>
+<div style="float: right; color: #333333; background-color: #eeeeec; border: 1px solid lightgray; -moz-border-radius: 5px 5px 5px 5px; padding: 5px;">
+  <div>{%include "view_details_select.html"%}</div>
+  <div style="margin-top: 5px;">
+    Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{patchset.key.id}});">
+      {% for jump_patch in patchset.patches %}
+        <option value="{{jump_patch.filename}}"
+         {%ifequal jump_patch.key.id patch.key.id%} selected="selected"{%endifequal%}>{{jump_patch.filename}}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {%if patch%}
+  <div style="margin-top: 5px;">
+    <a href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}{%urlappend_view_settings%}">
+    View unified diff</a>
+    |
+    <a href="{%url codereview.views.download_patch issue.key.id,patchset.key.id,patch.key.id%}"
+       title="Download patch for {{patch.filename}}">
+      Download patch
+    </a>
+  </div>
+  {%endif%}
+  {%if user%}
+  <div style="margin-top: 5px;">
+    <a class="novisit" href="{%url codereview.views.publish issue.key.id%}">Publish+Mail
+    Comments</a> ('m')
+    |
+    <a class="novisit" href="javascript:draftMessage.dialog_show()">Edit draft message</a> ('M')
+  </div>
+  {%endif%}
+</div>
+<div style="clear: both;"></div>
+
+<div class="code" style="margin-top: 1.3em; display: table; margin-left: auto; margin-right: auto;">
+{%include "diff_navigation.html"%}
+
+<div style="position:relative;" id="table-top">
+
+<span id="hook-sel" style="display:none;"></span>
+
+{%if patch.property_changes %}
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+<tr align="center"><td>
+<table class="property_changes">
+<tr><th>Property Changes:</th></tr>
+{%for row in patch.property_changes%}<tr><td>{{row|safe}}</td></tr>{%endfor%}
+</table></td></tr>
+</table>
+{%endif%}
+
+<table border="0" cellpadding="0" cellspacing="0" id="thecode"
+       ondblclick="M_handleTableDblClick(event)" width="100%"
+       ontouchstart="M_handleTableTouchStart(event)"
+       ontouchend="M_handleTableTouchEnd(event)">
+<tr id="codeTop"><th>OLD</th><th>NEW</th></tr>
+
+{%if patch.is_binary %}
+<tr>
+<td style="width:50%" align="center">
+  <img src="{%url codereview.views.image issue.key.id,patchset.key.id,patch.key.id,0%}" />
+</td>
+<td style="width:50%" align="center">
+  <img src="{%url codereview.views.image issue.key.id,patchset.key.id,patch.key.id,1%}" />
+</td>
+</tr>
+{%else%}
+{%for row in rows%}{{row|safe}}{%endfor%}
+{%endif%}
+
+<tr id="codeBottom"><th>OLD</th><th>NEW</th></tr>
+
+</table>
+
+</div>
+<div class="codenav">{%include "file_navigation.html"%}</div>
+</div>
+
+<script language="JavaScript" type="text/javascript"><!--
+var old_snapshot = "old";
+var new_snapshot = "new";
+var intraLineDiff = new M_IntraLineDiff();
+var hookState = new M_HookState(window);
+hookState.updateHooks();
+
+var skipped_lines_url = ('{%url diff_skipped_lines_prefix issue.key.id,patchset.key.id,patch.key.id%}');
+;
+
+// -->
+</script>
+
+{%include "draft_message.html"%}
+
+{%endblock%}
+
+{%block help%}
+<div style="font-size: medium; text-align: center;">Side by Side Diff</div>
+<hr/>
+<div style="text-align: center; margin-bottom: .8em;">
+  Use n/p to move between diff chunks;
+  N/P to move between comments.
+  {%if user%}
+  Double-click a line to add a draft in-line comment.
+  <br><span style="color:red">Draft comments are only viewable by you;</span>
+  use <b>Publish+Mail Comments</b> ('m') to let others view them.
+  {%else%}
+  Please <a href="{{sign_in}}">Sign in</a> to add in-line comments.
+  {%endif%}
+</div>
+{%endblock%}
