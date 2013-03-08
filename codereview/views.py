@@ -1978,7 +1978,14 @@ def _get_patchset_info(request, patchset_id):
           patch._lines = None
           patch.parsed_deltas = []
           for delta in patch.delta:
-            patch.parsed_deltas.append([patchset_id_mapping[delta], delta])
+            # If delta is not in patchset_id_mapping, it's because of internal
+            # corruption.
+            if delta in patchset_id_mapping:
+              patch.parsed_deltas.append([patchset_id_mapping[delta], delta])
+            else:
+              logging.error(
+                  'Issue %d: %d is missing from %s',
+                  issue.key().id(), delta, patchset_id_mapping)
       except DeadlineExceededError:
         logging.exception('DeadlineExceededError in _get_patchset_info')
         if attempt > 2:
