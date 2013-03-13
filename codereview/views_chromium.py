@@ -619,17 +619,16 @@ def update_default_builders(request):
 def delete_old_pending_jobs(request):
   """/restricted/delete_old_pending_jobs - Deletes old pending jobs.
 
-  We will only delete invalid pending try jobs older than a week.
+  Delete invalid pending try jobs older than a day old.
   """
-  one_week_ago = datetime.datetime.now() - datetime.timedelta(days=7)
+  cutoff_date = datetime.datetime.now() - datetime.timedelta(days=1)
   count = 0
 
   q = models.TryJobResult.all().filter(
       'result =', models.TryJobResult.TRYPENDING).order('timestamp')
   for job in q:
     if not _is_job_valid(job):
-      # If job is older than a week, get rid of it.
-      if job.timestamp < one_week_ago:
+      if job.timestamp <= cutoff_date:
         job.delete()
         count += 1
 
