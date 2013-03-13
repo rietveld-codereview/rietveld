@@ -4,4 +4,4 @@ cron:
   schedule: every 12 hours
 - description: Delete old pending jobs
   url: /restricted/delete_old_pending_jobs
-  schedule: every 24 hours
+  schedule: every 12 hours
