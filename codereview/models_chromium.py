@@ -79,6 +79,8 @@ class DefaultBuilderList(db.Model):
   _DEFAULT_BUILDER_MEMCACHE_KEY = 'default_builders_'
   _DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS = 60 * 60 * 12
 
+  _DEFAULT_CHROMIUM_TRYSERVER_NAME = 'tryserver.chromium'
+
   default_builders = db.StringListProperty(default=[])
 
   @classmethod
@@ -94,25 +96,36 @@ class DefaultBuilderList(db.Model):
     return cls.get_or_insert(name, default_builders=[])
 
   @classmethod
-  def get_builders(cls, name):
+  def get_builders(cls, base_url):
     """Gets the list of default builders.
 
-    This function will first attempt to get the list from the memcache.  If
-    its not available there, it will get it from the datastore and then update
-    the memcache.
+    This function will first attempt to get the list from the memcache. If its
+    not available there, it will get it from the datastore and then update the
+    memcache.
 
     Args:
-      name: The name of the build master, like 'tryserver.chromium'.
+      base_url: The base URL we want a list of default builders for.
 
     Returns:
-      A list of strings where each string is the name of one builder.  The
+      A list of strings where each string is the name of one builder. The
       names are sorted alphabetically.
     """
-    key = cls._DEFAULT_BUILDER_MEMCACHE_KEY + name
-    builders = memcache.get(key)
+    # Look for the list of builders using the specified base url in memcache.
+    base_url_key = cls._DEFAULT_BUILDER_MEMCACHE_KEY + base_url
+    builders = memcache.get(base_url_key, namespace=base_url)
     if builders is None:
-      builders = cls._get_instance(name).default_builders
-      memcache.set(key, builders, cls._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS)
+      # If the list of builders does not exist in memcache get it from the
+      # datastore in 2 steps.
+      # 1. Get the tryserver name from the datastore using the base_url.
+      tryserver_name = BaseUrlTryServer.get_instance(
+          base_url=base_url,
+          tryserver_name=cls._DEFAULT_CHROMIUM_TRYSERVER_NAME).tryserver_name
+      # 2. Get the list of builders from the datastore using the tryserver_name.
+      builders = cls._get_instance(tryserver_name).default_builders
+      # Set it in memcache to prevent future misses.
+      memcache.set(base_url_key, builders,
+                   time=cls._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS,
+                   namespace=base_url)
     return builders
 
   @classmethod
@@ -129,15 +142,16 @@ class DefaultBuilderList(db.Model):
     failed = []
 
     for obj in cls.all():
+      tryserver_name = obj.key().name()
       try:
-        successful[obj.key().name()] = obj._update_builders()
+        successful[tryserver_name] = obj._update_builders(tryserver_name)
       except (ValueError, urlfetch.Error):
         logging.error(sys.exc_info()[1])
-        failed.append(obj.key().name())
+        failed.append(tryserver_name)
 
     return (successful, failed)
 
-  def _update_builders(self):
+  def _update_builders(self, tryserver_name):
     """Updates the list of default builders by polling the master.
 
     This function makes a network request so should not be called while
@@ -145,15 +159,21 @@ class DefaultBuilderList(db.Model):
 
     Returns: dict of changes to trybot list.
     """
-    url = 'http://build.chromium.org/p/%s/json/builders' % self.key().name()
-    result = urlfetch.fetch(url, deadline=60)
+    json_urls = BaseUrlTryServer.get_json_urls(tryserver_name)
+    if not json_urls:
+      logging.error('json_urls not specified for %s' % tryserver_name)
+      return {}
 
     old_builders = set(self.default_builders)
-    # The returned data is a json encoded dictionary, where the keys are the
-    # builder names and the values are information about the corresponding
-    # builder.  We only need the names.
-    # TODO(rogerta): may want to trim this list a bit, its pretty big.
-    builders = sorted(json.loads(result.content))
+    builders = []
+    for json_url in json_urls:
+      result = urlfetch.fetch(json_url, deadline=60)
+      # The returned data is a json encoded dictionary, where the keys are the
+      # builder names and the values are information about the corresponding
+      # builder.  We only need the names.
+      # TODO(rogerta): may want to trim this list a bit, its pretty big.
+      builders.extend(json.loads(result.content))
+    builders.sort()
     # Exclude triggered bots: these cannot succeed with a associated build
     self.default_builders = [b for b in builders if not 'triggered' in b]
     memcache.set(self._DEFAULT_BUILDER_MEMCACHE_KEY + self.key().name(),
@@ -165,3 +185,36 @@ class DefaultBuilderList(db.Model):
     changes = [('added', list(new_builders - old_builders)),
                ('removed', list(old_builders - new_builders))]
     return dict((desc, items) for (desc, items) in changes if items)
+
+
+class BaseUrlTryServer(db.Model):
+  """Maps a Base URL to a TryServer name and JSON URL."""
+
+  _DEFAULT_CHROMIUM_TRYSERVER_JSON_URLS = [
+      'http://build.chromium.org/p/tryserver.chromium/json/builders',
+      'http://build.chromium.org/p/tryserver.chromium.linux/json/builders',
+  ]
+
+  tryserver_name = db.StringProperty(required=True)
+  json_urls = db.StringListProperty()
+
+  @classmethod
+  def get_instance(cls, base_url, tryserver_name):
+    """Gets the single instance of the base url try server.
+
+    Args:
+      base_url: The base URL we want try server information for.
+
+    Returns:
+      An instance of BaseUrlTryServer for the given base URL.
+    """
+    return cls.get_or_insert(base_url, tryserver_name=tryserver_name)
+
+  @classmethod
+  def get_json_urls(cls, tryserver_name):
+    """Get the TryServer JSON URL(s) for a specified TryServer name."""
+    baseurl_tryserver = cls.all().filter(
+        'tryserver_name', tryserver_name).get()
+    return (baseurl_tryserver.json_urls
+            if baseurl_tryserver
+            else cls._DEFAULT_CHROMIUM_TRYSERVER_JSON_URLS)
