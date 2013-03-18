@@ -29,6 +29,7 @@ from google.appengine.runtime import DeadlineExceededError
 from django import forms
 from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
 from django.http import HttpResponseBadRequest, HttpResponseForbidden
+from django.http import HttpResponseServerError
 from django.utils import simplejson as json
 
 from codereview import cpplint
@@ -38,9 +39,9 @@ from codereview import models
 from codereview import models_chromium
 from codereview import patching
 from codereview import views
-from codereview.views import issue_editor_required, login_required
-from codereview.views import patch_required, patchset_required, post_required
-from codereview.views import respond, reverse, xsrf_required
+from codereview.views import admin_required, issue_editor_required
+from codereview.views import login_required, patch_required, patchset_required
+from codereview.views import post_required, respond, reverse, xsrf_required
 
 
 ### Forms ###
@@ -57,6 +58,23 @@ class TryPatchSetForm(forms.Form):
   revision = forms.CharField(max_length=40, required=False)
   clobber = forms.BooleanField(required=False)
   builders = forms.CharField(max_length=16*1024)
+
+
+class TryserversForm(forms.Form):
+  base_url = forms.CharField(
+      max_length=255,
+      help_text='The Base URL of issues that should use the specified '
+                'tryserver. Example: "http://src.chromium.org/svn/trunk/src/"')
+  json_urls = forms.CharField(
+      max_length=511,
+      help_text='Comma separated list of tryserver JSON URLs. Example: '
+                '"http://build.chromium.org/p/tryserver.chromium/json/builders'
+                ',http://build.chromium.org/p/tryserver.chromium.linux/json/'
+                'builders"')
+  tryserver_name = forms.CharField(
+      max_length=255,
+      help_text='The tryserver name from DefaultBuilderList. '
+                'Example: "tryserver.chromium"')
 
 
 ### Utility functions ###
@@ -616,6 +634,43 @@ def update_default_builders(request):
   return HttpResponse(content, content_type='text/plain')
 
 
+@admin_required
+@xsrf_required
+def update_tryservers(request):
+  """/restricted/update_tryservers - Sets Tryserver information.
+
+  Sets JSON URLs and Tryserver name to a specified base URL.
+  """
+  if request.method == 'GET':
+    return respond(request, 'update_tryservers.html',
+                   {'form': TryserversForm()})
+
+  form = TryserversForm(request.POST)
+  if not form.is_valid():
+    return views.HttpTextResponse('Invalid arguments', status=400)
+
+  base_url = form.cleaned_data['base_url']
+  json_urls_str = form.cleaned_data['json_urls']
+  tryserver_name = form.cleaned_data['tryserver_name']
+
+  try:
+    json_urls = json_urls_str.split(',')
+    base_url_tryserver = models_chromium.BaseUrlTryServer(
+        key_name=base_url,
+        json_urls=json_urls,
+        tryserver_name=tryserver_name)
+    base_url_tryserver.put()
+    content = 'Updated successfully.\n\n'
+    content += 'base_url: %s\n' % base_url
+    content += 'json_urls: %s\n' % json_urls
+    content += 'tryserver_name: %s' % tryserver_name
+  except DeadlineExceededError:
+    return HttpResponseServerError('Deadline exceeded')
+
+  logging.info(content)
+  return HttpResponse(content, content_type='text/plain')
+
+
 def delete_old_pending_jobs(request):
   """/restricted/delete_old_pending_jobs - Deletes old pending jobs.
 
@@ -726,6 +781,7 @@ def get_pending_try_patchsets(request):
     description['root'] = 'src'  # TODO(rogerta): figure out how to get it
     description['patchset'] = patchset.key().id()
     description['issue'] = issue.key().id()
+    description['baseurl'] = issue.base
     return description
 
   q = models.TryJobResult.all().filter(

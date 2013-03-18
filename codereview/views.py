@@ -2162,13 +2162,9 @@ def show(request, form=None):
                   'has_draft_message': has_draft_message,
                   'is_editor': issue.user_can_edit(request.user),
                   'src_url': src_url,
-                  # TODO(rogerta): don't hard code build master server name
-                  # here.  Need to map it correctly from the issue's base URL.
                   'default_builders':
                       models_chromium.DefaultBuilderList.get_builders(
-                          'tryserver.chromium') +
-                      models_chromium.DefaultBuilderList.get_builders(
-                          'tryserver.chromium.linux'),
+                          issue.base),
                   })
 
 
