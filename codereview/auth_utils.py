@@ -185,7 +185,6 @@ def get_current_rietveld_oauth_user():
   try:
     current_oauth_user = oauth.get_current_user(EMAIL_SCOPE)
   except oauth.Error:
-    logging.debug('No OAuth user was found.')
     return
 
   token = get_oauth_token_from_env()
@@ -214,9 +213,6 @@ def get_current_user():
   current_cookie_user = users.get_current_user()
   if current_cookie_user is not None:
     return current_cookie_user
-
-  logging.debug('No user found from session cookies.')
-
   return get_current_rietveld_oauth_user()
 
 
