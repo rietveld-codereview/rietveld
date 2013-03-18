@@ -100,3 +100,19 @@ urlpatterns += patterns(
     (r'^rss/(?P<url>.*)$', 'django.contrib.syndication.views.feed',
      {'feed_dict': feed_dict}),
     )
+
+# Chromium urls
+urlpatterns += patterns(
+    'codereview.views_chromium',
+    (r'^(\d+)/edit_flags$', 'edit_flags'),
+    (r'^(\d+)/binary/(\d+)/(\d+)/(\d+)$', 'download_binary'),
+    (r'^(\d+)/try/(\d+)/?$', 'try_patchset'),
+    (r'^conversions$', 'conversions'),
+    (r'^lint/issue(\d+)_(\d+)', 'lint'),
+    (r'^lint_patch/issue(\d+)_(\d+)_(\d+)', 'lint_patch'),
+    (r'^status_listener$', 'status_listener'),
+    (r'^get_pending_try_patchsets$', 'get_pending_try_patchsets'),
+    (r'^restricted/update_default_builders', 'update_default_builders'),
+    (r'^restricted/update_tryservers', 'update_tryservers'),
+    (r'^restricted/delete_old_pending_jobs', 'delete_old_pending_jobs'),
+    )
