@@ -3036,11 +3036,11 @@ function M_fillTableCell_(attrs, text) {
  * See _ShortenBuffer() in codereview/engine.py.
  */
 function M_expandSkipped(id_before, id_after, where, id_skip) {
-  links = document.getElementById('skiplinks-'+id_skip).getElementsByTagName('a');
+  var links = document.getElementById('skiplinks-'+id_skip).getElementsByTagName('a');
   for (var i=0; i<links.length; i++) {
 	links[i].href = '#skiplinks-'+id_skip;
   }
-  tr = document.getElementById('skip-'+id_skip);
+  var tr = document.getElementById('skip-'+id_skip);
   var httpreq = M_getXMLHttpRequest();
   if (!httpreq) {
     html = '<td colspan="2" style="text-align: center;">';
@@ -3055,11 +3055,11 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
   if (context_select) {
     context = context_select.value;
   }
-  aborted = false;
+  var aborted = false;
   httpreq.onreadystatechange = function () {
     if (httpreq.readyState == 4 && !aborted) {
       if (httpreq.status == 200) {
-        response = eval('('+httpreq.responseText+')');
+        var response = eval('('+httpreq.responseText+')');
 	var last_row = null;
         for (var i=0; i<response.length; i++) {
           var data = response[i];
