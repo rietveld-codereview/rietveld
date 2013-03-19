@@ -23,6 +23,7 @@ import re
 import sha
 
 from google.appengine.api import memcache
+from google.appengine.api import taskqueue
 from google.appengine.ext import db
 from google.appengine.runtime import DeadlineExceededError
 
@@ -672,24 +673,75 @@ def update_tryservers(request):
 
 
 def delete_old_pending_jobs(request):
-  """/restricted/delete_old_pending_jobs - Deletes old pending jobs.
+  """/restricted/delete_old_pending_jobs
+
+  Trigger task to delete old pending jobs.
+  """
+  cutoff_date = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+  cutoff_date_str = cutoff_date.strftime("DATETIME(%Y-%m-%d %H:%M:%S)")
+  cursor = ''
+  limit = 100
+  offset = 0
+  taskqueue.add(
+      url=reverse(delete_old_pending_jobs_task),
+      params={
+        'cursor': cursor,
+        'cutoff_date': cutoff_date_str,
+        'limit': str(limit),
+        'offset': str(offset),
+      },
+      queue_name='delete-old-pending-jobs-task')
+  msg = 'Trigger done at %s' % cutoff_date_str
+  logging.info(msg)
+  return HttpResponse(msg, content_type='text/plain')
+
+
+def delete_old_pending_jobs_task(request):
+  """/restricted/delete_old_pending_jobs_task - Deletes old pending jobs.
 
   Delete invalid pending try jobs older than a day old.
   """
-  cutoff_date = datetime.datetime.now() - datetime.timedelta(days=1)
-  count = 0
+  cursor = request.POST.get('cursor')
+  cutoff_date_str = request.POST.get('cutoff_date')
+  cutoff_date = datetime.datetime.strptime(
+      cutoff_date_str, "DATETIME(%Y-%m-%d %H:%M:%S)")
+  limit = int(request.POST.get('limit'))
+  offset = int(request.POST.get('offset'))
 
   q = models.TryJobResult.all().filter(
       'result =', models.TryJobResult.TRYPENDING).order('timestamp')
-  for job in q:
+  if cursor:
+    q.with_cursor(cursor)
+
+  logging.info('cutoffdate=%s, limit=%d, offset=%d cursor=%s', cutoff_date_str,
+      limit, offset, cursor)
+  items = q.fetch(limit)
+  if not items:
+    msg = 'Iteration done'
+    logging.info(msg)
+    return HttpResponse(msg, content_type='text/plain')
+
+  # Enqueue the next one right away.
+  cursor = q.cursor()
+  taskqueue.add(
+      url=reverse(delete_old_pending_jobs_task),
+      params={
+        'cursor': q.cursor(),
+        'cutoff_date': cutoff_date_str,
+        'limit': str(limit),
+        'offset': str(offset + len(items)),
+      },
+      queue_name='delete-old-pending-jobs-task')
+
+  count = 0
+  for job in items:
     if not _is_job_valid(job):
       if job.timestamp <= cutoff_date:
         job.delete()
         count += 1
-
-  result_summary = '%d pending jobs purged' % count
-  logging.info(result_summary)
-  return HttpResponse(result_summary, content_type='text/plain')
+  msg = '%d pending jobs purged out of %d' % (count, len(items))
+  logging.info(msg)
+  return HttpResponse(msg, content_type='text/plain')
 
 
 @post_required
