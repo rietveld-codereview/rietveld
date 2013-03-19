@@ -104,9 +104,13 @@
       <span><i>Trybot&nbsp;results:</i></span>
       {%for try_job in patchset.try_job_results%}
         <a class="build-result build-status-color-{{try_job.status}}"
+        {%if try_job.buildnumber %}
            href="{{try_job.url}}"
-           status="{{try_job.status}}"
            title="{{try_job.status}} {{try_job.buildnumber}}"
+        {%else%}
+           title="{{try_job.status}}"
+        {%endif%}
+           status="{{try_job.status}}"
         {%ifequal last_patchset.key.id patchset.key.id%}
            style="display:none;"
         {%endifequal%}
