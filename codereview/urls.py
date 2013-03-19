@@ -115,4 +115,6 @@ urlpatterns += patterns(
     (r'^restricted/update_default_builders$', 'update_default_builders'),
     (r'^restricted/update_tryservers$', 'update_tryservers'),
     (r'^restricted/delete_old_pending_jobs$', 'delete_old_pending_jobs'),
+    (r'^restricted/delete_old_pending_jobs_task$',
+      'delete_old_pending_jobs_task'),
     )
