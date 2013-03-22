@@ -24,7 +24,7 @@ import sys
 ROOT = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..')
 LIB = os.path.join(ROOT, '..', 'google_appengine', 'lib')
 sys.path.insert(0, os.path.join(ROOT, '..', 'google_appengine'))
-sys.path.append(os.path.join(LIB, 'django_1_2'))
+sys.path.append(os.path.join(LIB, 'django-1.3'))
 sys.path.append(os.path.join(LIB, 'fancy_urllib'))
 sys.path.append(os.path.join(LIB, 'simplejson'))
 sys.path.append(os.path.join(LIB, 'webob'))
