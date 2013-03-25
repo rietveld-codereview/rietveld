@@ -110,6 +110,8 @@ class DefaultBuilderList(db.Model):
       A list of strings where each string is the name of one builder. The
       names are sorted alphabetically.
     """
+    # Remove contents after '@' to avoid explosion due to git branches.
+    base_url = base_url.rsplit('@', 1)[0]
     # Look for the list of builders using the specified base url in memcache.
     base_url_key = cls._DEFAULT_BUILDER_MEMCACHE_KEY + base_url
     builders = memcache.get(base_url_key, namespace=base_url)
@@ -192,7 +194,8 @@ class BaseUrlTryServer(db.Model):
 
   _DEFAULT_CHROMIUM_TRYSERVER_JSON_URLS = [
       'http://build.chromium.org/p/tryserver.chromium/json/builders',
-      'http://build.chromium.org/p/tryserver.chromium.linux/json/builders',
+      # Disabled? It is unavailable.
+      # 'http://build.chromium.org/p/tryserver.chromium.linux/json/builders',
   ]
 
   tryserver_name = db.StringProperty(required=True)
