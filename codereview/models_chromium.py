@@ -216,5 +216,5 @@ class BaseUrlTryServer(db.Model):
     baseurl_tryserver = cls.all().filter(
         'tryserver_name', tryserver_name).get()
     return (baseurl_tryserver.json_urls
-            if baseurl_tryserver
+            if baseurl_tryserver and baseurl_tryserver.json_urls
             else cls._DEFAULT_CHROMIUM_TRYSERVER_JSON_URLS)
