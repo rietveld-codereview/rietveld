@@ -11,10 +11,11 @@
     </div>
     <div style="float: right;">
       {%if patchset.data%}
-        <a href="{%url codereview.views.download issue.key.id,patchset.key.id%}">
-          Download raw patch set</a>
-        (<a href="{%url codereview.views.tarball issue.key.id,patchset.key.id%}"
-            title="Download a tarball containing the original and patched files.">tarball</a>)
+        Download
+          <a href="{%url codereview.views.download issue.key.id,patchset.key.id%}"
+            title="Patchset in text format">[raw]</a>
+          <a href="{%url codereview.views.tarball issue.key.id,patchset.key.id%}"
+            title="Tarball containing the original and patched files">[tar.bz2]</a>
       {% else %}
         <span class="disabled">(Patch set is too large to download)</span>
       {% endif %}
@@ -25,7 +26,7 @@
           <input type="hidden" name="_method" value="delete" />
           |
           <input onclick="return confirm('Are you sure?');"
-                 type="submit" value="Delete patch set" class="link-to"/>
+                 type="submit" value="Delete" class="link-to"/>
         </form>
         {%endif%}
       {%endifnotequal%}
