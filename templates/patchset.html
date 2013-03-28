@@ -13,6 +13,8 @@
       {%if patchset.data%}
         <a href="{%url codereview.views.download issue.key.id,patchset.key.id%}">
           Download raw patch set</a>
+        (<a href="{%url codereview.views.tarball issue.key.id,patchset.key.id%}"
+            title="Download a tarball containing the original and patched files.">tarball</a>)
       {% else %}
         <span class="disabled">(Patch set is too large to download)</span>
       {% endif %}
@@ -21,8 +23,9 @@
         <form method="post" action="{%url codereview.views.delete_patchset issue.key.id patchset.key.id %}">
           <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
           <input type="hidden" name="_method" value="delete" />
-          |<input onclick="return confirm('Are you sure?');"
-            type="submit" value="Delete patch set" class="link-to"/>
+          |
+          <input onclick="return confirm('Are you sure?');"
+                 type="submit" value="Delete patch set" class="link-to"/>
         </form>
         {%endif%}
       {%endifnotequal%}

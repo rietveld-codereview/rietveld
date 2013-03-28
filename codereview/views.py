@@ -25,6 +25,8 @@ import mimetypes
 import os
 import random
 import re
+import tarfile
+import tempfile
 import urllib
 from cStringIO import StringIO
 from xml.etree import ElementTree
@@ -50,6 +52,7 @@ from django.utils import encoding
 from django.utils import simplejson
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
+from django.core.servers.basehttp import FileWrapper
 
 from codereview import engine
 from codereview import library
@@ -2294,6 +2297,62 @@ def download(request):
     # Add 256+ bytes of padding to prevent XSS attacks on Internet Explorer.
     padding = ('='*67 + '\n') * 4
   return HttpTextResponse(padding + request.patchset.data)
+
+
+@patchset_required
+def tarball(request):
+  """/tarball/<issue>/<patchset>/[lr] - Returns a .tar.bz2 file
+  containing a/ and b/ trees of the complete files for the entire patchset."""
+
+  patches = (models.Patch.all()
+             .filter('patchset =', request.patchset.key())
+             .order('filename')
+             .fetch(1000))
+
+  temp = tempfile.TemporaryFile()
+  tar = tarfile.open(mode="w|bz2", fileobj=temp)
+
+  def add_entry(prefix, content):
+    data = content.data
+    if data is None:
+      data = content.text
+      if isinstance(data, unicode):
+        data = data.encode("utf-8", "replace")
+    if data is None:
+      return
+    info = tarfile.TarInfo(prefix + patch.filename)
+    info.size = len(data)
+    # TODO(adonovan): set SYMTYPE/0755 when Rietveld supports symlinks.
+    info.type = tarfile.REGTYPE
+    info.mode = 0644
+    delta = request.patchset.modified - datetime.datetime(1970, 1, 1)  # datetime->time_t
+    info.mtime = int(delta.days * 86400 + delta.seconds)
+    tar.addfile(info, fileobj=StringIO(data))
+
+  for patch in patches:
+    if not patch.no_base_file:
+      try:
+        add_entry('a/', patch.get_content())  # before
+      except FetchError:  # I/O problem?
+        logging.exception('tarball: patch(%s, %s).get_content failed' %
+                          (patch.key().id(), patch.filename()))
+    try:
+      add_entry('b/', patch.get_patched_content())  # after
+    except FetchError:  # file deletion?  I/O problem?
+      logging.exception('tarball: patch(%s, %s).get_patched_content failed' %
+                        (patch.key().id(), patch.filename()))
+
+  tar.close()
+  temp.flush()
+
+  wrapper = FileWrapper(temp)
+  response = HttpResponse(wrapper, mimetype='application/x-gtar')
+  response['Content-Disposition'] = (
+      'attachment; filename=patch%s_%s.tar.bz2' % (request.issue.key().id(),
+                                                   request.patchset.key().id()))
+  response['Content-Length'] = temp.tell()
+  temp.seek(0)
+  return response
 
 
 @issue_required
