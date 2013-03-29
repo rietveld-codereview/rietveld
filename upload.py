@@ -635,7 +635,7 @@ class KeyringCreds(object):
     password = None
     if keyring and not email in self.accounts_seen:
       try:
-        password = keyring.get_password(self.host, email)
+        password = keyring.get_password(str(self.host), email)
       except:
         # Sadly, we have to trap all errors here as
         # gnomekeyring.IOError inherits from object. :/
@@ -649,7 +649,7 @@ class KeyringCreds(object):
       if keyring:
         answer = raw_input("Store password in system keyring?(y/N) ").strip()
         if answer == "y":
-          keyring.set_password(self.host, email, password)
+          keyring.set_password(str(self.host), email, password)
           self.accounts_seen.add(email)
     return (email, password)
 
