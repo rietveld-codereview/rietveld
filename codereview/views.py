@@ -634,11 +634,16 @@ def _notify_issue(request, issue, message):
     True if the message was (apparently) delivered, False if not.
   """
   iid = issue.key().id()
-  emails = [issue.owner.email()]
+  emails = set()
+  emails.add(issue.owner.email())
   if issue.reviewers:
-    emails.extend(issue.reviewers)
+    emails.update(issue.reviewers)
   if issue.cc:
-    emails.extend(issue.cc)
+    emails.update(issue.cc)
+  if request.user:
+    # Do not XMPP the person who made the rietveld modifications.
+    # See https://code.google.com/p/rietveld/issues/detail?id=401.
+    emails.discard(request.user.email())
   accounts = models.Account.get_multiple_accounts_by_email(emails)
   jids = []
   for account in accounts.itervalues():
