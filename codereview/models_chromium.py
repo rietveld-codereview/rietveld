@@ -119,6 +119,9 @@ class DefaultBuilderList(db.Model):
       # If the list of builders does not exist in memcache get it from the
       # datastore in 2 steps.
       # 1. Get the tryserver name from the datastore using the base_url.
+      if not base_url:
+        # Do not support try servers if the base URL is missing.
+        return []
       tryserver_name = BaseUrlTryServer.get_instance(
           base_url=base_url,
           tryserver_name=cls._DEFAULT_CHROMIUM_TRYSERVER_NAME).tryserver_name
