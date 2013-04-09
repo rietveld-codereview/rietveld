@@ -830,7 +830,10 @@ def get_pending_try_patchsets(request):
                                          patchset.message)
     description['user'] = owner.nickname()
     description['email'] = owner.email()
-    description['root'] = 'src'  # TODO(rogerta): figure out how to get it
+    if 'chromium/blink' in job['baseurl']:
+      description['root'] = 'src/third_party/WebKit'
+    else:
+      description['root'] = 'src'
     description['patchset'] = patchset.key().id()
     description['issue'] = issue.key().id()
     description['baseurl'] = issue.base
