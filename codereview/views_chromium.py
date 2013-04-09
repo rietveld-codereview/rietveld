@@ -830,9 +830,9 @@ def get_pending_try_patchsets(request):
                                          patchset.message)
     description['user'] = owner.nickname()
     description['email'] = owner.email()
-    if ('chromium/blink' in job['baseurl']
-        or (job['baseurl'].startswith('svn:')
-            and job['baseurl'].endswith('blink/trunk'))):
+    if ('chromium/blink' in issue.base
+        or (issue.base.startswith('svn:')
+            and issue.base.endswith('blink/trunk'))):
       description['root'] = 'src/third_party/WebKit'
     else:
       description['root'] = 'src'
