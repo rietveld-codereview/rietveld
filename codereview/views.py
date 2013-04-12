@@ -316,6 +316,9 @@ class PublishForm(forms.Form):
   in_reply_to = forms.CharField(required=False,
                                 max_length=MAX_DB_KEY_LENGTH,
                                 widget=forms.HiddenInput())
+  automated = forms.BooleanField(required=False, widget=forms.HiddenInput(),
+                                 initial=True)
+  verbose = forms.BooleanField(required=False, widget=forms.HiddenInput())
 
 
 class MiniPublishForm(forms.Form):
@@ -335,6 +338,9 @@ class MiniPublishForm(forms.Form):
                                     widget=forms.HiddenInput())
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
+  automated = forms.BooleanField(required=False, widget=forms.HiddenInput(),
+                                 initial=True)
+  verbose = forms.BooleanField(required=False, widget=forms.HiddenInput())
 
 
 class BlockForm(forms.Form):
