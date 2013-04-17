@@ -149,10 +149,8 @@
       <input type="hidden" name="last_patchset" value="{{last_patchset.key.id}}">
       Commit: <input type="checkbox" id="commit" name="commit"
         {%if issue.commit%}checked{%endif%}
-        disabled
+        {%if not request.user or issue.closed%}disabled{%endif%}
         onchange="M_editFlags('{{issue.key.id}}')" />
-        CQ closed for maintenance: <a href="https://code.google.com/p/chromium/issues/detail?id=231428">
-          crbug.com/231428</a>
     </form>
   {%endifequal%}
 </div>
