@@ -424,11 +424,6 @@ def _is_job_valid(job):
 @xsrf_required
 def edit_flags(request):
   """/<issue>/edit_flags - Edit issue's flags."""
-  return HttpResponseForbidden(
-      'Sorry! CQ is closed. See '
-      'https://code.google.com/p/chromium/issues/detail?id=231428.',
-      content_type='text/plain')
-
   last_patchset = models.PatchSet.all().ancestor(
       request.issue).order('-created').get()
   if not last_patchset:
