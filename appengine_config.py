@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import sys
 
 from google.appengine.ext.appstats import recording
 
@@ -44,3 +45,6 @@ appstats_CALC_RPC_COSTS = True
 # http://code.google.com/appengine/docs/python/tools/libraries.html#Django
 os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
 # NOTE: All "main" scripts must import webapp.template before django.
+
+# Enable third-party imports
+sys.path.append(os.path.join(os.path.dirname(__file__), 'third_party'))

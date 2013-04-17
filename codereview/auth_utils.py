@@ -44,8 +44,7 @@ import urllib
 from google.appengine.api import oauth
 from google.appengine.api import urlfetch
 from google.appengine.api import users
-
-from django.conf import settings
+from google.appengine.ext import ndb
 
 
 EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
@@ -53,6 +52,45 @@ TOKENINFO_URL = 'https://www.googleapis.com/oauth2/v1/tokeninfo'
 _ALLOWED_AUTH_SCHEMES = ('OAUTH ', 'BEARER ')
 
 IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
+
+
+class SecretKey(ndb.Model):
+  """Model for representing project secret keys."""
+  client_id = ndb.StringProperty(required=True, indexed=False)
+  client_secret = ndb.StringProperty(required=True, indexed=False)
+
+  GLOBAL_KEY = '_global_config'
+
+  @classmethod
+  def set_config(cls, client_id, client_secret):
+    """Sets global config object using a Client ID and Secret.
+
+    Args:
+      client_id: String containing Google APIs Client ID.
+      client_secret: String containing Google APIs Client Secret.
+
+    Returns:
+      The inserted SecretKey object.
+    """
+    config = cls(id=cls.GLOBAL_KEY,
+                 client_id=client_id, client_secret=client_secret)
+    config.put()
+    return config
+
+  @classmethod
+  def get_config(cls):
+    """Gets tuple of Client ID and Secret from global config object.
+
+    Returns:
+      2-tuple containing the Client ID and Secret from the global config
+          SecretKey object, if it is in the datastore, else the tuple
+          (None, None).
+    """
+    config = cls.get_by_id(cls.GLOBAL_KEY)
+    if config is None:
+      return None, None
+    else:
+      return config.client_id, config.client_secret
 
 
 def get_oauth_token_from_env():
@@ -164,7 +202,8 @@ def check_token_info(token_info, oauth_user):
                     audience, token_info.get('issued_to'))
     return False
 
-  if audience != settings.RIETVELD_CLIENT_ID:
+  client_id, _ = SecretKey.get_config()
+  if audience != client_id:
     logging.warning('Audience %r not intended for this application.', audience)
     return False
 

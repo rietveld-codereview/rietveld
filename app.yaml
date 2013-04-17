@@ -34,6 +34,11 @@ handlers:
 - url: /.*
   script: main.application
 
+admin_console:
+  pages:
+  - name: Client ID and Secret Settings
+    url: /admin/set-client-id-and-secret
+
 inbound_services:
 - mail
 - xmpp_message
