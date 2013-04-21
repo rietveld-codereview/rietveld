@@ -78,7 +78,8 @@ class Issue(db.Model):
   #: (if False - then Rietveld attempts to download them from server)
   local_base = db.BooleanProperty(default=False)
   repo_guid = db.StringProperty()
-  owner = db.UserProperty(auto_current_user_add=True, required=True)
+  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True,
+                                         required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   reviewers = db.ListProperty(db.Email)
@@ -552,7 +553,7 @@ class Comment(db.Model):
 
   patch = db.ReferenceProperty(Patch)  # == parent
   message_id = db.StringProperty()  # == key_name
-  author = db.UserProperty(auto_current_user_add=True)
+  author = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
   date = db.DateTimeProperty(auto_now=True)
   lineno = db.IntegerProperty()
   text = db.TextProperty()
@@ -628,7 +629,7 @@ class Repository(db.Model):
 
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
-  owner = db.UserProperty(auto_current_user_add=True)
+  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
   guid = db.StringProperty()  # global unique repository id
 
   def __str__(self):
@@ -646,7 +647,7 @@ class Branch(db.Model):
                                choices=('*trunk*', 'branch', 'tag'))
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
-  owner = db.UserProperty(auto_current_user_add=True)
+  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
 
 
 ### Accounts ###
@@ -670,7 +671,8 @@ class Account(db.Model):
   starred issues we'd have to think of a different approach.)
   """
 
-  user = db.UserProperty(auto_current_user_add=True, required=True)
+  user = auth_utils.AnyAuthUserProperty(auto_current_user_add=True,
+                                        required=True)
   email = db.EmailProperty(required=True)  # key == <email>
   nickname = db.StringProperty(required=True)
   default_context = db.IntegerProperty(default=settings.DEFAULT_CONTEXT,
