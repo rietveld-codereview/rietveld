@@ -4319,16 +4319,16 @@ def get_access_token(request):
   if credentials is None or credentials.invalid:
     return redirect_response_object
 
-  port_value = _validate_port(request.GET.get('port'))
-  if port_value is None:
-    return HttpTextResponse('The port value sent is invalid.')
-
   # Find out if credentials is expired
   if credentials.access_token is None or credentials.access_token_expired:
     try:
       credentials.refresh(httplib2.Http())
     except AccessTokenRefreshError:
       return redirect_response_object
+
+  port_value = _validate_port(request.GET.get('port'))
+  if port_value is None:
+    return HttpTextResponse('Access Token: %s' % (credentials.access_token,))
 
   # Send access token along to localhost client
   quoted_access_token = urllib.quote(credentials.access_token)

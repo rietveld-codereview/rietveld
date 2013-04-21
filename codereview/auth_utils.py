@@ -44,6 +44,7 @@ import urllib
 from google.appengine.api import oauth
 from google.appengine.api import urlfetch
 from google.appengine.api import users
+from google.appengine.ext import db
 from google.appengine.ext import ndb
 
 
@@ -184,9 +185,23 @@ def check_token_info(token_info, oauth_user):
     return False
 
   # Scope check
-  if token_info.get('scope') != EMAIL_SCOPE:
-    logging.warning('Scope %r differs from email scope.',
-                    token_info.get('scope'))
+  if 'scope' not in token_info:
+    logging.warning('No scope in token info.')
+    return False
+
+  scope_string = token_info['scope']
+  if not isinstance(scope_string, basestring):
+    logging.warning('Scope not a string.')
+    return False
+
+  scope_list = scope_string.split(' ')
+  # Scopes must be separated by a single space.
+  if '' in scope_list:
+    logging.warning('Scope string %r had unexpected format.', scope_string)
+    return False
+
+  if EMAIL_SCOPE not in scope_list:
+    logging.warning('Scope list %r does not contain email scope.', scope_list)
     return False
 
   # Audience checks
@@ -253,6 +268,43 @@ def get_current_user():
   if current_cookie_user is not None:
     return current_cookie_user
   return get_current_rietveld_oauth_user()
+
+
+class AnyAuthUserProperty(db.UserProperty):
+  """An extension of the UserProperty which also accepts OAuth users.
+
+  The default db.UserProperty only considers cookie-based Auth users.
+  """
+
+  def default_value(self):
+    """Default value for user.
+
+    NOTE: This is adapted from UserProperty.default_value but uses a different
+    get_current_user() method.
+
+    Returns:
+      Value of get_current_user() if auto_current_user or
+      auto_current_user_add is set; else None. (But *not* the default
+      implementation, since we don't support the 'default' keyword
+      argument.)
+    """
+    if self.auto_current_user or self.auto_current_user_add:
+      return get_current_user()
+    return None
+
+  def get_updated_value_for_datastore(self, unused_model_instance):
+    """Get new value for property to send to datastore.
+
+    NOTE: This is adapted from UserProperty.get_updated_value_for_datastore but
+    uses a different get_current_user() method.
+
+    Returns:
+      Value of get_current_user() if auto_current_user is set; else
+      AUTO_UPDATE_UNCHANGED.
+    """
+    if self.auto_current_user:
+      return get_current_user()
+    return db.AUTO_UPDATE_UNCHANGED
 
 
 def is_current_user_admin():
