@@ -26,7 +26,7 @@
    	  title="Issues created by me"
    	  href="{%url django.contrib.syndication.views.feed url="mine"%}/{%nickname user True%}" />
      <link rel="alternate" type="application/atom+xml"
-   	  title="Issues reviewable by me" 
+   	  title="Issues reviewable by me"
    	  href="{%url django.contrib.syndication.views.feed url="reviews"%}/{%nickname user True%}" />
      <link rel="alternate" type="application/atom+xml"
    	  title="Issues closed by me"
@@ -116,7 +116,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
       </table>
     </td>
     <td>
-      <table width="100%"> 
+      <table width="100%">
         <tr>
          <td></td><th>Issue</th>
         </tr>
@@ -152,7 +152,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
           <td></td><th>Comment/message editing</th>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">&lt;Ctrl&gt;</span> + <span class="letter">s</span> <b>:</b></td><td>save comment</td>
+          <td class="shortcut"><span class="letter">&lt;Ctrl&gt;</span> + <span class="letter">s</span> or <span class="letter">&lt;Ctrl&gt;</span> + <span class="letter">Enter</span> <b>:</b></td><td>save comment</td>
         </tr>
         <tr>
           <td class="shortcut"><span class="letter">&lt;Esc&gt;</span> <b>:</b></td><td>cancel edit</td>
