@@ -537,6 +537,7 @@ table#queues td, table#clfiles td {
 
 div#trybot-popup {
   position: fixed;
+  overflow: scroll;
   padding: 8px;
   background-color: #E5ECF9;
   border: 1px solid  #93b7fa;

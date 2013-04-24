@@ -72,8 +72,8 @@ class DefaultBuilderList(db.Model):
   The key of the instance is the name of the build master server.
 
   Attributes:
-    default_builders: List of strings, where each string is the name of one
-        builder for the given try server.
+    categories_and_builders_json: JSON document of Trybot categories to their
+        builders.
   """
   # Constants for default builders memcache.
   _DEFAULT_BUILDER_MEMCACHE_KEY = 'default_builders_'
@@ -81,19 +81,7 @@ class DefaultBuilderList(db.Model):
 
   _DEFAULT_CHROMIUM_TRYSERVER_NAME = 'tryserver.chromium'
 
-  default_builders = db.StringListProperty(default=[])
-
-  @classmethod
-  def _get_instance(cls, name):
-    """Gets the single instance of the default builder list.
-
-    Args:
-      name: The name of the build master, like 'tryserver.chromium'.
-
-    Returns:
-      An instance of DefaultBuilderList for the given build master.
-    """
-    return cls.get_or_insert(name, default_builders=[])
+  categories_and_builders_json = db.TextProperty(default="{}")
 
   @classmethod
   def get_builders(cls, base_url):
@@ -107,8 +95,8 @@ class DefaultBuilderList(db.Model):
       base_url: The base URL we want a list of default builders for.
 
     Returns:
-      A list of strings where each string is the name of one builder. The
-      names are sorted alphabetically.
+      A map of Trybot categories to a list of its builders. The builder names
+      are sorted alphabetically.
     """
     # Remove contents after '@' to avoid explosion due to git branches.
     base_url = base_url.rsplit('@', 1)[0]
@@ -125,13 +113,14 @@ class DefaultBuilderList(db.Model):
       tryserver_name = BaseUrlTryServer.get_instance(
           base_url=base_url,
           tryserver_name=cls._DEFAULT_CHROMIUM_TRYSERVER_NAME).tryserver_name
-      # 2. Get the list of builders from the datastore using the tryserver_name.
-      builders = cls._get_instance(tryserver_name).default_builders
+      # 2. Get the map of categories to builders from the datastore using the
+      # tryserver_name.
+      builders = cls.get_or_insert(tryserver_name).categories_and_builders_json
       # Set it in memcache to prevent future misses.
       memcache.set(base_url_key, builders,
                    time=cls._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS,
                    namespace=base_url)
-    return builders
+    return json.loads(builders)
 
   @classmethod
   def update(cls):
@@ -169,26 +158,53 @@ class DefaultBuilderList(db.Model):
       logging.error('json_urls not specified for %s' % tryserver_name)
       return {}
 
-    old_builders = set(self.default_builders)
-    builders = []
+    old_categories_to_builders = json.loads(self.categories_and_builders_json)
+    categories_to_builders = {}
     for json_url in json_urls:
       result = urlfetch.fetch(json_url, deadline=60)
       # The returned data is a json encoded dictionary, where the keys are the
       # builder names and the values are information about the corresponding
-      # builder.  We only need the names.
+      # builder.  We need the builder names and their categories.
       # TODO(rogerta): may want to trim this list a bit, its pretty big.
-      builders.extend(json.loads(result.content))
-    builders.sort()
-    # Exclude triggered bots: these cannot succeed with a associated build
-    self.default_builders = [b for b in builders if not 'triggered' in b]
+      parsed_json = json.loads(result.content)
+      for builder in parsed_json:
+        category = parsed_json[builder].get('category')
+        if not category:
+          category = 'None'
+        category_builders = categories_to_builders.get(category, set())
+        # Exclude triggered bots: these cannot succeed with a associated build.
+        if not 'triggered' in builder:
+          category_builders.add(builder)
+        categories_to_builders[category] = category_builders
+    self.categories_and_builders_json = json.dumps(
+        categories_to_builders,
+        default=lambda x: (sorted(list(x)) if isinstance(x, set) else x))
     memcache.set(self._DEFAULT_BUILDER_MEMCACHE_KEY + self.key().name(),
-                 self.default_builders,
+                 self.categories_and_builders_json,
                  self._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS)
     self.put()
 
-    new_builders = set(self.default_builders)
-    changes = [('added', list(new_builders - old_builders)),
-               ('removed', list(old_builders - new_builders))]
+    # Figure out what changed in the categories and builders.
+    new_categories = set(categories_to_builders)
+    old_categories = set(old_categories_to_builders)
+    added_categories = sorted(new_categories - old_categories)
+    removed_categories = sorted(old_categories - new_categories)
+    changes= []
+    for added_category in added_categories:
+      changes.append(('added builders to new category %s' % added_category,
+                     categories_to_builders[added_category]))
+    for removed_category in removed_categories:
+      changes.append(
+          ('removed builders from deleted category %s' % removed_category,
+          old_categories_to_builders[removed_category]))
+    for category in sorted(new_categories & old_categories):
+      new_builders = categories_to_builders[category]
+      old_builders = set(old_categories_to_builders[category])
+      changes.append(('added builders to existing category %s' % category,
+                     list(new_builders - old_builders)))
+      changes.append(('removed builders from existing category %s' % category,
+                     list(old_builders - new_builders)))
+
     return dict((desc, items) for (desc, items) in changes if items)
 
 
