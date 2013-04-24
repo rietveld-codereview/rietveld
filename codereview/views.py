@@ -3497,6 +3497,11 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
       try:
         mail.send_mail(**send_args)
         break
+      except mail.InvalidSenderError:
+        if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
+          send_args['sender'] = django_settings.RIETVELD_INCOMING_MAIL_ADDRESS
+        else:
+          raise
       except apiproxy_errors.DeadlineExceededError:
         # apiproxy_errors.DeadlineExceededError is raised when the
         # deadline of an API call is reached (e.g. for mail it's

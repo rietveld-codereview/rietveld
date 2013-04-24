@@ -672,7 +672,7 @@ group.add_option("--p4_user", action="store", dest="p4_user",
 class ClientRedirectServer(BaseHTTPServer.HTTPServer):
   """A server for redirects back to localhost from the associated server.
 
-  Waits for a single request and parses the query parameters into query_params
+  Waits for a single request and parses the query parameters for an access token
   and then stops serving.
   """
   access_token = None
@@ -682,15 +682,14 @@ class ClientRedirectHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   """A handler for redirects back to localhost from the associated server.
 
   Waits for a single request and parses the query parameters into the server's
-  query_params and then stops serving.
+  access_token and then stops serving.
   """
 
   def SetAccessToken(self):
     """Stores the access token from the request on the server.
 
-    Will only do this if exactly one query parameter was passed in
-    to the request and that query parameter used a 'access_token' as
-    the key.
+    Will only do this if exactly one query parameter was passed in to the
+    request and that query parameter used 'access_token' as the key.
     """
     query_string = urlparse.urlparse(self.path).query
     query_params = urlparse.parse_qs(query_string)
