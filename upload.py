@@ -788,7 +788,11 @@ def GetAccessToken(server=DEFAULT_REVIEW_SERVER, port=DEFAULT_OAUTH2_PORT,
 class KeyringCreds(object):
   def __init__(self, server, host, email):
     self.server = server
-    self.host = host
+    # Explicitly cast host to str to work around bug in old versions of Keyring
+    # (versions before 0.10). Even though newer versions of Keyring fix this,
+    # some modern linuxes (such as Ubuntu 12.04) still bundle a version with
+    # the bug.
+    self.host = str(host)
     self.email = email
     self.accounts_seen = set()
 
@@ -807,7 +811,7 @@ class KeyringCreds(object):
     password = None
     if keyring and not email in self.accounts_seen:
       try:
-        password = keyring.get_password(str(self.host), email)
+        password = keyring.get_password(self.host, email)
       except:
         # Sadly, we have to trap all errors here as
         # gnomekeyring.IOError inherits from object. :/
@@ -821,7 +825,7 @@ class KeyringCreds(object):
       if keyring:
         answer = raw_input("Store password in system keyring?(y/N) ").strip()
         if answer == "y":
-          keyring.set_password(str(self.host), email, password)
+          keyring.set_password(self.host, email, password)
           self.accounts_seen.add(email)
     return (email, password)
 
