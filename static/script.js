@@ -563,15 +563,22 @@ function M_editPendingTryJobs(patchset) {
   popup.css('top', offset.top);
   popup.css('left', offset.left);
   popup.css('display', '');
-  
+ 
+  maxWidth = 550
+  maxHeight = 300
+  maxWidthWithScrollBar = maxWidth + 15;
+  popup.css('max-width', maxWidth);
+  popup.css('max-height', maxHeight);
+ 
   // If the popup would show off-screen, move it.
   var bottomOfPopup = offset.top + popup.innerHeight(); 
-  var bottomOfWindow = window.innerHeight; 
-  if (bottomOfPopup > bottomOfWindow) {
+  var bottomOfWindow = window.innerHeight;
+  if (bottomOfPopup > bottomOfWindow ||
+      offset.left + maxWidthWithScrollBar > window.innerWidth) {
     // Move the popup to the left if it would be offset to the right.  This
     // readjusts the height of the popup though, so calculate it again.
-    if (offset.left > (window.innerWidth / 2))
-      popup.css('left', window.innerWidth / 3);
+    if (offset.left + maxWidthWithScrollBar > window.innerWidth)
+      popup.css('left', window.innerWidth - maxWidthWithScrollBar)
     
     bottomOfPopup = offset.top + popup.innerHeight(); 
     if (bottomOfPopup > bottomOfWindow)
