@@ -538,20 +538,13 @@ function M_editFlags(issue) {
  * @param {String} patchset The patchset key.
  */
 function M_editPendingTryJobs(patchset) {
-  var rootElement = document.getElementById('tryjobdiv-' + patchset);
-
-  // find existing pending try jobs.
-  var existingJobs = {};
-  jQuery('a[status="try-pending"]', rootElement).each(function(i) {
-    var trimmed = jQuery.trim(jQuery(this).text());
-    existingJobs[trimmed] = 1;
-  });
-
   // Set the state of the checkboxes as needed.
   var popup = jQuery('#trybot-popup');
   jQuery('input:checkbox', popup).each(function(i) {
     var self = jQuery(this);
-    self.attr('checked', self.attr('name') in existingJobs); 
+    // Uncheck all tryjobs. See
+    // https://code.google.com/p/skia/issues/detail?id=1263
+    self.attr('checked', false); 
     self.removeAttr('disabled');
   });
 
