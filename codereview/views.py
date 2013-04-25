@@ -3499,6 +3499,9 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
         break
       except mail.InvalidSenderError:
         if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
+          previous_sender = send_args['sender']
+          if previous_sender not in send_args['to']:
+            send_args['to'].append(previous_sender)
           send_args['sender'] = django_settings.RIETVELD_INCOMING_MAIL_ADDRESS
         else:
           raise
