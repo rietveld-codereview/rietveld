@@ -2458,6 +2458,8 @@ def RealMain(argv, data=None):
   files = vcs.GetBaseFiles(data)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
+  if options.use_oauth2:
+    options.save_cookies = False
   rpc_server = GetRpcServer(options.server,
                             options.email,
                             options.host,
