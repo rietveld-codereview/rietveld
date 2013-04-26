@@ -774,14 +774,20 @@ def GetAccessToken(server=DEFAULT_REVIEW_SERVER, port=DEFAULT_OAUTH2_PORT,
       via WaitForAccessToken does not receive an access token, this method
       returns None.
   """
+  access_token = None
   if open_local_webbrowser:
     OpenOAuth2ConsentPage(server=server, port=port)
-    access_token = WaitForAccessToken(port=port)
-  else:
+    try:
+      access_token = WaitForAccessToken(port=port)
+    except socket.error, e:
+      print 'Can\'t start local webserver. Socket Error: %s\n' % (e.strerror.)
+
+  if access_token is None:
     # TODO(dhermes): Offer to add to clipboard using xsel, xclip, pbcopy, etc.
     page = 'https://%s%s' % (server, OAUTH_PATH)
     print NO_OPEN_LOCAL_MESSAGE_TEMPLATE % (page,)
     access_token = raw_input('Enter access token: ').strip()
+
   return access_token
 
 
