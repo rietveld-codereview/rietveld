@@ -780,7 +780,7 @@ def GetAccessToken(server=DEFAULT_REVIEW_SERVER, port=DEFAULT_OAUTH2_PORT,
     try:
       access_token = WaitForAccessToken(port=port)
     except socket.error, e:
-      print 'Can\'t start local webserver. Socket Error: %s\n' % (e.strerror.)
+      print 'Can\'t start local webserver. Socket Error: %s\n' % (e.strerror,)
 
   if access_token is None:
     # TODO(dhermes): Offer to add to clipboard using xsel, xclip, pbcopy, etc.
