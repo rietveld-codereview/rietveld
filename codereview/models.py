@@ -196,6 +196,24 @@ class Issue(db.Model):
       return False
     return user.email() in self.collaborator_emails()
 
+  def has_reviewer_approved(self, user):
+    """Returns true if the user has approved this issue, false if they
+    have disapproved it, and None otherwise."""
+    for msg in self.message_set.order('-date'):
+      if user != msg.sender:
+        continue
+
+      if msg.approval:
+        return True
+      if msg.disapproval:
+        return False
+    return None
+
+  @property
+  def formatted_reviewers(self):
+    """Returns a dict from the reviewer to their approval status."""
+    return {r: self.has_reviewer_approved(r) for r in self.reviewers}
+
 
 class PatchSet(db.Model):
   """A set of patchset uploaded together.
