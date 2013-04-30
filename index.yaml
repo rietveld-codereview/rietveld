@@ -142,8 +142,21 @@ indexes:
 
 - kind: Message
   properties:
+  - name: draft
   - name: issue
   - name: date
+    direction: desc
+
+- kind: Message
+  properties:
+  - name: issue
+  - name: date
+
+- kind: Message
+  properties:
+  - name: issue
+  - name: date
+    direction: desc
 
 - kind: Message
   properties:

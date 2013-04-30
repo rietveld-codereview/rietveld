@@ -89,6 +89,7 @@ class Issue(db.Model):
   n_comments = db.IntegerProperty()
 
   _is_starred = None
+  _has_updates = None
 
   @property
   def is_starred(self):
@@ -213,6 +214,46 @@ class Issue(db.Model):
   def formatted_reviewers(self):
     """Returns a dict from the reviewer to their approval status."""
     return {r: self.has_reviewer_approved(r) for r in self.reviewers}
+
+  @property
+  def has_updates(self):
+    """Returns true there have been recent updates on this issue for the
+    current user.  If the current user is an owner, this will return true
+    if there are any messages after the last message from the owner.  If
+    the current user is not the owner, this will return True if there has
+    been a message from the owner (but not other reviewers) after the
+    last message from the current user."""
+    if self._has_updates is not None:
+      return self._has_updates
+
+    user = auth_utils.get_current_user()
+    if not user:
+      return False
+
+    # If this issue is not relvant to the user, return False.
+    msgs = self.message_set.order('-date').filter('draft =', False)
+    if (user != self.owner and
+        user.email() not in self.reviewers and
+        user.email() not in self.cc and
+        user.email() not in [msg.sender for msg in msgs]):
+      return False
+
+    for msg in msgs:
+      if user == self.owner:
+        self._has_updates = msg.sender != self.owner.email()
+        break
+      elif msg.sender == user.email():
+        self._has_updates = False
+        break
+      elif msg.sender == self.owner.email():
+        self._has_updates = True
+        break
+    else:
+      # If the issue has no messages, then it has no updates for the
+      # owner, but updates for everyone else.
+      self._has_updates = (user != self.owner)
+
+    return self._has_updates
 
 
 class PatchSet(db.Model):
