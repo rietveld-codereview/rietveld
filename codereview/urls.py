@@ -86,6 +86,9 @@ urlpatterns = patterns(
     (r'^search$', 'search'),
     (r'^tasks/calculate_delta$', 'calculate_delta'),
     (r'^tasks/migrate_entities$', 'task_migrate_entities'),
+    (r'^get-access-token$', 'get_access_token'),
+    (r'^oauth2callback$', 'oauth2callback'),
+    (r'^admin/set-client-id-and-secret$', 'set_client_id_and_secret'),
     )
 
 feed_dict = {

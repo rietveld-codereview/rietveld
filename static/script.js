@@ -2440,7 +2440,7 @@ function M_keyDownCommon(evt, handler, input_handler) {
  */
 function M_commentTextKeyDown_(src, key) {
   if (src.nodeName == "TEXTAREA") {
-    if (key == 'Ctrl-S') {
+    if (key == 'Ctrl-S' || key == 'Ctrl-Enter') {
       // Save the form corresponding to this text area.
       M_disableCarefulUnload();
       if (src.form.save.onclick) {

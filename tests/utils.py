@@ -42,6 +42,7 @@ class TestCase(_TestCase):
     super(TestCase, self).setUp()
     self.testbed = testbed.Testbed()
     self.testbed.activate()
+    self.testbed.init_memcache_stub()
     self.testbed.init_datastore_v3_stub()
     self.testbed.init_user_stub()
 
