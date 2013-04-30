@@ -74,6 +74,14 @@ a.redlink {
   font-weight: bold;
 }
 
+.approval a, span.approval {
+  color: green;
+}
+
+.disapproval a, span.disapproval {
+  color: red;
+}
+
 .anchor {
   visibility: hidden;
 }

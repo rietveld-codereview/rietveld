@@ -145,6 +145,12 @@ indexes:
   - name: issue
   - name: date
 
+- kind: Message
+  properties:
+  - name: issue
+  - name: date
+    direction: desc
+
 - kind: Patch
   properties:
   - name: patchset

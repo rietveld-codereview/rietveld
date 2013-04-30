@@ -99,6 +99,36 @@ def show_user(email, arg=None, _autoescape=None, _memcache_results=None):
 
 
 @register.filter
+def show_reviewers(reviewer_list, arg=None):
+  """Render list of links to each reviewer's dashboard with color."""
+
+  email_list = []
+  for reviewer, approval in reviewer_list.items():
+    email = reviewer
+    if isinstance(email, users.User):
+      email = email.email()
+    email_list.append(email)
+
+  links = get_links_for_users(email_list)
+
+  if not arg:
+    user = auth_utils.get_current_user()
+    if user is not None:
+      links[user.email()] = 'me'
+
+  return django.utils.safestring.mark_safe(', '.join(
+      format_approval_text(links[r], a) for r, a in reviewer_list.items()))
+
+
+def format_approval_text(text, approval):
+  if approval == None:
+    return text
+  if approval:
+    return "<span class='approval'>" + text + "</span>"
+  return "<span class='disapproval'>" + text + "</span>"
+
+
+@register.filter
 def show_users(email_list, arg=None):
   """Render list of links to each user's dashboard."""
   new_email_list = []
