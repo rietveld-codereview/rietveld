@@ -79,7 +79,8 @@ class Issue(db.Model):
   #: (if False - then Rietveld attempts to download them from server)
   local_base = db.BooleanProperty(default=False)
   repo_guid = db.StringProperty()
-  owner = db.UserProperty(auto_current_user_add=True, required=True)
+  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True,
+                                         required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
   reviewers = db.ListProperty(db.Email)
@@ -90,6 +91,7 @@ class Issue(db.Model):
   commit = db.BooleanProperty(default=False)
 
   _is_starred = None
+  _has_updates = None
 
   @property
   def is_starred(self):
@@ -198,6 +200,64 @@ class Issue(db.Model):
     if not user:
       return False
     return user.email() in self.collaborator_emails()
+
+  def has_reviewer_approved(self, user):
+    """Returns true if the user has approved this issue, false if they
+    have disapproved it, and None otherwise."""
+    for msg in self.message_set.order('-date'):
+      if user != msg.sender:
+        continue
+
+      if msg.approval:
+        return True
+      if msg.disapproval:
+        return False
+    return None
+
+  @property
+  def formatted_reviewers(self):
+    """Returns a dict from the reviewer to their approval status."""
+    return {r: self.has_reviewer_approved(r) for r in self.reviewers}
+
+  @property
+  def has_updates(self):
+    """Returns true there have been recent updates on this issue for the
+    current user.  If the current user is an owner, this will return true
+    if there are any messages after the last message from the owner.  If
+    the current user is not the owner, this will return True if there has
+    been a message from the owner (but not other reviewers) after the
+    last message from the current user."""
+    if self._has_updates is not None:
+      return self._has_updates
+
+    user = auth_utils.get_current_user()
+    if not user:
+      return False
+
+    # If this issue is not relvant to the user, return False.
+    msgs = self.message_set.order('-date').filter('draft =', False)
+    if (user != self.owner and
+        user.email() not in self.reviewers and
+        user.email() not in self.cc and
+        user.email() not in [msg.sender for msg in msgs]):
+      return False
+
+    for msg in msgs:
+      if user == self.owner:
+        self._has_updates = msg.sender != self.owner.email()
+        break
+      elif msg.sender == user.email():
+        self._has_updates = False
+        break
+      elif msg.sender == self.owner.email():
+        self._has_updates = True
+        break
+    else:
+      # If the issue has no messages, then it has no updates for the
+      # owner, but updates for everyone else.
+      self._has_updates = (user != self.owner)
+
+    return self._has_updates
 
 
 class TryJobResult(db.Model):
@@ -667,7 +727,7 @@ class Comment(db.Model):
 
   patch = db.ReferenceProperty(Patch)  # == parent
   message_id = db.StringProperty()  # == key_name
-  author = db.UserProperty(auto_current_user_add=True)
+  author = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
   date = db.DateTimeProperty(auto_now=True)
   lineno = db.IntegerProperty()
   text = db.TextProperty()
@@ -743,7 +803,7 @@ class Repository(db.Model):
 
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
-  owner = db.UserProperty(auto_current_user_add=True)
+  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
   guid = db.StringProperty()  # global unique repository id
 
   def __str__(self):
@@ -761,7 +821,7 @@ class Branch(db.Model):
                                choices=('*trunk*', 'branch', 'tag'))
   name = db.StringProperty(required=True)
   url = db.LinkProperty(required=True)
-  owner = db.UserProperty(auto_current_user_add=True)
+  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
 
 
 ### Accounts ###
@@ -785,7 +845,8 @@ class Account(db.Model):
   starred issues we'd have to think of a different approach.)
   """
 
-  user = db.UserProperty(auto_current_user_add=True, required=True)
+  user = auth_utils.AnyAuthUserProperty(auto_current_user_add=True,
+                                        required=True)
   email = db.EmailProperty(required=True)  # key == <email>
   nickname = db.StringProperty(required=True)
   default_context = db.IntegerProperty(default=settings.DEFAULT_CONTEXT,

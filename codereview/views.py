@@ -57,6 +57,17 @@ from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 from django.core.servers.basehttp import FileWrapper
 
+import httplib2
+from oauth2client.appengine import _parse_state_value
+from oauth2client.appengine import _safe_html
+from oauth2client.appengine import CredentialsNDBModel
+from oauth2client.appengine import StorageByKeyName
+from oauth2client.appengine import xsrf_secret_key
+from oauth2client.client import AccessTokenRefreshError
+from oauth2client.client import OAuth2WebServerFlow
+from oauth2client import xsrfutil
+
+from codereview import auth_utils
 from codereview import engine
 from codereview import library
 from codereview import models
@@ -74,6 +85,8 @@ django.template.add_to_builtins('codereview.library')
 
 
 IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
+ACCESS_TOKEN_REDIRECT_TEMPLATE = ('http://localhost:%(port)d?'
+                                  'access_token=%(token)s')
 # Maximum forms fields length
 MAX_SUBJECT = 100
 MAX_DESCRIPTION = 10000
@@ -555,6 +568,12 @@ class SearchForm(forms.Form):
     user = self._clean_accounts('reviewer')
     if user:
       return user.email()
+
+
+class ClientIDAndSecretForm(forms.Form):
+  """Simple form for collecting Client ID and Secret."""
+  client_id = forms.CharField()
+  client_secret = forms.CharField()
 
 
 ### Exceptions ###
@@ -1346,12 +1365,21 @@ def _show_user(request):
       if (issue.key() not in draft_keys and issue.owner != user
           and _can_view_issue(request.user, issue))]
   all_issues = my_issues + review_issues + closed_issues + cc_issues
+  # When a CL is sent from upload.py using --send_mail we create an empty
+  # message. This might change in the future, either by not adding an empty
+  # message or by populating the message with the content of the email
+  # that was sent out.
+  outgoing_issues = [issue for issue in my_issues
+                     if issue.message_set.count(1)]
+  unsent_issues = [issue for issue in my_issues
+                   if not issue.message_set.count(1)]
   _load_users_for_issues(all_issues)
   _optimize_draft_counts(all_issues)
   account = models.Account.get_account_for_user(request.user_to_show)
   return respond(request, 'user.html',
                  {'account': account,
-                  'my_issues': my_issues,
+                  'outgoing_issues': outgoing_issues,
+                  'unsent_issues': unsent_issues,
                   'review_issues': review_issues,
                   'closed_issues': closed_issues,
                   'cc_issues': cc_issues,
@@ -3624,6 +3652,14 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
       try:
         mail.send_mail(**send_args)
         break
+      except mail.InvalidSenderError:
+        if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
+          previous_sender = send_args['sender']
+          if previous_sender not in send_args['to']:
+            send_args['to'].append(previous_sender)
+          send_args['sender'] = django_settings.RIETVELD_INCOMING_MAIL_ADDRESS
+        else:
+          raise
       except apiproxy_errors.DeadlineExceededError:
         # apiproxy_errors.DeadlineExceededError is raised when the
         # deadline of an API call is reached (e.g. for mail it's
@@ -4365,3 +4401,145 @@ def calculate_delta(request):
     patch.delta_calculated = True
     patch.put()
   return HttpResponse()
+
+
+def _build_state_value(django_request, user):
+  """Composes the value for the 'state' parameter.
+
+  Packs the current request URI and an XSRF token into an opaque string that
+  can be passed to the authentication server via the 'state' parameter.
+
+  Meant to be similar to oauth2client.appengine._build_state_value.
+
+  Args:
+    django_request: Django HttpRequest object, The request.
+    user: google.appengine.api.users.User, The current user.
+
+  Returns:
+    The state value as a string.
+  """
+  relative_path = django_request.get_full_path().encode('utf-8')
+  uri = django_request.build_absolute_uri(relative_path)
+  token = xsrfutil.generate_token(xsrf_secret_key(), user.user_id(),
+                                  action_id=str(uri))
+  return  uri + ':' + token
+
+
+def _create_flow(django_request):
+  """Create the Flow object.
+
+  The Flow is calculated using mostly fixed values and constants retrieved
+  from other modules.
+
+  Args:
+    django_request: Django HttpRequest object, The request.
+
+  Returns:
+    oauth2client.client.OAuth2WebServerFlow object.
+  """
+  redirect_path = reverse(oauth2callback)
+  redirect_uri = django_request.build_absolute_uri(redirect_path)
+  client_id, client_secret = auth_utils.SecretKey.get_config()
+  return OAuth2WebServerFlow(client_id, client_secret, auth_utils.EMAIL_SCOPE,
+                             redirect_uri=redirect_uri,
+                             approval_prompt='force')
+
+
+def _validate_port(port_value):
+  """Makes sure the port value is valid and can be used by a non-root user.
+
+  Args:
+    port_value: Integer or string version of integer.
+
+  Returns:
+    Integer version of port_value if valid, otherwise None.
+  """
+  try:
+    port_value = int(port_value)
+  except (ValueError, TypeError):
+    return None
+
+  if not (1024 <= port_value <= 49151):
+    return None
+
+  return port_value
+
+
+@login_required
+def get_access_token(request):
+  """/get-access-token - Facilitates OAuth 2.0 dance for client.
+
+  Meant to take a 'port' query parameter and redirect to localhost with that
+  port and the user's access token appended.
+  """
+  user = request.user
+  flow = _create_flow(request)
+
+  flow.params['state'] = _build_state_value(request, user)
+  credentials = StorageByKeyName(
+      CredentialsNDBModel, user.user_id(), 'credentials').get()
+
+  authorize_url = flow.step1_get_authorize_url()
+  redirect_response_object = HttpResponseRedirect(authorize_url)
+  if credentials is None or credentials.invalid:
+    return redirect_response_object
+
+  # Find out if credentials is expired
+  if credentials.access_token is None or credentials.access_token_expired:
+    try:
+      credentials.refresh(httplib2.Http())
+    except AccessTokenRefreshError:
+      return redirect_response_object
+
+  port_value = _validate_port(request.GET.get('port'))
+  if port_value is None:
+    return HttpTextResponse('Access Token: %s' % (credentials.access_token,))
+
+  # Send access token along to localhost client
+  quoted_access_token = urllib.quote(credentials.access_token)
+  client_uri = ACCESS_TOKEN_REDIRECT_TEMPLATE % {
+      'port': port_value,
+      'token': quoted_access_token,
+  }
+  return HttpResponseRedirect(client_uri)
+
+
+@login_required
+def oauth2callback(request):
+  """/oauth2callback - Callback handler for OAuth 2.0 redirect.
+
+  Handles redirect and moves forward to the rest of the application.
+  """
+  error = request.GET.get('error')
+  if error:
+    error_msg = request.GET.get('error_description', error)
+    return HttpTextResponse(
+        'The authorization request failed: %s' % _safe_html(error_msg))
+  else:
+    user = request.user
+    flow = _create_flow(request)
+    credentials = flow.step2_exchange(request.GET)
+    StorageByKeyName(
+        CredentialsNDBModel, user.user_id(), 'credentials').put(credentials)
+    redirect_uri = _parse_state_value(str(request.GET.get('state')),
+                                      user)
+    return HttpResponseRedirect(redirect_uri)
+
+
+@admin_required
+def set_client_id_and_secret(request):
+  """/admin/set-client-id-and-secret - Allows admin to set Client ID and Secret.
+
+  These values, from the Google APIs console, are required to validate
+  OAuth 2.0 tokens within auth_utils.py.
+  """
+  if request.method == 'POST':
+    form = ClientIDAndSecretForm(request.POST)
+    if form.is_valid():
+      client_id = form.cleaned_data['client_id']
+      client_secret = form.cleaned_data['client_secret']
+      auth_utils.SecretKey.set_config(client_id, client_secret)
+    return HttpResponseRedirect(reverse(set_client_id_and_secret))
+  else:
+    form = ClientIDAndSecretForm()
+    return respond(request, 'set_client_id_and_secret.html', {'form': form})

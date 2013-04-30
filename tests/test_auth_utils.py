@@ -21,8 +21,6 @@ from google.appengine.api import users
 from google.appengine.api.user_service_stub import _OAUTH_EMAIL as OAUTH_EMAIL
 from google.appengine.api import urlfetch
 
-from django.conf import settings
-
 from utils import TestCase
 
 from codereview import auth_utils
@@ -32,7 +30,7 @@ TOKENINFO_URL_WITH_QUERY = auth_utils.TOKENINFO_URL + '?access_token='
 DEFAULT_STATUS_CODE = 200
 TEST_EMAIL = 'foo@example.com'
 EMAIL_SCOPE = auth_utils.EMAIL_SCOPE
-RIETVELD_CLIENT_ID = settings.RIETVELD_CLIENT_ID
+CLIENT_ID = 'dummy29.apps.googleusercontent.com'
 
 
 class DummyURLFetchResponse(object):
@@ -54,6 +52,8 @@ class TestAuthUtils(TestCase):
       self.auth_header = os.environ['HTTP_AUTHORIZATION']
       del os.environ['HTTP_AUTHORIZATION']
     self.original_fetch = urlfetch.fetch
+
+    auth_utils.SecretKey.set_config(CLIENT_ID, 'dummy.secret')
 
   def tearDown(self):
     super(TestAuthUtils, self).tearDown()
@@ -218,7 +218,7 @@ class TestAuthUtils(TestCase):
     token_info['issued_to'] = 'bar'
     self.assertFalse(auth_utils.check_token_info(token_info, oauth_user))
 
-    # Issued to and audience agree, audience not equal to RIETVELD_CLIENT_ID
+    # Issued to and audience agree, audience not equal to CLIENT_ID
     token_info['issued_to'] = wrong_client_id
     self.assertFalse(auth_utils.check_token_info(token_info, oauth_user))
 
@@ -229,8 +229,8 @@ class TestAuthUtils(TestCase):
       'email': TEST_EMAIL,
       'verified_email': True,
       'scope': EMAIL_SCOPE,
-      'audience': RIETVELD_CLIENT_ID,
-      'issued_to': RIETVELD_CLIENT_ID,
+      'audience': CLIENT_ID,
+      'issued_to': CLIENT_ID,
     }
     self.assertTrue(auth_utils.check_token_info(token_info, oauth_user))
 
@@ -267,8 +267,8 @@ class TestAuthUtils(TestCase):
       'email': email,
       'verified_email': True,
       'scope': EMAIL_SCOPE,
-      'audience': RIETVELD_CLIENT_ID,
-      'issued_to': RIETVELD_CLIENT_ID,
+      'audience': CLIENT_ID,
+      'issued_to': CLIENT_ID,
     })
     # tearDown will set urlfetch.fetch back to the original for us
     urlfetch.fetch = self.make_tokeninfo_fetch(token_info)

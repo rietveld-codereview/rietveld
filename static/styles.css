@@ -74,6 +74,14 @@ a.redlink {
   font-weight: bold;
 }
 
+.approval a, span.approval {
+  color: green;
+}
+
+.disapproval a, span.disapproval {
+  color: red;
+}
+
 .anchor {
   visibility: hidden;
 }
@@ -689,6 +697,10 @@ span.visualtab {
   padding: 3px;
   padding-left: 0px;
   
+}
+
+.issue-list .updated {
+  font-weight: bold;
 }
 
 .issue-list .pagination {

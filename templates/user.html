@@ -26,25 +26,7 @@ document.onkeydown = M_dashboardKeyDown;
 
   <tr>
     <td colspan="9" class="header">
-      <h3>Created by {%nickname email%} ({{my_issues|length}})</h3>
-    </td>
-  </tr>
-  {%if not my_issues%}
-    <tr>
-      <td colspan="9" class="first last">
-        <span class="disabled">(None)</span>
-      </td>
-    </tr>
-  {%else%}
-    {%include "issue_heading.html"%}
-    {%for issue in my_issues%}
-      {%include "issue_row.html"%}
-    {%endfor%}
-  {%endif%}
-
-  <tr>
-    <td colspan="9" class="header">
-      <h3>Reviewable by {%nickname email%} ({{review_issues|length}})</h3>
+      <h3>Incoming reviews {%nickname email%} ({{review_issues|length}})</h3>
     </td>
   </tr>
   {%if not review_issues%}
@@ -56,6 +38,42 @@ document.onkeydown = M_dashboardKeyDown;
   {%else%}
     {%include "issue_heading.html"%}
     {%for issue in review_issues%}
+      {%include "issue_row.html"%}
+    {%endfor%}
+  {%endif%}
+
+  <tr>
+    <td colspan="9" class="header">
+      <h3>Outgoing reviews {%nickname email%} ({{outgoing_issues|length}})</h3>
+    </td>
+  </tr>
+  {%if not outgoing_issues%}
+    <tr>
+      <td colspan="9" class="first last">
+        <span class="disabled">(None)</span>
+      </td>
+    </tr>
+  {%else%}
+    {%include "issue_heading.html"%}
+    {%for issue in outgoing_issues%}
+      {%include "issue_row.html"%}
+    {%endfor%}
+  {%endif%}
+
+  <tr>
+    <td colspan="9" class="header">
+      <h3>Unsent issues {%nickname email%} ({{unsent_issues|length}})</h3>
+    </td>
+  </tr>
+  {%if not unsent_issues%}
+    <tr>
+      <td colspan="9" class="first last">
+        <span class="disabled">(None)</span>
+      </td>
+    </tr>
+  {%else%}
+    {%include "issue_heading.html"%}
+    {%for issue in unsent_issues%}
       {%include "issue_row.html"%}
     {%endfor%}
   {%endif%}

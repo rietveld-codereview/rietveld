@@ -44,8 +44,8 @@ import urllib
 from google.appengine.api import oauth
 from google.appengine.api import urlfetch
 from google.appengine.api import users
-
-from django.conf import settings
+from google.appengine.ext import db
+from google.appengine.ext import ndb
 
 
 EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
@@ -53,6 +53,45 @@ TOKENINFO_URL = 'https://www.googleapis.com/oauth2/v1/tokeninfo'
 _ALLOWED_AUTH_SCHEMES = ('OAUTH ', 'BEARER ')
 
 IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
+
+
+class SecretKey(ndb.Model):
+  """Model for representing project secret keys."""
+  client_id = ndb.StringProperty(required=True, indexed=False)
+  client_secret = ndb.StringProperty(required=True, indexed=False)
+
+  GLOBAL_KEY = '_global_config'
+
+  @classmethod
+  def set_config(cls, client_id, client_secret):
+    """Sets global config object using a Client ID and Secret.
+
+    Args:
+      client_id: String containing Google APIs Client ID.
+      client_secret: String containing Google APIs Client Secret.
+
+    Returns:
+      The inserted SecretKey object.
+    """
+    config = cls(id=cls.GLOBAL_KEY,
+                 client_id=client_id, client_secret=client_secret)
+    config.put()
+    return config
+
+  @classmethod
+  def get_config(cls):
+    """Gets tuple of Client ID and Secret from global config object.
+
+    Returns:
+      2-tuple containing the Client ID and Secret from the global config
+          SecretKey object, if it is in the datastore, else the tuple
+          (None, None).
+    """
+    config = cls.get_by_id(cls.GLOBAL_KEY)
+    if config is None:
+      return None, None
+    else:
+      return config.client_id, config.client_secret
 
 
 def get_oauth_token_from_env():
@@ -146,9 +185,23 @@ def check_token_info(token_info, oauth_user):
     return False
 
   # Scope check
-  if token_info.get('scope') != EMAIL_SCOPE:
-    logging.warning('Scope %r differs from email scope.',
-                    token_info.get('scope'))
+  if 'scope' not in token_info:
+    logging.warning('No scope in token info.')
+    return False
+
+  scope_string = token_info['scope']
+  if not isinstance(scope_string, basestring):
+    logging.warning('Scope not a string.')
+    return False
+
+  scope_list = scope_string.split(' ')
+  # Scopes must be separated by a single space.
+  if '' in scope_list:
+    logging.warning('Scope string %r had unexpected format.', scope_string)
+    return False
+
+  if EMAIL_SCOPE not in scope_list:
+    logging.warning('Scope list %r does not contain email scope.', scope_list)
     return False
 
   # Audience checks
@@ -164,7 +217,8 @@ def check_token_info(token_info, oauth_user):
                     audience, token_info.get('issued_to'))
     return False
 
-  if audience != settings.RIETVELD_CLIENT_ID:
+  client_id, _ = SecretKey.get_config()
+  if audience != client_id:
     logging.warning('Audience %r not intended for this application.', audience)
     return False
 
@@ -214,6 +268,43 @@ def get_current_user():
   if current_cookie_user is not None:
     return current_cookie_user
   return get_current_rietveld_oauth_user()
+
+
+class AnyAuthUserProperty(db.UserProperty):
+  """An extension of the UserProperty which also accepts OAuth users.
+
+  The default db.UserProperty only considers cookie-based Auth users.
+  """
+
+  def default_value(self):
+    """Default value for user.
+
+    NOTE: This is adapted from UserProperty.default_value but uses a different
+    get_current_user() method.
+
+    Returns:
+      Value of get_current_user() if auto_current_user or
+      auto_current_user_add is set; else None. (But *not* the default
+      implementation, since we don't support the 'default' keyword
+      argument.)
+    """
+    if self.auto_current_user or self.auto_current_user_add:
+      return get_current_user()
+    return None
+
+  def get_updated_value_for_datastore(self, unused_model_instance):
+    """Get new value for property to send to datastore.
+
+    NOTE: This is adapted from UserProperty.get_updated_value_for_datastore but
+    uses a different get_current_user() method.
+
+    Returns:
+      Value of get_current_user() if auto_current_user is set; else
+      AUTO_UPDATE_UNCHANGED.
+    """
+    if self.auto_current_user:
+      return get_current_user()
+    return db.AUTO_UPDATE_UNCHANGED
 
 
 def is_current_user_admin():
