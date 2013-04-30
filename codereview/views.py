@@ -1310,12 +1310,21 @@ def _show_user(request):
       if (issue.key() not in draft_keys and issue.owner != user
           and _can_view_issue(request.user, issue))]
   all_issues = my_issues + review_issues + closed_issues + cc_issues
+  # When a CL is sent from upload.py using --send_mail we create an empty
+  # message. This might change in the future, either by not adding an empty
+  # message or by populating the message with the content of the email
+  # that was sent out.
+  outgoing_issues = [issue for issue in my_issues
+                     if issue.message_set.count(1)]
+  unsent_issues = [issue for issue in my_issues
+                   if not issue.message_set.count(1)]
   _load_users_for_issues(all_issues)
   _optimize_draft_counts(all_issues)
   account = models.Account.get_account_for_user(request.user_to_show)
   return respond(request, 'user.html',
                  {'account': account,
-                  'my_issues': my_issues,
+                  'outgoing_issues': outgoing_issues,
+                  'unsent_issues': unsent_issues,
                   'review_issues': review_issues,
                   'closed_issues': closed_issues,
                   'cc_issues': cc_issues,
