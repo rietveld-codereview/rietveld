@@ -679,6 +679,10 @@ span.visualtab {
   
 }
 
+.issue-list .updated {
+  font-weight: bold;
+}
+
 .issue-list .pagination {
   text-align: right;
   padding: 3px;
