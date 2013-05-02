@@ -178,12 +178,6 @@ indexes:
   - name: date
     direction: desc
 
-- kind: Message
-  properties:
-  - name: issue
-  - name: date
-    direction: desc
-
 - kind: Patch
   properties:
   - name: patchset
