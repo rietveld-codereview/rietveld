@@ -1222,7 +1222,8 @@ def _optimize_draft_counts(issues):
     issue_ids = account.drafts
   for issue in issues:
     if issue_ids is None or issue.key().id() not in issue_ids:
-      issue._num_drafts = 0
+      issue._num_drafts = issue._num_drafts or {}
+      issue._num_drafts[account] = 0
 
 
 @login_required
@@ -1958,9 +1959,11 @@ def _get_patchset_info(request, patchset_id):
     drafts = []
   comments = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE',
                                      issue))
+  # TODO(andi) Remove draft_count attribute, we already have issue._num_drafts
+  # and it's additional magic.
   issue.draft_count = len(drafts)
   for c in drafts:
-    c.ps_key = c.patch.patchset.key()
+    c.ps_key = c.patch.patchset.key()  # Issues a query!
   patchset_id_mapping = {}  # Maps from patchset id to its ordering number.
   for patchset in patchsets:
     patchset_id_mapping[patchset.key().id()] = len(patchset_id_mapping) + 1

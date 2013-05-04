@@ -23,6 +23,7 @@ import time
 from google.appengine.api import memcache
 from google.appengine.api import urlfetch
 from google.appengine.ext import db
+from google.appengine.api.users import User
 
 from django.conf import settings
 
@@ -144,22 +145,21 @@ class Issue(db.Model):
 
   _num_drafts = None
 
-  @property
-  def num_drafts(self):
-    """The number of draft comments on this issue for the current user.
+  def get_num_drafts(self, user):
+    """The number of draft comments on this issue for the user.
 
     The value is expensive to compute, so it is cached.
     """
-    if self._num_drafts is None:
-      account = Account.current_user_account
-      if account is None:
-        self._num_drafts = 0
-      else:
-        query = gql(Comment,
-            'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-            self, account.user)
-        self._num_drafts = query.count()
-    return self._num_drafts
+    if user is None:
+      return 0
+    assert isinstance(user, User), 'Expected User, got %r instead.' % user
+    self._num_drafts = self._num_drafts or {}
+    if user not in self._num_drafts:
+      query = gql(Comment,
+                  'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
+                  self, user)
+      self._num_drafts[user] = query.count()
+    return self._num_drafts[user]
 
   @staticmethod
   def _collaborator_emails_from_description(description):
@@ -916,7 +916,8 @@ class Account(db.Model):
       dirty = self._initialize_drafts()
     id = issue.key().id()
     if have_drafts is None:
-      have_drafts = bool(issue.num_drafts)  # Beware, this may do a query.
+      # Beware, this may do a query.
+      have_drafts = bool(issue.get_num_drafts(self.user))
     if have_drafts:
       if id not in self._drafts:
         self._drafts.append(id)
