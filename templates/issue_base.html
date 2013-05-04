@@ -134,14 +134,14 @@
   {%if issue%}
     <div class="popup" id="popup-issue">
       <b>Issue {{issue.key.id}}: {{issue.subject}}
-	{%if issue.closed %} (Closed) {%endif%}</b><br/>
+    {%if issue.closed %} (Closed) {%endif%}</b><br/>
       Created {{issue.created|timesince}} ago by {%nickname issue.owner%}<br/>
       Modified {{issue.modified|timesince}} ago<br/>
       Reviewers: {%nicknames issue.reviewers%}<br/>
       Base URL: {{issue.base}}<br/>
       Comments: {{issue.num_comments}}
-      {%if issue.num_drafts%} <span style="color: red;">+
-	{{issue.num_drafts}} drafts</span>{%endif%}
+      {%if issue|num_drafts:user%} <span style="color: red;">+
+   {{issue|num_drafts:user}} drafts</span>{%endif%}
     </div>
   {%endif%}
 {%endblock%}
