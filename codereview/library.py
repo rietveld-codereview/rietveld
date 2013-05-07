@@ -290,3 +290,14 @@ def nicknames(parser, token):
   node = nickname(parser, token)
   node.is_multi = True
   return node
+
+
+@register.filter
+def num_drafts(issue, user):
+  """Returns number of drafts for given user.
+
+  :param issue: an Issue instance.
+  :param user: an User instance or None.
+  :returns: Drafts for given object.
+  """
+  return issue.get_num_drafts(user)
