@@ -731,7 +731,14 @@ def OpenOAuth2ConsentPage(server=DEFAULT_REVIEW_SERVER,
       is serving. Defaults to DEFAULT_OAUTH2_PORT.
   """
   path = OAUTH_PATH_PORT_TEMPLATE % {'port': port}
-  page = 'https://%s%s' % (server, path)
+  parsed_url = urlparse.urlparse(server)
+  scheme = parsed_url[0] or 'https'
+  if scheme != 'https':
+    ErrorExit('Using OAuth requires a review server with SSL enabled.')
+  # If no scheme was given on command line the server address ends up in
+  # parsed_url.path otherwise in netloc.
+  host = parsed_url[1] or parsed_url[2]
+  page = '%s://%s%s' % (scheme, host, path)
   webbrowser.open(page, new=1, autoraise=True)
   print OPEN_LOCAL_MESSAGE_TEMPLATE % (page,)
 
