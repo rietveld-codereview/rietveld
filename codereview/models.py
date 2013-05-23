@@ -298,7 +298,7 @@ class Issue(db.Model):
 
     Returns a future for the put() operation or None if this issue is up to
     date."""
-    if (self.n_messages_sent is None):
+    if self.n_messages_sent is None:
       if self.draft_count_by_user is None:
         self.calculate_draft_count_by_user()
       self.calculate_updates_for()
