@@ -4,3 +4,5 @@ queue:
   retry_parameters:
     task_retry_limit: 5
     task_age_limit: 1d
+- name: delete-old-pending-jobs-task
+  rate: 1/s
