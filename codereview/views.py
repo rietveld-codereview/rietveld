@@ -19,6 +19,7 @@ import binascii
 import datetime
 import email  # see incoming_mail()
 import email.utils
+import itertools
 import logging
 import md5
 import mimetypes
@@ -1311,14 +1312,23 @@ def _show_user(request):
       if (issue.key() not in draft_keys and issue.owner != user
           and _can_view_issue(request.user, issue))]
   all_issues = my_issues + review_issues + closed_issues + cc_issues
+
+  # Some of these issues may not have accurate updates_for information,
+  # so ask each issue to update itself.
+  futures = []
+  for issue in itertools.chain(draft_issues, all_issues):
+    ret = issue.calculate_and_save_updates_if_None()
+    if ret is not None:
+      futures.append(ret)
+  for f in futures:
+    f.get_result()
+
   # When a CL is sent from upload.py using --send_mail we create an empty
   # message. This might change in the future, either by not adding an empty
   # message or by populating the message with the content of the email
   # that was sent out.
-  outgoing_issues = [issue for issue in my_issues
-                     if issue.message_set.count(1)]
-  unsent_issues = [issue for issue in my_issues
-                   if not issue.message_set.count(1)]
+  outgoing_issues = [issue for issue in my_issues if issue.num_messages]
+  unsent_issues = [issue for issue in my_issues if not issue.num_messages]
   _load_users_for_issues(all_issues)
   _optimize_draft_counts(all_issues)
   account = models.Account.get_account_for_user(request.user_to_show)
@@ -1635,6 +1645,7 @@ def upload_complete(request, patchset_id=None):
   if request.POST.get('send_mail') == 'yes' or request.POST.get('message'):
     msg = _make_message(request, request.issue, request.POST.get('message', ''),
                         send_mail=(request.POST.get('send_mail', '') == 'yes'))
+    request.issue.put()
     msg.put()
     _notify_issue(request, request.issue, 'Mailed')
   if errors:
@@ -1713,6 +1724,7 @@ def _make_new(request, form):
 
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, '', '', True)
+    issue.put()
     msg.put()
     _notify_issue(request, issue, 'Created')
   return (issue, patchset)
@@ -1824,6 +1836,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
 
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, message, '', True)
+    issue.put()
     msg.put()
     _notify_issue(request, issue, 'Updated')
   return patchset
@@ -2320,6 +2333,7 @@ def mailissue(request):
       return HttpTextResponse('Login required', status=401)
   issue = request.issue
   msg = _make_message(request, issue, '', '', True)
+  issue.put()
   msg.put()
   _notify_issue(request, issue, 'Mailed')
 
@@ -3100,6 +3114,8 @@ def _inline_draft(request):
     comment.put()
     # The actual count doesn't matter, just that there's at least one.
     models.Account.current_user_account.update_drafts(issue, 1)
+  issue.calculate_draft_count_by_user()
+  issue_fut = db.put_async(issue)
 
   query = models.Comment.gql(
       'WHERE patch = :patch AND lineno = :lineno AND left = :left '
@@ -3109,6 +3125,7 @@ def _inline_draft(request):
   if comment is not None and comment.author is None:
     # Show anonymous draft even though we don't save it
     comments.append(comment)
+  issue_fut.get_result()
   if not comments:
     return HttpTextResponse(' ')
   for c in comments:
@@ -3424,7 +3441,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     if 'patch' in context:
       patch = context['patch']
       del context['patch']
-  if issue.message_set.count(1) > 0:
+  if issue.num_messages:
     subject = 'Re: ' + subject
   if comments:
     details = _get_draft_details(request, comments)
@@ -3448,6 +3465,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     msg.draft = False
     msg.date = datetime.datetime.now()
     msg.issue_was_closed = issue.closed
+  issue.calculate_updates_for(msg)
 
   if in_reply_to:
     try:
@@ -3602,6 +3620,7 @@ def _get_draft_message(draft):
   return HttpTextResponse(draft.text if draft else '')
 
 
+@issue_required
 def _post_draft_message(request, draft):
   """Handles POST requests to /<issue>/draft_message.
 
@@ -4156,7 +4175,7 @@ def _process_incoming_mail(raw_message, recipients):
                        date=datetime.datetime.now(),
                        text=db.Text(body),
                        draft=False)
-  msg.put()
+  issue.calculate_updates_for(msg)
 
   # Add sender to reviewers if needed.
   all_emails = [str(x).lower()
@@ -4171,7 +4190,9 @@ def _process_incoming_mail(raw_message, recipients):
       issue.reviewers.append(account.email)  # e.g. account.email is CamelCase
     else:
       issue.reviewers.append(db.Email(sender))
-    issue.put()
+
+  issue.put()
+  msg.put()
 
 
 @login_required

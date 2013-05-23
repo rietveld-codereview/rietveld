@@ -14,6 +14,8 @@
 
 """App Engine data model (schema) definition for Rietveld."""
 
+import itertools
+import json
 import logging
 import md5
 import os
@@ -89,8 +91,20 @@ class Issue(db.Model):
   private = db.BooleanProperty(default=False)
   n_comments = db.IntegerProperty()
 
+  # NOTE: Use num_messages instead of using n_messages_sent directly.
+  n_messages_sent = db.IntegerProperty()
+
+  # List of emails that this issue has updates for.
+  updates_for = db.ListProperty(db.Email)
+
+  # JSON: {reviewer_email -> [bool|None]}
+  reviewer_approval = db.TextProperty()
+
+  # JSON: {reviewer_email -> int}
+  draft_count_by_user = db.TextProperty()
+
   _is_starred = None
-  _has_updates = None
+  _has_updates_for_current_user = None
 
   @property
   def is_starred(self):
@@ -113,6 +127,18 @@ class Issue(db.Model):
     if account is None:
       return False
     return self.user_can_edit(account.user)
+
+  @property
+  def num_messages(self):
+    """Get and/or calculate the number of messages sent for this issue."""
+    if self.n_messages_sent is None:
+      self.calculate_updates_for()
+    return self.n_messages_sent
+
+  @num_messages.setter
+  def num_messages(self, val):
+    """Setter for num_messages."""
+    self.n_messages_sent = val
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n.
@@ -153,13 +179,24 @@ class Issue(db.Model):
     if user is None:
       return 0
     assert isinstance(user, User), 'Expected User, got %r instead.' % user
-    self._num_drafts = self._num_drafts or {}
-    if user not in self._num_drafts:
-      query = gql(Comment,
-                  'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-                  self, user)
-      self._num_drafts[user] = query.count()
-    return self._num_drafts[user]
+    if self._num_drafts is None:
+      if self.draft_count_by_user is None:
+        self.calculate_draft_count_by_user()
+      else:
+        self._num_drafts = json.loads(self.draft_count_by_user)
+    return self._num_drafts.get(user.email(), 0)
+
+  def calculate_draft_count_by_user(self):
+    """Computes the number of drafts by user and returns the put future.
+
+    Initializes _num_drafts as a side effect.
+    """
+    self._num_drafts = {}
+    query = Comment.all().filter('draft =', True).ancestor(self).run()
+    for comment in query:
+      cur = self._num_drafts.setdefault(comment.author.email(), 0)
+      self._num_drafts[comment.author.email()] = cur + 1
+    self.draft_count_by_user = json.dumps(self._num_drafts)
 
   @staticmethod
   def _collaborator_emails_from_description(description):
@@ -197,63 +234,71 @@ class Issue(db.Model):
       return False
     return user.email() in self.collaborator_emails()
 
-  def has_reviewer_approved(self, user):
-    """Returns true if the user has approved this issue, false if they
-    have disapproved it, and None otherwise."""
-    for msg in self.message_set.order('-date'):
-      if user != msg.sender:
-        continue
-
-      if msg.approval:
-        return True
-      if msg.disapproval:
-        return False
-    return None
-
   @property
   def formatted_reviewers(self):
     """Returns a dict from the reviewer to their approval status."""
-    return {r: self.has_reviewer_approved(r) for r in self.reviewers}
+    if self.reviewer_approval:
+      return json.loads(self.reviewer_approval)
+    else:
+      # Don't have reviewer_approval calculated, so return all reviewers with
+      # no approval status.
+      return {r: None for r in self.reviewers}
 
   @property
   def has_updates(self):
-    """Returns true there have been recent updates on this issue for the
-    current user.  If the current user is an owner, this will return true
-    if there are any messages after the last message from the owner.  If
-    the current user is not the owner, this will return True if there has
+    """Returns True if there have been recent updates on this issue for the
+    current user.
+
+    If the current user is an owner, this will return True if there are any
+    messages after the last message from the owner.
+    If the current user is not the owner, this will return True if there has
     been a message from the owner (but not other reviewers) after the
     last message from the current user."""
-    if self._has_updates is not None:
-      return self._has_updates
+    if self._has_updates_for_current_user is None:
+      user = auth_utils.get_current_user()
+      if not user:
+        return False
+      self._has_updates_for_current_user = (user.email() in self.updates_for)
+    return self._has_updates_for_current_user
 
-    user = auth_utils.get_current_user()
-    if not user:
-      return False
+  def calculate_updates_for(self, *msgs):
+    """Recalculates updates_for, reviewer_approval, and draft_count_by_user,
+    factoring in msgs which haven't been sent.
 
-    # If this issue is not relvant to the user, return False.
-    msgs = self.message_set.order('-date').filter('draft =', False)
-    if (user != self.owner and
-        user.email() not in self.reviewers and
-        user.email() not in self.cc and
-        user.email() not in [msg.sender for msg in msgs]):
-      return False
+    This only updates this Issue object. You'll still need to put() it to
+    the data store for it to take effect.
+    """
+    updates_for_set = set(self.updates_for)
+    approval_dict = {r: None for r in self.reviewers}
+    self.num_messages = 0
+    old_messages = self.message_set.filter('draft =', False).run()
+    for msg in itertools.chain(old_messages, msgs):
+      self.num_messages += 1
+      if msg.sender == self.owner.email():
+        updates_for_set.update(self.reviewers, self.cc,
+                               self.collaborator_emails())
+      else:
+        updates_for_set.add(self.owner.email())
+        if msg.approval:
+          approval_dict[msg.sender] = True
+        elif msg.disapproval:
+          approval_dict[msg.sender] = False
+      updates_for_set.discard(msg.sender)
+    self.updates_for = [db.Email(x) for x in updates_for_set]
+    self.reviewer_approval = json.dumps(approval_dict)
 
-    for msg in msgs:
-      if user == self.owner:
-        self._has_updates = msg.sender != self.owner.email()
-        break
-      elif msg.sender == user.email():
-        self._has_updates = False
-        break
-      elif msg.sender == self.owner.email():
-        self._has_updates = True
-        break
-    else:
-      # If the issue has no messages, then it has no updates for the
-      # owner, but updates for everyone else.
-      self._has_updates = (user != self.owner)
+  def calculate_and_save_updates_if_None(self):
+    """If this Issue doesn't have a valid updates_for or n_messages_sent,
+    calculate them and save them back to the datastore.
 
-    return self._has_updates
+    Returns a future for the put() operation or None if this issue is up to
+    date."""
+    if (self.n_messages_sent is None or
+        (not self.updates_for and self.num_messages)):
+      if self.draft_count_by_user is None:
+        self.calculate_draft_count_by_user()
+      self.calculate_updates_for()
+      return db.put_async(self)
 
 
 class PatchSet(db.Model):
