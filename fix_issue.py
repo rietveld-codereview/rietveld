@@ -79,3 +79,9 @@ def UpgradeBuildResults(patchset):
         context.mutation_pool.put(obj)
 
   yield Put()
+
+def RemoveNMessagesSentFromIssues(issue):
+  """Causes Issues to re-cache their message_set-based data."""
+  if issue.n_messages_sent is not None:
+    del issue.n_messages_sent
+    yield op.db.Put(issue)

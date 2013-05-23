@@ -20,3 +20,10 @@ mapreduce:
     params:
     - name: entity_kind
       default: codereview.models.PatchSet
+- name: Remove n_messages_sent key to cause Issue cache data to be re-evaluated
+  mapper:
+    input_reader: google.appengine.ext.mapreduce.input_readers.DatastoreInputReader
+    handler: fix_issue.RemoveNMessagesSentFromIssues
+    params:
+    - name: entity_kind
+      default: codereview.models.Issue
