@@ -284,6 +284,7 @@ class Issue(db.Model):
         elif msg.disapproval:
           approval_dict[msg.sender] = False
       updates_for_set.discard(msg.sender)
+      self.modified = msg.date
     self.updates_for = [db.Email(x) for x in updates_for_set]
     self.reviewer_approval = json.dumps(approval_dict)
 
@@ -293,12 +294,17 @@ class Issue(db.Model):
 
     Returns a future for the put() operation or None if this issue is up to
     date."""
-    if (self.n_messages_sent is None or
-        (not self.updates_for and self.num_messages)):
+    if (self.n_messages_sent is None):
       if self.draft_count_by_user is None:
         self.calculate_draft_count_by_user()
       self.calculate_updates_for()
-      return db.put_async(self)
+      try:
+        # Don't change self.modified when filling cache values. AFAICT, there's
+        # no better way...
+        self.__class__.modified.auto_now = False
+        return db.put_async(self)
+      finally:
+        self.__class__.modified.auto_now = True
 
 
 class PatchSet(db.Model):
