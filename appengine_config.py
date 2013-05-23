@@ -41,10 +41,5 @@ appstats_SHELL_OK = True
 # Enable RPC cost calculation.
 appstats_CALC_RPC_COSTS = True
 
-# Django 1.2+ requires DJANGO_SETTINGS_MODULE environment variable to be set
-# http://code.google.com/appengine/docs/python/tools/libraries.html#Django
-os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
-# NOTE: All "main" scripts must import webapp.template before django.
-
 # Enable third-party imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'third_party'))
