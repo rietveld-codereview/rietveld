@@ -455,6 +455,8 @@ def edit_flags(request):
 
   if 'commit' in request.POST:
     request.issue.commit = form.cleaned_data['commit']
+    if request.user.email() not in request.issue.reviewers:
+      request.issue.reviewers.append(db.Email(request.user.email()))
     request.issue.put()
 
   if 'builders' in request.POST:
