@@ -1060,6 +1060,17 @@ def json_response(func):
 
   return json_wrapper
 
+def access_control_allow_origin_star(func):
+  """Decorator that adds Access-Control-Allow-Origin: * to any HTTPResponse
+  allowing cross-site XHR access to the handler."""
+
+  def allow_origin_access_star_wrapper(request, *args, **kwds):
+    response = func(request, *args, **kwds)
+    response["Access-Control-Allow-Origin"] = "*"
+    return response
+
+  return allow_origin_access_star_wrapper
+
 
 ### Request handlers ###
 
@@ -2726,6 +2737,7 @@ def _patchset_as_dict(patchset, request=None):
   return values
 
 
+@access_control_allow_origin_star
 @issue_required
 @json_response
 def api_issue(request):
@@ -3797,6 +3809,7 @@ def _delete_draft_message(draft):
   return HttpTextResponse('OK')
 
 
+@access_control_allow_origin_star
 @json_response
 def search(request):
   """/search - Search for issues or patchset.
