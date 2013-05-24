@@ -1,6 +1,6 @@
 import datetime
 import logging
-from google.appengine.ext.mapreduce import operation as op
+from mapreduce import operation as op
 from codereview.models import Account, Issue, TryJobResult
 
 
@@ -83,5 +83,5 @@ def UpgradeBuildResults(patchset):
 def RemoveNMessagesSentFromIssues(issue):
   """Causes Issues to re-cache their message_set-based data."""
   if issue.n_messages_sent is not None:
-    del issue.n_messages_sent
+    issue.n_messages_sent = None
     yield op.db.Put(issue)

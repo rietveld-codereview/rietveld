@@ -42,6 +42,14 @@ handlers:
   script: main.application
   login: admin
 
+# Before uploading, do:
+#
+# svn co http://appengine-mapreduce.googlecode.com/svn/trunk/python/src/mapreduce
+#
+#- url: /mapreduce(/.*)?
+#  script: mapreduce/main.py
+#  login: admin
+
 - url: /.*
   script: main.application
 #  secure: always
@@ -59,7 +67,6 @@ inbound_services:
 builtins:
 - appstats: on
 #- deferred: on
-#- mapreduce: on
 - remote_api: on
 
 libraries:
