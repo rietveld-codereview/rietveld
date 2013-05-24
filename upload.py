@@ -729,6 +729,9 @@ def OpenOAuth2ConsentPage(server=DEFAULT_REVIEW_SERVER,
       DEFAULT_REVIEW_SERVER.
     port: Integer, the port where the localhost server receiving the redirect
       is serving. Defaults to DEFAULT_OAUTH2_PORT.
+
+  Returns:
+    A boolean indicating whether the page opened successfully.
   """
   path = OAUTH_PATH_PORT_TEMPLATE % {'port': port}
   parsed_url = urlparse.urlparse(server)
@@ -739,8 +742,10 @@ def OpenOAuth2ConsentPage(server=DEFAULT_REVIEW_SERVER,
   # parsed_url.path otherwise in netloc.
   host = parsed_url[1] or parsed_url[2]
   page = '%s://%s%s' % (scheme, host, path)
-  webbrowser.open(page, new=1, autoraise=True)
-  print OPEN_LOCAL_MESSAGE_TEMPLATE % (page,)
+  page_opened = webbrowser.open(page, new=1, autoraise=True)
+  if page_opened:
+    print OPEN_LOCAL_MESSAGE_TEMPLATE % (page,)
+  return page_opened
 
 
 def WaitForAccessToken(port=DEFAULT_OAUTH2_PORT):
@@ -783,11 +788,12 @@ def GetAccessToken(server=DEFAULT_REVIEW_SERVER, port=DEFAULT_OAUTH2_PORT,
   """
   access_token = None
   if open_local_webbrowser:
-    OpenOAuth2ConsentPage(server=server, port=port)
-    try:
-      access_token = WaitForAccessToken(port=port)
-    except socket.error, e:
-      print 'Can\'t start local webserver. Socket Error: %s\n' % (e.strerror,)
+    page_opened = OpenOAuth2ConsentPage(server=server, port=port)
+    if page_opened:
+      try:
+        access_token = WaitForAccessToken(port=port)
+      except socket.error, e:
+        print 'Can\'t start local webserver. Socket Error: %s\n' % (e.strerror,)
 
   if access_token is None:
     # TODO(dhermes): Offer to add to clipboard using xsel, xclip, pbcopy, etc.
