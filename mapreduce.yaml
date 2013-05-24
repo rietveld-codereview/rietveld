@@ -1,29 +1,36 @@
 mapreduce:
 - name: Fix issues with account modified today
   mapper:
-    input_reader: google.appengine.ext.mapreduce.input_readers.DatastoreInputReader
+    input_reader: mapreduce.input_readers.DatastoreInputReader
     handler: fix_issue.FixIssue
     params:
     - name: entity_kind
       default: codereview.models.Issue
 - name: Delete unused accounts
   mapper:
-    input_reader: google.appengine.ext.mapreduce.input_readers.DatastoreInputReader
+    input_reader: mapreduce.input_readers.DatastoreInputReader
     handler: fix_issue.DeleteUnusedAccounts
     params:
     - name: entity_kind
       default: codereview.models.Account
 - name: Convert the old build_results member of PatchSet to TryJobResults
   mapper:
-    input_reader: google.appengine.ext.mapreduce.input_readers.DatastoreInputReader
+    input_reader: mapreduce.input_readers.DatastoreInputReader
     handler: fix_issue.UpgradeBuildResults
     params:
     - name: entity_kind
       default: codereview.models.PatchSet
+
+# The filters key only works if you apply mapreduce.patch
+# Upstream: https://code.google.com/p/appengine-mapreduce/issues/detail?id=174
 - name: Remove n_messages_sent key to cause Issue cache data to be re-evaluated
   mapper:
-    input_reader: google.appengine.ext.mapreduce.input_readers.DatastoreInputReader
+    input_reader: mapreduce.input_readers.DatastoreInputReader
     handler: fix_issue.RemoveNMessagesSentFromIssues
     params:
+    - name: queue_name
+      default: "delete-n-sent-messages"
     - name: entity_kind
       default: codereview.models.Issue
+    - name: filters
+      default: '[["n_messages_sent", ">=", 0], ["n_messages_sent", "<", 81]]'
