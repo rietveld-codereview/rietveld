@@ -871,6 +871,10 @@ function M_replyToMessage(message_id, written_time, author,
     M_setValueFromDivs(divs, form.message);
     form.message.value += "\n";
   }
+  // Scroll view to bottom of message textarea and scroll textarea to bottom
+  // too, so that the user can write w/o adjusting the views first.
+  M_scrollIntoView(window, form.send_mail, 1);
+  form.message.scrollTop = form.message.scrollHeight;
   M_addTextResizer_(form);
   M_hideElement(replyLink);
 }

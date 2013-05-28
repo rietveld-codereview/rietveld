@@ -166,7 +166,7 @@
             {%if user%}
               <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{%nickname message.sender True%}', '{{message.key}}')"
                  id="message-reply-href-{{forloop.counter0}}">Reply</a>
-              <textarea rows="7" cols="70" name="message" style="display:none"></textarea>
+              <textarea rows="20" name="message" style="display:none; width:99%"></textarea>
               <div id="message-reply-{{forloop.counter0}}"
                    style="display:none;"></div>
             {%else%}
