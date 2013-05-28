@@ -1,0 +1,37 @@
+{%extends "base.html"%}
+{%block title1%}URL Conversions -{%endblock%}
+{%block body%}
+<h2>Base URL conversion rules</h2>
+
+<table>
+{%if user%}
+  {%if warning %}
+    {{ warning }}
+  {%endif%}
+  <form action="{%url codereview.views.conversions%}" method="post">
+  <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+{%endif%}
+<tr><th>Base url<th>Source code url
+{%if user%}
+  <th>Del
+{%endif%}
+{%for rule in rules%}
+  <tr>
+  <td>{{rule.base_url_template}}
+  <td>{{rule.source_code_url_template}}
+  {%if user%}
+    <td><input type=checkbox name="del {{rule.base_url_template}}">
+  {%endif%}
+{%endfor%}
+
+{%if user%}
+  <tr>
+  <td><input type="text" name="base_url_template" id="id_base_url_template"
+  value="{{ base_url }}"/>
+  <td><input type="text" name="source_code_url_template"
+  value="{{ src_url }}"/>
+  <tr><td><td><td><input type="submit" value="Process">
+  </form>
+{%endif%}
+</table>
+{%endblock%}
