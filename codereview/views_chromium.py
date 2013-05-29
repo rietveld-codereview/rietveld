@@ -456,7 +456,8 @@ def edit_flags(request):
   if 'commit' in request.POST:
     request.issue.commit = form.cleaned_data['commit']
     user_email = request.user.email().lower()
-    if (user_email != request.issue.owner.email() and
+    if (request.issue.commit and  # Add as reviewer if setting, not clearing.
+        user_email != request.issue.owner.email() and
         user_email not in request.issue.reviewers and
         user_email not in request.issue.collaborator_emails()):
       request.issue.reviewers.append(db.Email(request.user.email()))
