@@ -116,17 +116,30 @@ class Issue(db.Model):
     return self._is_starred
 
   def user_can_edit(self, user):
-    """Return true if the given user has permission to edit this issue."""
+    """Returns True if the given user has permission to edit this issue."""
     return user and (user == self.owner or self.is_collaborator(user)
                      or auth_utils.is_current_user_admin())
 
   @property
   def edit_allowed(self):
     """Whether the current user can edit this issue."""
-    account = Account.current_user_account
-    if account is None:
+    return self.user_can_edit(auth_utils.get_current_user())
+
+  def user_can_view(self, user):
+    """Returns True if the given user has permission to view this issue."""
+    if not self.private:
+      return True
+    if user is None:
       return False
-    return self.user_can_edit(account.user)
+    email = user.email().lower()
+    return (self.user_can_edit(user) or
+            email in self.cc or
+            email in self.reviewers)
+
+  @property
+  def view_allowed(self):
+    """Whether the current user can view this issue."""
+    return self.user_can_view(auth_utils.get_current_user())
 
   @property
   def num_messages(self):
