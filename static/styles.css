@@ -747,6 +747,10 @@ span.visualtab {
   -webkit-border-radius: 8px 8px 0px 0px;
   -moz-border-radius: 8px 8px 0px 0px;
   cursor: pointer;
+  padding-bottom: 8px;
+  margin-top: -8px;
+  min-height: 1.5em;
+  background-color: white;
 }
 .message-body {
   border-left: 1px solid lightgray;
