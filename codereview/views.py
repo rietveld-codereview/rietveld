@@ -82,8 +82,12 @@ django.template.add_to_builtins('codereview.library')
 
 
 IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
-ACCESS_TOKEN_REDIRECT_TEMPLATE = ('http://localhost:%(port)d?'
+OAUTH_DEFAULT_ERROR_MESSAGE = 'OAuth 2.0 error occurred.'
+_ACCESS_TOKEN_TEMPLATE_ROOT = 'http://localhost:%(port)d?'
+ACCESS_TOKEN_REDIRECT_TEMPLATE = (_ACCESS_TOKEN_TEMPLATE_ROOT +
                                   'access_token=%(token)s')
+ACCESS_TOKEN_FAIL_REDIRECT_TEMPLATE = (_ACCESS_TOKEN_TEMPLATE_ROOT +
+                                       'error=%(error)s')
 # Maximum forms fields length
 MAX_SUBJECT = 100
 MAX_DESCRIPTION = 10000
@@ -4348,22 +4352,30 @@ def get_access_token(request):
     return redirect_response_object
 
   # Find out if credentials is expired
+  refresh_failed = False
   if credentials.access_token is None or credentials.access_token_expired:
     try:
       credentials.refresh(httplib2.Http())
     except AccessTokenRefreshError:
       return redirect_response_object
+    except:
+      refresh_failed = True
 
   port_value = _validate_port(request.GET.get('port'))
   if port_value is None:
     return HttpTextResponse('Access Token: %s' % (credentials.access_token,))
 
   # Send access token along to localhost client
-  quoted_access_token = urllib.quote(credentials.access_token)
-  client_uri = ACCESS_TOKEN_REDIRECT_TEMPLATE % {
-      'port': port_value,
-      'token': quoted_access_token,
-  }
+  redirect_template_args = {'port': port_value}
+  if refresh_failed:
+    quoted_error = urllib.quote(OAUTH_DEFAULT_ERROR_MESSAGE)
+    redirect_template_args['error'] = quoted_error
+    client_uri = ACCESS_TOKEN_FAIL_REDIRECT_TEMPLATE % redirect_template_args
+  else:
+    quoted_access_token = urllib.quote(credentials.access_token)
+    redirect_template_args['token'] = quoted_access_token
+    client_uri = ACCESS_TOKEN_REDIRECT_TEMPLATE % redirect_template_args
+
   return HttpResponseRedirect(client_uri)
 
 
