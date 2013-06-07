@@ -1823,6 +1823,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   else:
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
+  issue.calculate_updates_for()
   issue.put()
 
   if form.cleaned_data.get('send_mail'):
@@ -2194,6 +2195,7 @@ def edit(request):
   if base_changed:
     for patchset in issue.patchset_set:
       db.run_in_transaction(_delete_cached_contents, list(patchset.patch_set))
+  issue.calculate_updates_for()
   issue.put()
   if issue.closed == was_closed:
     message = 'Edited'
@@ -2452,6 +2454,7 @@ def fields(request):
     issue.description = fields['description']
   if 'reviewers' in fields:
     issue.reviewers = _get_emails_from_raw(fields['reviewers'])
+    issue.calculate_updates_for()
   if 'subject' in fields:
     issue.subject = fields['subject']
   issue.put()
@@ -4166,7 +4169,6 @@ def _process_incoming_mail(raw_message, recipients):
                        date=datetime.datetime.now(),
                        text=db.Text(body),
                        draft=False)
-  issue.calculate_updates_for(msg)
 
   # Add sender to reviewers if needed.
   all_emails = [str(x).lower()
@@ -4182,6 +4184,7 @@ def _process_incoming_mail(raw_message, recipients):
     else:
       issue.reviewers.append(db.Email(sender))
 
+  issue.calculate_updates_for(msg)
   issue.put()
   msg.put()
 
