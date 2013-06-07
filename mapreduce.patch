@@ -1,0 +1,21 @@
+Index: input_readers.py
+===================================================================
+--- input_readers.py	(revision 464)
++++ input_readers.py	(working copy)
+@@ -45,6 +45,7 @@
+ 
+ import base64
+ import copy
++import json
+ import logging
+ import pickle
+ import random
+@@ -234,6 +235,8 @@
+       if params_diff:
+         raise errors.BadReaderParamsError(
+             "Invalid input_reader parameters: %s" % ",".join(params_diff))
++  if isinstance(params.get('filters'), basestring):
++    params['filters'] = json.loads(params['filters'])
+   return params
+ 
+ 
