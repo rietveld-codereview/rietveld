@@ -118,6 +118,11 @@ AUTH_HANDLER_RESPONSE = """\
 <html>
   <head>
     <title>Authentication Status</title>
+    <script>
+    window.onload = function() {
+      window.close();
+    }
+    </script>
   </head>
   <body>
     <p>The authentication flow has completed.</p>

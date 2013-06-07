@@ -671,36 +671,6 @@ def _clean_int(value, default, min_value=None, max_value=None):
   return value
 
 
-def is_admin(user_email):
-  """Returns True if the specified user is an admin.
-
-  Args:
-    user: A string holding the email address of the user.  Assumes string
-        is all lowercase.
-
-  Returns:
-    True if the user is an admin, False otherwise.
-  """
-  # TODO(vbendeb) this domain name should be a configuration item. Or maybe
-  # only admins should be allowed to modify the conversions table.
-  # TODO(rogerta): should not hardcode email patterns but maybe use
-  # 'https://chromium-access.appspot.com/auto/users' to get full list.
-  return (user_email.endswith("@chromium.org") or
-          user_email.endswith("@google.com"))
-
-
-def _can_view_issue(user, issue):
-  if user is None:
-    return not issue.private
-  user_email = db.Email(user.email().lower())
-  return (not issue.private
-          or issue.owner == user
-          or user_email in issue.cc
-          or user_email in issue.reviewers
-          or is_admin(user_email)
-          or user.email() in issue.collaborator_emails())
-
-
 def _notify_issue(request, issue, message):
   """Try sending an XMPP (chat) message.
 
@@ -875,7 +845,7 @@ def issue_required(func):
       if request.user is None:
         return HttpResponseRedirect(
             users.create_login_url(request.get_full_path().encode('utf-8')))
-      if not _can_view_issue(request.user, issue):
+      if not issue.view_allowed:
         return HttpTextResponse(
             'You do not have permission to view this issue', status=403)
     request.issue = issue
@@ -904,31 +874,30 @@ def user_key_required(func):
   return user_key_wrapper
 
 
-def owner_required(func):
+def editor_required(func):
   """Decorator that insists you own the issue.
 
   It must appear after issue_required or equivalent, like patchset_required.
   """
 
   @login_required
-  def owner_wrapper(request, *args, **kwds):
-    if not (request.issue.owner == request.user or
-            request.issue.is_collaborator(request.user)):
+  def editor_wrapper(request, *args, **kwds):
+    if not request.issue.edit_allowed:
       return HttpTextResponse('You do not own this issue', status=403)
     return func(request, *args, **kwds)
 
-  return owner_wrapper
+  return editor_wrapper
 
 
-def issue_owner_required(func):
+def issue_editor_required(func):
   """Decorator that processes the issue_id argument and insists you own it."""
 
   @issue_required
-  @owner_required
-  def issue_owner_wrapper(request, *args, **kwds):
+  @editor_required
+  def issue_editor_wrapper(request, *args, **kwds):
     return func(request, *args, **kwds)
 
-  return issue_owner_wrapper
+  return issue_editor_wrapper
 
 
 def issue_editor_required(func):
@@ -938,7 +907,7 @@ def issue_editor_required(func):
   @login_required
   @issue_required
   def issue_editor_wrapper(request, *args, **kwds):
-    if not request.issue.user_can_edit(request.user):
+    if not request.issue.edit_allowed:
       return HttpTextResponse(
           'You do not have permission to edit this issue', status=403)
     return func(request, *args, **kwds)
@@ -962,16 +931,16 @@ def patchset_required(func):
   return patchset_wrapper
 
 
-def patchset_owner_required(func):
+def patchset_editor_required(func):
   """Decorator that processes the patchset_id argument and insists you own the
   issue."""
 
   @patchset_required
-  @owner_required
-  def patchset_owner_wrapper(request, *args, **kwds):
+  @editor_required
+  def patchset_editor_wrapper(request, *args, **kwds):
     return func(request, *args, **kwds)
 
-  return patchset_owner_wrapper
+  return patchset_editor_wrapper
 
 
 def patch_required(func):
@@ -1125,7 +1094,7 @@ def _inner_paginate(request, issues, template, extra_template_params):
   Returns:
     Response for sending back to browser.
   """
-  visible_issues = [i for i in issues if _can_view_issue(request.user, i)]
+  visible_issues = [i for i in issues if i.view_allowed]
   _optimize_draft_counts(visible_issues)
   _load_users_for_issues(visible_issues)
   params = {
@@ -1308,8 +1277,7 @@ def starred(request):
     issues = []
   else:
     issues = [issue for issue in models.Issue.get_by_id(stars)
-                    if issue is not None
-                    and _can_view_issue(request.user, issue)]
+                    if issue is not None and issue.view_allowed]
     _load_users_for_issues(issues)
     _optimize_draft_counts(issues)
   return respond(request, 'starred.html', {'issues': issues})
@@ -1349,7 +1317,7 @@ def _show_user(request):
           'ORDER BY modified DESC '
           'LIMIT 100',
           user)
-      if issue.key() not in draft_keys and _can_view_issue(request.user, issue)]
+      if issue.key() not in draft_keys and issue.view_allowed]
   review_issues = [
       issue for issue in db.GqlQuery(
           'SELECT * FROM Issue '
@@ -1358,7 +1326,7 @@ def _show_user(request):
           'LIMIT 100',
           user.email().lower())
       if (issue.key() not in draft_keys and issue.owner != user
-          and _can_view_issue(request.user, issue))]
+          and issue.view_allowed)]
   closed_issues = [
       issue for issue in db.GqlQuery(
           'SELECT * FROM Issue '
@@ -1367,7 +1335,7 @@ def _show_user(request):
           'LIMIT 100',
           datetime.datetime.now() - datetime.timedelta(days=7),
           user)
-      if issue.key() not in draft_keys and _can_view_issue(request.user, issue)]
+      if issue.key() not in draft_keys and issue.view_allowed]
   cc_issues = [
       issue for issue in db.GqlQuery(
           'SELECT * FROM Issue '
@@ -1376,7 +1344,7 @@ def _show_user(request):
           'LIMIT 100',
           user.email())
       if (issue.key() not in draft_keys and issue.owner != user
-          and _can_view_issue(request.user, issue))]
+          and issue.view_allowed)]
   all_issues = my_issues + review_issues + closed_issues + cc_issues
 
   # Some of these issues may not have accurate updates_for information,
@@ -1501,7 +1469,7 @@ def upload(request):
         form.errors['issue'] = ['Base files upload required for that issue.']
         issue = None
       else:
-        if not issue.user_can_edit(request.user):
+        if not issue.edit_allowed:
           form.errors['user'] = ['You (%s) don\'t own this issue (%s)' %
                                  (request.user, issue_id)]
           issue = None
@@ -1597,7 +1565,7 @@ def upload_content(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if not request.issue.user_can_edit(request.user):
+  if not request.issue.edit_allowed:
     return HttpTextResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                             (request.user, request.issue.key().id()))
   patch = request.patch
@@ -1647,7 +1615,7 @@ def upload_patch(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if not request.issue.user_can_edit(request.user):
+  if not request.issue.edit_allowed:
     return HttpTextResponse(
         'ERROR: You (%s) don\'t own this issue (%s).' %
         (request.user, request.issue.key().id()))
@@ -1675,7 +1643,7 @@ def upload_patch(request):
 
 
 @post_required
-@issue_owner_required
+@issue_editor_required
 @upload_required
 def upload_complete(request, patchset_id=None):
   """/<issue>/upload_complete/<patchset> - Patchset upload is complete.
@@ -1843,7 +1811,7 @@ def _get_data_url(form):
 
 
 @post_required
-@issue_owner_required
+@issue_editor_required
 @xsrf_required
 def add(request):
   """/<issue>/add - Add a new PatchSet to an existing Issue."""
@@ -1865,7 +1833,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   account = models.Account.get_account_for_user(request.user)
   if account.blocked:
     return None
-  if not issue.user_can_edit(request.user):
+  if not issue.edit_allowed:
     # This check is done at each call site but check again as a safety measure.
     return None
   data, url, separate_patches = data_url
@@ -2229,7 +2197,7 @@ def show(request, form=None):
                   'num_patchsets': num_patchsets,
                   'first_patch': first_patch,
                   'has_draft_message': has_draft_message,
-                  'is_editor': issue.user_can_edit(request.user),
+                  'is_editor': issue.edit_allowed,
                   'src_url': src_url,
                   'default_builders':
                       models_chromium.DefaultBuilderList.get_builders(
@@ -2251,7 +2219,7 @@ def patchset(request):
                  {'issue': issue,
                   'patchset': patchset,
                   'patchsets': patchsets,
-                  'is_editor': issue.user_can_edit(request.user),
+                  'is_editor': issue.edit_allowed,
                   })
 
 
@@ -2393,7 +2361,7 @@ def _delete_cached_contents(patch_set):
 
 
 @post_required
-@issue_owner_required
+@issue_editor_required
 @xsrf_required
 def delete(request):
   """/<issue>/delete - Delete an issue.  There is no way back."""
@@ -2408,7 +2376,7 @@ def delete(request):
 
 
 @post_required
-@patchset_owner_required
+@patchset_editor_required
 @xsrf_required
 def delete_patchset(request):
   """/<issue>/patch/<patchset>/delete - Delete a patchset.
@@ -2477,7 +2445,7 @@ def mailissue(request):
   This URL is deprecated and shouldn't be used anymore.  However,
   older versions of upload.py or wrapper scripts still may use it.
   """
-  if not request.issue.user_can_edit(request.user):
+  if not request.issue.edit_allowed:
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
   issue = request.issue
@@ -2570,7 +2538,7 @@ def description(request):
   if request.method != 'POST':
     description = request.issue.description or ""
     return HttpTextResponse(description)
-  if not request.issue.user_can_edit(request.user):
+  if not request.issue.edit_allowed:
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
   issue = request.issue
@@ -2601,7 +2569,7 @@ def fields(request):
       response['subject'] = request.issue.subject
     return response
 
-  if not request.issue.user_can_edit(request.user):
+  if not request.issue.edit_allowed:
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
   fields = simplejson.loads(request.POST.get('fields'))
@@ -3356,7 +3324,7 @@ def _get_mail_template(request, issue, full_diff=False):
 def publish(request):
   """ /<issue>/publish - Publish draft comments and send mail."""
   issue = request.issue
-  if request.user == issue.owner:
+  if issue.edit_allowed:
     form_class = PublishForm
   else:
     form_class = MiniPublishForm
@@ -3403,7 +3371,7 @@ def publish(request):
   account = models.Account.get_account_for_user(request.user)
   if account.blocked or not form.is_valid():
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
-  if request.user == issue.owner:
+  if issue.edit_allowed:
     issue.subject = form.cleaned_data['subject']
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     reviewers = _get_emails(form, 'reviewers')
@@ -3900,7 +3868,7 @@ def search(request):
     # the issue's key.
     filtered_results = results
   else:
-    filtered_results = [i for i in results if _can_view_issue(request.user, i)]
+    filtered_results = [i for i in results if i.view_allowed]
   data = {
     'cursor': form.cleaned_data['cursor'],
   }

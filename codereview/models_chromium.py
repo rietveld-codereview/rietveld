@@ -23,12 +23,18 @@ from google.appengine.api import urlfetch
 from google.appengine.api import users
 from google.appengine.ext import db
 
+from codereview import models
+
 
 class UrlMap(db.Model):
   """Mapping between base url and source code viewer url."""
 
   base_url_template = db.StringProperty(required=True)
   source_code_url_template = db.StringProperty(required=True)
+
+  @staticmethod
+  def user_can_edit(user):
+    return models.is_privileged_user(user)
 
 
 class Key(db.Model):

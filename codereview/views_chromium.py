@@ -495,7 +495,7 @@ def conversions(request):
     return respond(request, 'conversions.html', {
             'rules': rules})
 
-  if (views.is_admin(request.user.email().lower())):
+  if not models_chromium.UrlMap.user_can_edit(request.user):
     # TODO(vbendeb) this domain name should be a configuration item. Or maybe
     # only admins should be allowed to modify the conversions table.
     warning = 'You are not authorized to modify the conversions table.'
