@@ -1178,7 +1178,7 @@ class VersionControlSystem(object):
     mimetype =  mimetypes.guess_type(filename)[0]
     if not mimetype:
       return False
-    return mimetype.startswith("image/")
+    return mimetype.startswith("image/") and not mimetype.startswith("image/svg")
 
   def IsBinaryData(self, data):
     """Returns true if data contains a null byte."""
