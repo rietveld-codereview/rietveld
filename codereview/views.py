@@ -539,10 +539,24 @@ class SearchForm(forms.Form):
       return user.email()
 
 
+class StringListField(forms.CharField):
+
+  def prepare_value(self, value):
+    if value is None:
+      return ''
+    return ','.join(value)
+
+  def to_python(self, value):
+    if not value:
+      return []
+    return [list_value.strip() for list_value in value.split(',')]
+
+
 class ClientIDAndSecretForm(forms.Form):
   """Simple form for collecting Client ID and Secret."""
   client_id = forms.CharField()
   client_secret = forms.CharField()
+  additional_client_ids = StringListField()
 
 
 ### Exceptions ###
@@ -4309,7 +4323,7 @@ def _create_flow(django_request):
   """
   redirect_path = reverse(oauth2callback)
   redirect_uri = django_request.build_absolute_uri(redirect_path)
-  client_id, client_secret = auth_utils.SecretKey.get_config()
+  client_id, client_secret, _ = auth_utils.SecretKey.get_config()
   return OAuth2WebServerFlow(client_id, client_secret, auth_utils.EMAIL_SCOPE,
                              redirect_uri=redirect_uri,
                              approval_prompt='force')
@@ -4416,7 +4430,9 @@ def set_client_id_and_secret(request):
     if form.is_valid():
       client_id = form.cleaned_data['client_id']
       client_secret = form.cleaned_data['client_secret']
-      auth_utils.SecretKey.set_config(client_id, client_secret)
+      additional_client_ids = form.cleaned_data['additional_client_ids']
+      auth_utils.SecretKey.set_config(client_id, client_secret,
+                                      additional_client_ids)
     return HttpResponseRedirect(reverse(set_client_id_and_secret))
   else:
     form = ClientIDAndSecretForm()

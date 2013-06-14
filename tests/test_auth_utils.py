@@ -27,7 +27,12 @@ from codereview import auth_utils
 
 TEST_EMAIL = 'foo@example.com'
 EMAIL_SCOPE = auth_utils.EMAIL_SCOPE
-CLIENT_ID = 'dummy29.apps.googleusercontent.com'
+CLIENT_ID = 'dummy21.apps.googleusercontent.com'
+OTHER_CLIENT_IDS = [
+  'dummy34.apps.googleusercontent.com',
+  'dummy55.apps.googleusercontent.com',
+  'dummy89.apps.googleusercontent.com',
+]
 
 
 
@@ -39,7 +44,8 @@ class TestAuthUtils(TestCase):
     # includes the OAuth API.
     self.oauth_login(TEST_EMAIL)
 
-    auth_utils.SecretKey.set_config(CLIENT_ID, 'dummy.secret')
+    auth_utils.SecretKey.set_config(CLIENT_ID, 'dummy.secret',
+                                    OTHER_CLIENT_IDS)
 
   def tearDown(self):
     super(TestAuthUtils, self).tearDown()
@@ -89,6 +95,15 @@ class TestAuthUtils(TestCase):
   def test_get_current_rietveld_oauth_bad_client_id(self):
     self.oauth_login('any@mail.com', client_id='bad.id')
     self.assertIsNone(auth_utils.get_current_rietveld_oauth_user())
+
+  def test_get_current_rietveld_oauth_other_client_id(self):
+    any_mail = 'any@mail.com'
+    for other_client_id in OTHER_CLIENT_IDS:
+      self.oauth_login(any_mail, client_id=other_client_id)
+      oauth_user = auth_utils.get_current_rietveld_oauth_user()
+      self.assertEqual(oauth_user.email(), any_mail)
+      self.assertEqual(oauth_user.auth_domain(), 'gmail.com')
+      self.assertEqual(oauth_user.user_id(), '0')
 
   def test_get_current_user_no_users(self):
     self.cookie_logout()

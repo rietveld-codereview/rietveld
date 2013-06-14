@@ -52,22 +52,29 @@ class SecretKey(ndb.Model):
   """Model for representing project secret keys."""
   client_id = ndb.StringProperty(required=True, indexed=False)
   client_secret = ndb.StringProperty(required=True, indexed=False)
+  additional_client_ids = ndb.StringProperty(repeated=True, indexed=False)
 
   GLOBAL_KEY = '_global_config'
 
   @classmethod
-  def set_config(cls, client_id, client_secret):
+  def set_config(cls, client_id, client_secret, additional_client_ids=None):
     """Sets global config object using a Client ID and Secret.
 
     Args:
       client_id: String containing Google APIs Client ID.
       client_secret: String containing Google APIs Client Secret.
+      additional_client_ids: List of strings for Google APIs Client IDs which
+        are allowed against this application but not used to mint tokens on
+        the server. For example, service accounts which interact with this
+        application. Defaults to None.
 
     Returns:
       The inserted SecretKey object.
     """
+    additional_client_ids = additional_client_ids or []
     config = cls(id=cls.GLOBAL_KEY,
-                 client_id=client_id, client_secret=client_secret)
+                 client_id=client_id, client_secret=client_secret,
+                 additional_client_ids=additional_client_ids)
     config.put()
     return config
 
@@ -76,15 +83,16 @@ class SecretKey(ndb.Model):
     """Gets tuple of Client ID and Secret from global config object.
 
     Returns:
-      2-tuple containing the Client ID and Secret from the global config
-          SecretKey object, if it is in the datastore, else the tuple
-          (None, None).
+      3-tuple containing the Client ID and Secret from the global config
+          SecretKey object as well as a list of other allowed client IDs, if the
+          config is in the datastore, else the tuple (None, None, []).
     """
     config = cls.get_by_id(cls.GLOBAL_KEY)
     if config is None:
-      return None, None
+      return None, None, []
     else:
-      return config.client_id, config.client_secret
+      return (config.client_id, config.client_secret,
+              config.additional_client_ids)
 
 
 def get_current_rietveld_oauth_user():
@@ -103,8 +111,9 @@ def get_current_rietveld_oauth_user():
   except oauth.Error:
     return
 
-  accepted_client_id, _ = SecretKey.get_config()
-  if accepted_client_id != current_client_id:
+  accepted_client_id, _, additional_client_ids = SecretKey.get_config()
+  if (accepted_client_id != current_client_id and
+      current_client_id not in additional_client_ids):
     logging.warning('Client ID %r not intended for this application.',
                     current_client_id)
     return
