@@ -3311,6 +3311,20 @@ def publish(request):
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
+@login_required
+@issue_required
+@xsrf_required
+def delete_drafts(request):
+  """Deletes all drafts of the current user for an issue."""
+  query = models.Comment.all().ancestor(request.issue).filter(
+    'author = ', request.user).filter('draft = ', True)
+  db.delete(query)
+  request.issue.calculate_draft_count_by_user()
+  request.issue.put()
+  return HttpResponseRedirect(
+    reverse(publish, args=[request.issue.key().id()]))
+
+
 def _encode_safely(s):
   """Helper to turn a unicode string into 8-bit bytes."""
   if isinstance(s, unicode):

@@ -30,7 +30,7 @@ draftMessage = new M_draftMessage({{issue.key.id}}, true);
   <tr>
     <td></td>
     <td>
-      <input type="submit" value="Publish All My Drafts" />
+      <input type="submit" value="Publish all my drafts" />
       {%if draft_message%}
       <input type="button" onclick="return discard(this);"
 	     value="Discard Message" />
@@ -53,6 +53,11 @@ draftMessage = new M_draftMessage({{issue.key.id}}, true);
   <h3>Unpublished Drafts:</h3>
   <pre class="description">{{preview|wordwrap:"80"|urlizetrunc:80}}</pre>
 </div>
+<form method="post" action="{% url codereview.views.delete_drafts issue.key.id %}"
+      onsubmit="return confirm('Are you sure? All your drafts for this issue will be deleted.');">
+  <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+  <button type="submit">Delete all my drafts</button> There's no undo!
+</form>
 {%endif%}
 <div style="clear:both"></div>
 
