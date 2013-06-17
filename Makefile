@@ -1,9 +1,24 @@
 # Makefile to simplify some common AppEngine actions.
 # Use 'make help' for a list of commands.
 
+# Helper code to detect SDK location
+define DETECT_SDK
+import os
+locations = [
+  "../google_appengine",
+  "/usr/local/google_appengine",
+  ".locally/google_appengine",
+]
+for path in locations:
+  if os.path.exists(path):
+    print(path)
+    break
+endef
+# /Helper
+
 APPID?= `cat app.yaml | sed -n 's/^application: *//p'`
 
-SDK_PATH ?=
+SDK_PATH ?= $(shell python -c '$(DETECT_SDK)')
 
 DEV_APPSERVER?= $(if $(SDK_PATH), $(SDK_PATH)/,)dev_appserver.py
 DEV_APPSERVER_FLAGS?=
