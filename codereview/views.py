@@ -1664,10 +1664,6 @@ def upload_complete(request, patchset_id=None):
   return HttpTextResponse(msg, status=status)
 
 
-class EmptyPatchSet(Exception):
-  """Exception used inside _make_new() to break out of the transaction."""
-
-
 def _make_new(request, form):
   """Creates new issue and fill relevant fields from given form data.
 
@@ -1699,33 +1695,36 @@ def _make_new(request, form):
   if base is None:
     return (None, None)
 
-  def txn():
-    issue = models.Issue(subject=form.cleaned_data['subject'],
-                         description=form.cleaned_data['description'],
-                         base=base,
-                         repo_guid=form.cleaned_data.get('repo_guid', None),
-                         reviewers=reviewers,
-                         cc=cc,
-                         private=form.cleaned_data.get('private', False),
-                         n_comments=0)
-    issue.put()
+  issue = models.Issue(subject=form.cleaned_data['subject'],
+                       description=form.cleaned_data['description'],
+                       base=base,
+                       repo_guid=form.cleaned_data.get('repo_guid', None),
+                       reviewers=reviewers,
+                       cc=cc,
+                       private=form.cleaned_data.get('private', False),
+                       n_comments=0)
+  issue.put()
 
-    patchset = models.PatchSet(issue=issue, data=data, url=url, parent=issue)
-    patchset.put()
+  patchset = models.PatchSet(issue=issue, data=data, url=url, parent=issue)
+  patchset.put()
 
-    if not separate_patches:
+  if not separate_patches:
+    try:
       patches = engine.ParsePatchSet(patchset)
-      if not patches:
-        raise EmptyPatchSet  # Abort the transaction
-      db.put(patches)
-    return issue, patchset
+    except:
+      # catch all exceptions happening in engine.ParsePatchSet,
+      # engine.SplitPatch. With malformed diffs a variety of exceptions could
+      # happen there.
+      logging.exception('Exception during patch parsing')
+      patches = []
+    if not patches:
+      patchset.delete()
+      issue.delete()
+      errkey = url and 'url' or 'data'
+      form.errors[errkey] = ['Patch set contains no recognizable patches']
+      return (None, None)
 
-  try:
-    issue, patchset = db.run_in_transaction(txn)
-  except EmptyPatchSet:
-    errkey = url and 'url' or 'data'
-    form.errors[errkey] = ['Patch set contains no recognizable patches']
-    return (None, None)
+    db.put(patches)
 
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, '', '', True)
@@ -1798,7 +1797,6 @@ def add(request):
 def _add_patchset_from_form(request, issue, form, message_key='message',
                             emails_add_only=False):
   """Helper for add() and upload()."""
-  # TODO(guido): use a transaction like in _make_new(); may be share more code?
   if form.is_valid():
     data_url = _get_data_url(form)
   if not form.is_valid():
@@ -1816,7 +1814,11 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   patchset.put()
 
   if not separate_patches:
-    patches = engine.ParsePatchSet(patchset)
+    try:
+      patches = engine.ParsePatchSet(patchset)
+    except:
+      logging.exception('Exception during patchset parsing')
+      patches = []
     if not patches:
       patchset.delete()
       errkey = url and 'url' or 'data'
