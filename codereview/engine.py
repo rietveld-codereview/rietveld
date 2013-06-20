@@ -18,6 +18,8 @@ import cgi
 import difflib
 import re
 
+from google.appengine.ext import db
+
 from django.conf import settings
 from django.template import loader, RequestContext
 
@@ -79,9 +81,17 @@ def ParsePatchSet(patchset):
     A list of models.Patch instances.
   """
   patches = []
-  for filename, text in SplitPatch(patchset.data):
+  ps_key = patchset.key()
+  splitted = SplitPatch(patchset.data)
+  if not splitted:
+    return []
+  first_id, last_id = db.allocate_ids(
+    db.Key.from_path(models.Patch.kind(), 1, parent=ps_key), len(splitted))
+  ids = range(first_id, last_id + 1)
+  for filename, text in splitted:
+    key = db.Key.from_path(models.Patch.kind(), ids.pop(0), parent=ps_key)
     patches.append(models.Patch(patchset=patchset, text=utils.to_dbtext(text),
-                                filename=filename, parent=patchset))
+                                filename=filename, key=key))
   return patches
 
 
