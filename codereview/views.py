@@ -1695,6 +1695,10 @@ def _make_new(request, form):
   if base is None:
     return (None, None)
 
+  issue_key = db.Key.from_path(
+    models.Issue.kind(),
+    db.allocate_ids(db.Key.from_path(models.Issue.kind(), 1), 1)[0])
+
   issue = models.Issue(subject=form.cleaned_data['subject'],
                        description=form.cleaned_data['description'],
                        base=base,
@@ -1702,10 +1706,17 @@ def _make_new(request, form):
                        reviewers=reviewers,
                        cc=cc,
                        private=form.cleaned_data.get('private', False),
-                       n_comments=0)
+                       n_comments=0,
+                       key=issue_key)
   issue.put()
 
-  patchset = models.PatchSet(issue=issue, data=data, url=url, parent=issue)
+  ps_key = db.Key.from_path(
+    models.PatchSet.kind(),
+    db.allocate_ids(db.Key.from_path(models.PatchSet.kind(), 1,
+                                     parent=issue.key()), 1)[0],
+    parent=issue.key())
+
+  patchset = models.PatchSet(issue=issue, data=data, url=url, key=ps_key)
   patchset.put()
 
   if not separate_patches:
@@ -1809,8 +1820,13 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
     return None
   data, url, separate_patches = data_url
   message = form.cleaned_data[message_key]
+  ps_key = db.Key.from_path(
+    models.PatchSet.kind(),
+    db.allocate_ids(db.Key.from_path(models.PatchSet.kind(), 1,
+                                     parent=issue.key()), 1)[0],
+    parent=issue.key())
   patchset = models.PatchSet(issue=issue, message=message, data=data, url=url,
-                             parent=issue)
+                             key=ps_key)
   patchset.put()
 
   if not separate_patches:
