@@ -10,6 +10,16 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
+- kind: Account
+  properties:
+  - name: blocked
+  - name: lower_email
+
+- kind: Account
+  properties:
+  - name: blocked
+  - name: lower_nickname
+
 - kind: Comment
   properties:
   - name: left

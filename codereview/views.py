@@ -1363,6 +1363,26 @@ def block_user(request):
           account.blocked,
           account.email)
       account.put()
+      if account.blocked:
+        # Remove user from existing issues so that he doesn't participate in
+        # email communication anymore.
+        tbd = {}
+        email = account.user.email()
+        query = models.Issue.all().filter('reviewers =', email)
+        for issue in query:
+          issue.reviewers.remove(email)
+          issue.calculate_updates_for()
+          tbd[issue.key()] = issue
+        # look for issues where blocked user is in cc only
+        query = models.Issue.all().filter('cc =', email)
+        for issue in query:
+          if issue.key() in tbd:
+            # Update already changed instance instead. This happens when the
+            # blocked user is in both reviewers and ccs.
+            issue = tbd[issue.key()]
+          issue.cc.remove(account.user.email())
+          tbd[issue.key()] = issue
+        db.put(tbd.values())
   else:
     form = BlockForm()
   form.initial['blocked'] = account.blocked
@@ -1897,6 +1917,13 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
         return None
       if db_email not in emails:
         emails.append(db_email)
+  # Remove blocked accounts
+  for account in models.Account.get_multiple_accounts_by_email(emails).values():
+    if account.blocked:
+      try:
+        emails.remove(account.email)
+      except IndexError:
+        pass
   return emails
 
 
@@ -2143,6 +2170,7 @@ def account(request):
     accounts = models.Account.all()
     accounts.filter("lower_%s >= " % property, query)
     accounts.filter("lower_%s < " % property, query + u"\ufffd")
+    accounts.filter("blocked =", False)
     accounts.order("lower_%s" % property)
     for account in accounts:
       if account.key() in added:
