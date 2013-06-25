@@ -487,6 +487,10 @@ class SearchForm(forms.Form):
                              max_length=MAX_REVIEWERS,
                              widget=AccountInput(attrs={'size': 60,
                                                         'multiple': False}))
+  cc = forms.CharField(required=False,
+                       max_length=MAX_CC,
+                       label = 'CC',
+                       widget=AccountInput(attrs={'size': 60}))
   repo_guid = forms.CharField(required=False, max_length=MAX_URL,
                               label="Repository ID")
   base = forms.CharField(required=False, max_length=MAX_URL)
@@ -3761,7 +3765,7 @@ def search(request):
     q.filter('owner = ', form.cleaned_data['owner'])
   if form.cleaned_data['reviewer']:
     q.filter('reviewers = ', form.cleaned_data['reviewer'])
-  if 'cc' in form.cleaned_data:
+  if form.cleaned_data['cc']:
     q.filter('cc = ', form.cleaned_data['cc'])
   if form.cleaned_data['private'] is not None:
     q.filter('private = ', form.cleaned_data['private'])
