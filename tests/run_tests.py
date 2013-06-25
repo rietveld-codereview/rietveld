@@ -38,6 +38,7 @@ def collect_test_modules():
 def setup_test_env(sdk_path):
   """Sets up App Engine/Django test environment."""
   sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../'))
+  sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../third_party'))
   sys.path.insert(0, sdk_path)
   import dev_appserver
   dev_appserver.fix_sys_path()
