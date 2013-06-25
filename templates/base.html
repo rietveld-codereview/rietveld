@@ -60,91 +60,90 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 {%block help%}{%endblock%}
 <div style="font-size: medium; text-align: center;">Keyboard Shortcuts</div>
 <hr />
-<table width="100%">
-
+<table class="shortcuts">
   <tr valign="top">
     <td>
-      <table width="100%">
+      <table>
         <tr>
           <td></td><th>File</th>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">u</span> <b>:</b></td><td>up to issue</td>
+          <td><span>u</span> <b>:</b></td><td>up to issue</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">m</span> <b>:</b></td><td>publish + mail comments</td>
+          <td><span>m</span> <b>:</b></td><td>publish + mail comments</td>
         </tr>
 	<tr>
-	  <td class="shortcut"><span class="letter">M</span> <b>:</b></td><td>edit review message</td>
+	  <td><span>M</span> <b>:</b></td><td>edit review message</td>
 	</tr>
         <tr>
-          <td class="shortcut"><span class="letter">j</span> / <span class="letter">k</span> <b>:</b></td><td>jump to file after / before current file</td>
+          <td><span>j</span> / <span>k</span> <b>:</b></td><td>jump to file after / before current file</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">J</span> / <span class="letter">K</span> <b>:</b></td><td>jump to next file with a comment after / before current file</td>
+          <td><span>J</span> / <span>K</span> <b>:</b></td><td>jump to next file with a comment after / before current file</td>
         </tr>
         <tr>
           <td></td><th>Side-by-side diff</th>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">i</span> <b>:</b></td><td>toggle intra-line diffs</td>
+          <td><span>i</span> <b>:</b></td><td>toggle intra-line diffs</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">e</span> <b>:</b></td><td>expand all comments</td>
+          <td><span>e</span> <b>:</b></td><td>expand all comments</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">c</span> <b>:</b></td><td>collapse all comments</td>
+          <td><span>c</span> <b>:</b></td><td>collapse all comments</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">s</span> <b>:</b></td><td>toggle showing all comments</td>
+          <td><span>s</span> <b>:</b></td><td>toggle showing all comments</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">n</span> / <span class="letter">p</span> <b>:</b></td><td>next / previous diff chunk or comment</td>
+          <td><span>n</span> / <span>p</span> <b>:</b></td><td>next / previous diff chunk or comment</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">N</span> / <span class="letter">P</span> <b>:</b></td><td>next / previous comment</td>
+          <td><span>N</span> / <span>P</span> <b>:</b></td><td>next / previous comment</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">&lt;Up&gt;</span> / <span class="letter">&lt;Down&gt;</span> <b>:</b></td><td>next / previous line</td>
+          <td><span>&lt;Up&gt;</span> / <span>&lt;Down&gt;</span> <b>:</b></td><td>next / previous line</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">&lt;Enter&gt;</span> <b>:</b></td><td>respond to / edit current comment</td>
+          <td><span>&lt;Enter&gt;</span> <b>:</b></td><td>respond to / edit current comment</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">d</span> <b>:</b></td><td>mark current comment as done</td>
+          <td><span>d</span> <b>:</b></td><td>mark current comment as done</td>
         </tr>
       </table>
     </td>
     <td>
-      <table width="100%">
+      <table>
         <tr>
          <td></td><th>Issue</th>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">u</span> <b>:</b></td><td>up to list of issues</td>
+          <td><span>u</span> <b>:</b></td><td>up to list of issues</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">m</span> <b>:</b></td><td>publish + mail comments</td>
+          <td><span>m</span> <b>:</b></td><td>publish + mail comments</td>
         </tr>
 	<tr>
-	  <td class="shortcut"><span class="letter">j</span> / <span class="letter">k</span> <b>:</b></td><td>jump to patch after / before current patch</td>
+	  <td><span>j</span> / <span>k</span> <b>:</b></td><td>jump to patch after / before current patch</td>
 	</tr>
 	<tr>
-	  <td class="shortcut"><span class="letter">o</span> / <span class="letter">&lt;Enter&gt;</span> <b>:</b></td><td>open current patch in side-by-side view</td>
+	  <td><span>o</span> / <span>&lt;Enter&gt;</span> <b>:</b></td><td>open current patch in side-by-side view</td>
 	</tr>
 	<tr>
-	  <td class="shortcut"><span class="letter">i</span> <b>:</b></td><td>open current patch in unified diff view</td>
+	  <td><span>i</span> <b>:</b></td><td>open current patch in unified diff view</td>
 	</tr>
         <tr><td>&nbsp;</td></tr>
         <tr><td></td><th>Issue List</th></tr>
         <tr>
-          <td class="shortcut"><span class="letter">j</span> / <span class="letter">k</span> <b>:</b></td><td>jump to issue after / before current issue</td>
+          <td><span>j</span> / <span>k</span> <b>:</b></td><td>jump to issue after / before current issue</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">o</span> / <span class="letter">&lt;Enter&gt;</span> <b>:</b></td><td>open current issue</td>
+          <td><span>o</span> / <span>&lt;Enter&gt;</span> <b>:</b></td><td>open current issue</td>
         </tr>
         <tr>
-	  <td class="shortcut"><span class="letter">#</span> <b>:</b></td>
+	  <td><span>#</span> <b>:</b></td>
 	  <td>close issue</td>
 	</tr>
         <tr><td>&nbsp;</td></tr>
@@ -152,10 +151,10 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
           <td></td><th>Comment/message editing</th>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">&lt;Ctrl&gt;</span> + <span class="letter">s</span> or <span class="letter">&lt;Ctrl&gt;</span> + <span class="letter">Enter</span> <b>:</b></td><td>save comment</td>
+          <td><span>&lt;Ctrl&gt;</span> + <span>s</span> or <span>&lt;Ctrl&gt;</span> + <span>Enter</span> <b>:</b></td><td>save comment</td>
         </tr>
         <tr>
-          <td class="shortcut"><span class="letter">&lt;Esc&gt;</span> <b>:</b></td><td>cancel edit</td>
+          <td><span>&lt;Esc&gt;</span> <b>:</b></td><td>cancel edit</td>
         </tr>
       </table>
     </td>

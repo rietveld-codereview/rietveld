@@ -543,6 +543,9 @@ table#queues td, table#clfiles td {
   padding: 2px;
 }
 
+
+/* --- keyboard shortcuts help --- */
+
 div#help {
   position: fixed;
   right: 4%;
@@ -575,16 +578,23 @@ div#help td {
   font-weight: normal;
 }
 
-td.shortcut {
+table.shortcuts, table.shortcuts table {
+  width:100%;
+}
+
+table.shortcuts table td:first-child {
   text-align: right;
 }
 
-span.letter {
+table.shortcuts table span {
   color: #88dd00;
   font-weight: bold;
   font-family: monospace;
   font-size: medium;
 }
+
+/* --/ keyboard shortcuts help-- */
+
 
 /* Visual tab indication. */
 
