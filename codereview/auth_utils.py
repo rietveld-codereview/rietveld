@@ -114,8 +114,8 @@ def get_current_rietveld_oauth_user():
   accepted_client_id, _, additional_client_ids = SecretKey.get_config()
   if (accepted_client_id != current_client_id and
       current_client_id not in additional_client_ids):
-    logging.warning('Client ID %r not intended for this application.',
-                    current_client_id)
+    logging.debug('Client ID %r not intended for this application.',
+                  current_client_id)
     return
 
   try:
