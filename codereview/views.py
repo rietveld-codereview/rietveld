@@ -3761,6 +3761,8 @@ def search(request):
     q.filter('owner = ', form.cleaned_data['owner'])
   if form.cleaned_data['reviewer']:
     q.filter('reviewers = ', form.cleaned_data['reviewer'])
+  if form.cleaned_data['cc']:
+    q.filter('cc = ', form.cleaned_data['cc'])
   if form.cleaned_data['private'] is not None:
     q.filter('private = ', form.cleaned_data['private'])
   if form.cleaned_data['repo_guid']:
