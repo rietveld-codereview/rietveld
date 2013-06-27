@@ -241,20 +241,7 @@
             {%cycle '' '' '' '' '' '' '</div><div class="trybot-popup-column">'%} 
           {%endfor%}
         {% else %}
-          {% for key, value in default_builders.items %}
-          <a id="{{ key }}-builders-pointer"
-             href="javascript:M_toggleSection('{{ key }}-builders')"
-             class="toggled-section closedtriangle">{{ key }}</a>
-          <div id="{{ key }}-builders" style="display:none">
-            {% for builder in value %}
-              <div class="trybot-popup-input">
-                <input type="checkbox" name="{{builder}}" id="cb_{{builder}}"
-                       checked="checked">{{builder}}</input>
-              </div>
-            {%endfor%}
-            </div>
-            <br/>
-          {%endfor%}
+          {% output_categories_and_builders default_builders.items %}
         {% endif %}
       </div>
       <div style="clear: both;"/>
