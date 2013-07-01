@@ -657,6 +657,10 @@ span.visualtab {
   
 }
 
+.issue-list #queues a {
+  text-decoration: none;
+}
+
 .issue-list .updated {
   font-weight: bold;
 }
