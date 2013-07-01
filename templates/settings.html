@@ -1,0 +1,30 @@
+{%extends "settings_base.html"%}
+{%block title1%}Settings -{%endblock%}
+{%block body%}
+<h2>Settings for {%nickname user True%}</h2>
+{%if chat_status%}
+<p>Chat status: {{chat_status}}</p>
+{%endif%}
+
+<p>You can change your nickname.  This affects how your name is
+displayed to other users.</p>
+
+<form action="{%url codereview.views.settings%}" method="post">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Update Settings"></td></tr>
+</table>
+</form>
+
+<p>&nbsp;</p>
+<h2>Delete This Account</h2>
+
+<form action="{%url codereview.views.account_delete%}" method="post">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+<input type="submit" value="Delete Account"
+  onClick="return confirm('Are you sure you want to delete this account?')">
+There is no undo!
+</form>
+
+{%endblock%}
