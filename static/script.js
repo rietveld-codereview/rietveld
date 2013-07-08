@@ -1417,12 +1417,15 @@ function M_handleTableTouchStart(evt) {
   if (evt.touches && evt.touches.length == 1) { // 1 finger touch
     M_clearTableTouchTimeout();
     M_timerLongTap = setTimeout(function() {
-     M_clearTableTouchTimeout();
+      M_clearTableTouchTimeout();
       M_handleTableDblClick(evt);
     }, 1000);
   }
 }
 
+function M_handleTableTouchMove(evt) {
+  M_clearTableTouchTimeout();
+}
 
 /**
  * Handles touchend event for long taps on mobile devices.
