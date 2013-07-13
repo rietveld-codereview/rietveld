@@ -1,0 +1,8 @@
+mapreduce:
+- name: MAINT Delete unused accounts
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: admin_tasks.delete_unused_accounts
+    params:
+    - name: entity_kind
+      default: codereview.models.Account

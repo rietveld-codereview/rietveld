@@ -75,3 +75,10 @@ deploy to the same version twice; the version must be manually picked
 by the developer doing the deployment.  If you don't like this, just
 edit the Makefile to remove "--version $(VERSION)" and edit app.yaml
 to hardcode a version number.
+
+Administration
+--------------
+
+Various jobs to administer an instance are collected in admin_tasks.py. These
+jobs can be run by an instance administrator by visiting http://<your-
+instance>/mapreduce/.
