@@ -4,6 +4,9 @@ runtime: python27
 api_version: 1
 threadsafe: false
 
+includes:
+- mapreduce/include.yaml
+
 default_expiration: 7d  # This is good for images, which never change
 
 handlers:
