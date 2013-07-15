@@ -893,6 +893,8 @@ ul.errorlist li {
 .build-result {
   text-decoration: none;
   color: #333333;
+  border-radius: 3px;
+  padding: 1px 0;
 }
 
 .build-status-color-failure {
