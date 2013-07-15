@@ -89,6 +89,7 @@ DEFAULT_REVIEW_SERVER = "codereview.appspot.com"
 # Max size of patch or base file.
 MAX_UPLOAD_SIZE = 900 * 1024
 
+
 # Constants for version control names.  Used by GuessVCSName.
 VCS_GIT = "Git"
 VCS_MERCURIAL = "Mercurial"
@@ -97,16 +98,30 @@ VCS_PERFORCE = "Perforce"
 VCS_CVS = "CVS"
 VCS_UNKNOWN = "Unknown"
 
-VCS_ABBREVIATIONS = {
-  VCS_MERCURIAL.lower(): VCS_MERCURIAL,
-  "hg": VCS_MERCURIAL,
-  VCS_SUBVERSION.lower(): VCS_SUBVERSION,
-  "svn": VCS_SUBVERSION,
-  VCS_PERFORCE.lower(): VCS_PERFORCE,
-  "p4": VCS_PERFORCE,
-  VCS_GIT.lower(): VCS_GIT,
-  VCS_CVS.lower(): VCS_CVS,
-}
+VCS = [
+{
+    'name': VCS_MERCURIAL,
+    'aliases': ['hg', 'mercurial'],
+}, {
+    'name': VCS_SUBVERSION,
+    'aliases': ['svn', 'subversion'],
+}, {
+    'name': VCS_PERFORCE,
+    'aliases': ['p4', 'perforce'],
+}, {
+    'name': VCS_GIT,
+    'aliases': ['git'],
+}, {
+    'name': VCS_CVS,
+    'aliases': ['cvs'],
+}]
+
+VCS_SHORT_NAMES = []    # hg, svn, ...
+VCS_ABBREVIATIONS = {}  # alias: name, ...
+for vcs in VCS:
+  VCS_SHORT_NAMES.append(min(vcs['aliases'], key=len))
+  VCS_ABBREVIATIONS.update((alias, vcs['name']) for alias in vcs['aliases'])
+
 
 # OAuth 2.0-Related Constants
 LOCALHOST_IP = '127.0.0.1'
@@ -644,8 +659,8 @@ group.add_option("-p", "--send_patch", action="store_true",
                       "attachment, and prepend email subject with 'PATCH:'.")
 group.add_option("--vcs", action="store", dest="vcs",
                  metavar="VCS", default=None,
-                 help=("Version control system (optional, usually upload.py "
-                       "already guesses the right VCS)."))
+                 help=("Explicitly specify version control system (%s)"
+                       % ", ".join(VCS_SHORT_NAMES)))
 group.add_option("--emulate_svn_auto_props", action="store_true",
                  dest="emulate_svn_auto_props", default=False,
                  help=("Emulate Subversion's auto properties feature."))

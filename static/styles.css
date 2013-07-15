@@ -20,13 +20,6 @@ body {
   background-color: #fff;
 }
 
-.home {
-  font-size: 200%;
-  font-weight: bold;
-  color: #000;
-  /* text-decoration: none; */
-}
-
 tt, code, pre {
   font-size: 12px;
 }
@@ -45,33 +38,12 @@ ul {
   margin-bottom: 0px;
 }
 
-.gaia {
-  text-align: right;
-  padding: 2px;
-  white-space: nowrap;
-}
-
-.search {
-  text-align: left;
-  padding: 2px;
-  white-space: nowrap;
-}
-
-.bluebg {
-  background-color: #ccf;
-}
-
 a {
   color: #4182fa;
 }
 
 a.novisit {
   color: #2a55a3;
-}
-
-a.redlink {
-  color: red;
-  font-weight: bold;
 }
 
 .approval a, span.approval {
@@ -118,7 +90,7 @@ a:visited.noul, a:visited.noulv {
 .oldlight, .newlight, .oldreplace1, .newreplace1,
 .newreplace, .newdelete, .newinsert, .newequal, .newblank,
 .oldmove, .oldchangemove, .oldchangemove1, .oldmove_out, .oldchangemove_out,
-.newmove, .newchangemove, .newchangemove1,
+.newmove, .newchangemove,
 .udiffadd, .udiffremove, .udiff, .debug-info {
   white-space: pre;
   font-family: monospace;
@@ -155,10 +127,6 @@ a:visited.noul, a:visited.noulv {
 }
 
 .newreplace1 {
-  background-color: #9f9;
-}
-
-.newchangemove1 {
   background-color: #9f9;
 }
 
@@ -530,16 +498,16 @@ table.property_changes {
   margin-bottom: 1em;
 }
 
-table#queues, table#clfiles {
+table#queues {
   border-collapse: collapse;
   width: 100%;
 }
 
-table#queues tr, table#clfiles tr {
+table#queues tr {
   border-bottom: thin solid lightgray;
 }
 
-table#queues td, table#clfiles td {
+table#queues td {
   padding: 2px;
 }
 
@@ -707,6 +675,10 @@ span.visualtab {
   padding: 3px;
   padding-left: 0px;
 
+}
+
+.issue-list #queues a {
+  text-decoration: none;
 }
 
 .issue-list .updated {

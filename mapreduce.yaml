@@ -1,32 +1,41 @@
 mapreduce:
+- name: MAINT Delete unused accounts
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: admin_tasks.delete_unused_accounts
+    params:
+    - name: entity_kind
+      default: codereview.models.Account
+
+
+# Chromium-only jobs
+
+
 - name: Fix issues with account modified today
   mapper:
     input_reader: mapreduce.input_readers.DatastoreInputReader
-    handler: fix_issue.FixIssue
+    handler: chromium_admin_tasks.FixIssue
     params:
     - name: entity_kind
       default: codereview.models.Issue
 - name: Delete unused accounts
   mapper:
     input_reader: mapreduce.input_readers.DatastoreInputReader
-    handler: fix_issue.DeleteUnusedAccounts
+    handler: chromium_admin_tasks.DeleteUnusedAccounts
     params:
     - name: entity_kind
       default: codereview.models.Account
 - name: Convert the old build_results member of PatchSet to TryJobResults
   mapper:
     input_reader: mapreduce.input_readers.DatastoreInputReader
-    handler: fix_issue.UpgradeBuildResults
+    handler: chromium_admin_tasks.UpgradeBuildResults
     params:
     - name: entity_kind
       default: codereview.models.PatchSet
-
-# The filters key only works if you apply mapreduce.patch
-# Upstream: https://code.google.com/p/appengine-mapreduce/issues/detail?id=174
 - name: Remove n_messages_sent key to cause Issue cache data to be re-evaluated
   mapper:
     input_reader: mapreduce.input_readers.DatastoreInputReader
-    handler: fix_issue.RemoveNMessagesSentFromIssues
+    handler: chromium_admin_tasks.RemoveNMessagesSentFromIssues
     params:
     - name: queue_name
       default: "delete-n-sent-messages"
