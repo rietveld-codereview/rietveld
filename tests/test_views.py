@@ -14,6 +14,9 @@
 
 """Tests for view functions and helpers."""
 
+import datetime
+import json
+
 from django.http import HttpRequest
 
 from google.appengine.api.users import User
@@ -89,3 +92,48 @@ class TestPublish(TestCase):
         # Try to render draft details using the patched Comment
         # instances from here.
         views._get_draft_details(request, [cmt1, cmt2])
+
+
+class TestSearch(TestCase):
+
+    def setUp(self):
+        """"Create two test issues and users."""
+        super(TestSearch, self).setUp()
+        user = User('bar@example.com')
+        models.Account.get_account_for_user(user)
+        user = User('test@groups.example.com')
+        models.Account.get_account_for_user(user)
+        self.user = User('foo@example.com')
+        self.login('foo@example.com')
+        issue1 = models.Issue(subject='test')
+        issue1.reviewers = [db.Email('test@groups.example.com'),
+                            db.Email('bar@example.com')]
+        issue1.local_base = False
+        issue1.put()
+        issue2 = models.Issue(subject='test')
+        issue2.reviewers = [db.Email('test2@groups.example.com'),
+                            db.Email('bar@example.com')]
+        issue2.local_base = False
+        issue2.put()
+
+    def test_json_get_api(self):
+        today = datetime.date.today()
+        start = datetime.datetime(today.year, today.month, 1)
+        next_month = today + datetime.timedelta(days=31)
+        end = datetime.datetime(next_month.year, next_month.month, 1)
+        # This search is derived from a real query that comes up in the logs
+        # quite regulary. It searches for open issues with a test group as
+        # reviewer within a month and requests the returned data to be encoded
+        # as JSON.
+        response = self.client.get('/search', {
+            'closed': 3, 'reviewer': 'test@groups.example.com',
+            'private': 1, 'created_before': str(end),
+            'created_after': str(start), 'order': 'created',
+            'keys_only': False, 'with_messages': False, 'cursor': '',
+            'limit': 1000, 'format': 'json'
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'],
+                         'application/json; charset=utf-8')
+        payload = json.loads(response.content)
+        self.assertEqual(len(payload['results']), 1)

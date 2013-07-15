@@ -4,6 +4,9 @@ runtime: python27
 api_version: 1
 threadsafe: false
 
+includes:
+- mapreduce/include.yaml
+
 default_expiration: 7d  # This is good for images, which never change
 
 # The commented "secure: always" handler can't be enabled for appspot.com
@@ -41,14 +44,6 @@ handlers:
 - url: /tasks/migrate_entities
   script: main.application
   login: admin
-
-# Before uploading, do:
-#
-# svn co http://appengine-mapreduce.googlecode.com/svn/trunk/python/src/mapreduce
-#
-#- url: /mapreduce(/.*)?
-#  script: mapreduce/main.py
-#  login: admin
 
 - url: /.*
   script: main.application

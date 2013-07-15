@@ -64,7 +64,7 @@ update_revision:
 	@echo "---[Updating REVISION]---"
 	@echo "$(VERSION_TAG)" >REVISION
 
-update: update_revision
+update: update_revision mapreduce
 	@echo "---[Updating $(APPID)]---"
 	$(APPCFG) $(APPCFG_FLAGS) update . --application $(APPID) --version $(VERSION)
 
@@ -84,3 +84,9 @@ test:
 coverage:
 	$(COVERAGE) run --branch tests/run_tests.py $(SDK_PATH)
 	$(COVERAGE) html --include="codereview/*"
+
+# Checkout mapreduce library and apply a little patch.
+# See https://code.google.com/p/appengine-mapreduce/issues/detail?id=174
+mapreduce:
+	svn co -r 491 http://appengine-mapreduce.googlecode.com/svn/trunk/python/src/mapreduce
+	cd mapreduce/ && patch < ../mapreduce.patch
