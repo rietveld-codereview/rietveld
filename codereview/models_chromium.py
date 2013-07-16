@@ -83,11 +83,32 @@ class DefaultBuilderList(db.Model):
   """
   # Constants for default builders memcache.
   _DEFAULT_BUILDER_MEMCACHE_KEY = 'default_builders_'
-  _DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS = 60 * 60 * 12
+  _MEMCACHE_EXPIRY_SECS = 60 * 60 * 12
 
   _DEFAULT_CHROMIUM_TRYSERVER_NAME = 'tryserver.chromium'
 
   categories_and_builders_json = db.TextProperty(default="{}")
+  trybot_documentation_link = db.LinkProperty()
+
+  @classmethod
+  def get_doc_link(cls, base_url):
+    """Gets the trybot documentation link for the specified base URL.
+
+    This function will first attempt to get the link from the memcache. If its
+    not available there, it will get it from the datastore and then update the
+    memcache.
+
+    Args:
+      base_url: The base URL we want a list of default builders for.
+
+    Returns:
+      A link containing the documentation of the trybots displayed for this base
+      URL.
+    """
+    return cls.get_url_metadatum(
+        memcache_key_prefix='doc_link_',
+        base_url=base_url,
+        property_name='trybot_documentation_link')
 
   @classmethod
   def get_builders(cls, base_url):
@@ -104,29 +125,52 @@ class DefaultBuilderList(db.Model):
       A map of Trybot categories to a list of its builders. The builder names
       are sorted alphabetically.
     """
+    builders = cls.get_url_metadatum(
+        memcache_key_prefix=cls._DEFAULT_BUILDER_MEMCACHE_KEY,
+        base_url=base_url,
+        property_name='categories_and_builders_json')
+    return json.loads(builders)
+
+  @classmethod
+  def get_url_metadatum(cls, memcache_key_prefix, base_url, property_name):
+    """Gets the requested property from memcache or the datastore.
+
+    This function will first attempt to get the list from the memcache. If its
+    not available there, it will get it from the datastore and then update the
+    memcache.
+
+    Args:
+      memcache_key_prefix: The prefix to use when querying memcache.
+      base_url: The base URL.
+      property_name: The name of the property we want the value of.
+
+    Returns:
+      The value of the requested property.
+    """
     # Remove contents after '@' to avoid explosion due to git branches.
     base_url = base_url.rsplit('@', 1)[0]
-    # Look for the list of builders using the specified base url in memcache.
-    base_url_key = cls._DEFAULT_BUILDER_MEMCACHE_KEY + base_url
-    builders = memcache.get(base_url_key, namespace=base_url)
-    if builders is None:
-      # If the list of builders does not exist in memcache get it from the
+    # Look for the property value using the specified base url in memcache.
+    base_url_key = memcache_key_prefix + base_url
+    requested_property = memcache.get(base_url_key, namespace=base_url)
+    if requested_property is None:
+      # If the requested property does not exist in memcache get it from the
       # datastore in 2 steps.
-      # 1. Get the tryserver name from the datastore using the base_url.
+      # 1. Get the requested property from the datastore using the base_url.
       if not base_url:
         # Do not support try servers if the base URL is missing.
         return []
       tryserver_name = BaseUrlTryServer.get_instance(
           base_url=base_url,
           tryserver_name=cls._DEFAULT_CHROMIUM_TRYSERVER_NAME).tryserver_name
-      # 2. Get the map of categories to builders from the datastore using the
+      # 2. Get the requested property from the datastore using the
       # tryserver_name.
-      builders = cls.get_or_insert(tryserver_name).categories_and_builders_json
+      requested_property = getattr(cls.get_or_insert(tryserver_name),
+                                   property_name)
       # Set it in memcache to prevent future misses.
-      memcache.set(base_url_key, builders,
-                   time=cls._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS,
+      memcache.set(base_url_key, requested_property,
+                   time=cls._MEMCACHE_EXPIRY_SECS,
                    namespace=base_url)
-    return json.loads(builders)
+    return requested_property
 
   @classmethod
   def update(cls):
@@ -187,7 +231,7 @@ class DefaultBuilderList(db.Model):
         default=lambda x: (sorted(list(x)) if isinstance(x, set) else x))
     memcache.set(self._DEFAULT_BUILDER_MEMCACHE_KEY + self.key().name(),
                  self.categories_and_builders_json,
-                 self._DEFAULT_BUILDER_MEMCACHE_EXPIRY_SECS)
+                 self._MEMCACHE_EXPIRY_SECS)
     self.put()
 
     # Figure out what changed in the categories and builders.

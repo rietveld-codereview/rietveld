@@ -250,6 +250,9 @@
                onclick="M_updatePendingTrybots('{{issue.key.id}}', '{{last_patchset.key.id}}', '{{xsrf_token}}')"/>
         <input type="button" value="Close"
                onclick="M_closePendingTrybots()"/>
+        {% if trybot_documentation_link %}
+          <br/><a href='{{ trybot_documentation_link }}'>Trybot Documentation</a>
+        {% endif %}
       </div>
     </form>
   </div>
