@@ -2207,6 +2207,9 @@ def show(request, form=None):
                   'default_builders':
                       models_chromium.DefaultBuilderList.get_builders(
                           issue.base),
+                  'trybot_documentation_link':
+                      models_chromium.DefaultBuilderList.get_doc_link(
+                          issue.base),
                   })
 
 
