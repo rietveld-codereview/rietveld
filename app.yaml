@@ -34,6 +34,11 @@ handlers:
   script: main.application
   login: admin
 
+# These seem to be hit over http and cannot deal with a 302 to https.
+- url: /_ah/(start|stop)
+  script: backends.app
+  login: admin
+
 - url: /.*
   script: main.application
 
@@ -54,6 +59,8 @@ builtins:
 libraries:
 - name: django
   version: 1.3
+- name: webapp2
+  version: 2.5.2
 
 env_variables:
   DJANGO_SETTINGS_MODULE: 'settings'

@@ -67,6 +67,7 @@ update_revision:
 update: update_revision mapreduce
 	@echo "---[Updating $(APPID)]---"
 	$(APPCFG) $(APPCFG_FLAGS) update . --application $(APPID) --version $(VERSION)
+	$(APPCFG) $(APPCFG_FLAGS) backends update . --application $(APPID) --version $(VERSION)
 
 upload: update
 
