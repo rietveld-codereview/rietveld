@@ -538,45 +538,30 @@ function M_editFlags(issue) {
  * @param {String} patchset The patchset key.
  */
 function M_editPendingTryJobs(patchset) {
-  // Set the state of the checkboxes as needed.
-  var popup = jQuery('#trybot-popup');
-  jQuery('input:checkbox', popup).each(function(i) {
-    var self = jQuery(this);
-    // Uncheck all tryjobs. See
-    // https://code.google.com/p/skia/issues/detail?id=1263
-    self.attr('checked', false); 
-    self.removeAttr('disabled');
-  });
-
-  // Show the popup and position it near the link.
-  var alink = jQuery('#tryjobchange-' + patchset);
-  var offset = alink.offset();
-  offset.top += alink.height() + 1 - window.pageYOffset;
-
-  popup.css('top', offset.top);
-  popup.css('left', offset.left);
-  popup.css('display', '');
- 
-  maxWidth = 550
-  maxHeight = 300
-  maxWidthWithScrollBar = maxWidth + 15;
-  popup.css('max-width', maxWidth);
-  popup.css('max-height', maxHeight);
- 
-  // If the popup would show off-screen, move it.
-  var bottomOfPopup = offset.top + popup.innerHeight(); 
-  var bottomOfWindow = window.innerHeight;
-  if (bottomOfPopup > bottomOfWindow ||
-      offset.left + maxWidthWithScrollBar > window.innerWidth) {
-    // Move the popup to the left if it would be offset to the right.  This
-    // readjusts the height of the popup though, so calculate it again.
-    if (offset.left + maxWidthWithScrollBar > window.innerWidth)
-      popup.css('left', window.innerWidth - maxWidthWithScrollBar)
-    
-    bottomOfPopup = offset.top + popup.innerHeight(); 
-    if (bottomOfPopup > bottomOfWindow)
-      popup.css('top', offset.top - bottomOfPopup + bottomOfWindow - 5);
+  var checkboxContainer = document.getElementById('trybot-popup-checkboxes');
+  var checkboxElements = checkboxContainer.getElementsByTagName('input');
+  for (var checkbox, i = 0; checkbox = checkboxElements[i]; i++) {
+    checkbox.checked = false;
+    checkbox.disabled = false;
   }
+
+  // Position popup below anchor.
+  var anchor = document.getElementById('tryjobchange-' + patchset);
+  var anchorRect = anchor.getBoundingClientRect();
+  var popupElement = document.getElementById('trybot-popup');
+  popupElement.style.left = anchorRect.left + 'px';
+  popupElement.style.top = anchorRect.bottom + 'px';
+  popupElement.style.display = '';
+
+  // Extra padding to allow for scrollbars.
+  var scrollbarWidth = 20;
+
+  // Move popup as need to be on screen.
+  var popupRect = popupElement.getBoundingClientRect();
+  if (popupRect.bottom > window.innerHeight)
+    popupElement.style.top = (anchorRect.bottom - (popupRect.bottom - window.innerHeight) - scrollbarWidth) + 'px';  
+  if (popupRect.right > window.innerWidth)
+    popupElement.style.left = (anchorRect.left - (popupRect.right - window.innerWidth) - scrollbarWidth) + 'px';  
 }
 
 /**

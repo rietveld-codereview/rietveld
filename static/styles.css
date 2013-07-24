@@ -511,9 +511,9 @@ table#queues td {
   padding: 2px;
 }
 
-div#trybot-popup {
+#trybot-popup {
   position: fixed;
-  overflow: scroll;
+  overflow: hidden;
   padding: 8px;
   background-color: #E5ECF9;
   border: 1px solid  #93b7fa;
@@ -522,9 +522,10 @@ div#trybot-popup {
   -moz-border-radius: 4px;
 }
 
-div.trybot-popup-column {
-  float: left;
-  margin-bottom: 8px;
+#trybot-popup-checkboxes {
+  columns: 4;
+  -webkit-columns: 4;
+  width: 100ex;
 }
 
 div.trybot-popup-input {
