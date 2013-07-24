@@ -21,6 +21,7 @@ import datetime
 import email  # see incoming_mail()
 import email.utils
 import itertools
+import json
 import logging
 import md5
 import mimetypes
@@ -51,7 +52,6 @@ from django.shortcuts import render_to_response
 import django.template
 from django.template import RequestContext
 from django.utils import encoding
-from django.utils import simplejson
 from django.utils.html import strip_tags
 from django.utils.html import urlize
 from django.utils.safestring import mark_safe
@@ -1044,9 +1044,9 @@ def json_response(func):
     if isinstance(data, HttpResponse):
       return data
     if request.REQUEST.get('pretty','0').lower() in ('1', 'true', 'on'):
-      data = simplejson.dumps(data, indent='  ', sort_keys=True)
+      data = json.dumps(data, indent=2, sort_keys=True)
     else:
-      data = simplejson.dumps(data, separators=(',',':'))
+      data = json.dumps(data, separators=(',',':'))
     return HttpResponse(data, content_type='application/json; charset=utf-8')
 
   return json_wrapper
@@ -2645,7 +2645,7 @@ def fields(request):
   if not request.issue.edit_allowed:
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
-  fields = simplejson.loads(request.POST.get('fields'))
+  fields = json.loads(request.POST.get('fields'))
   issue = request.issue
   if 'description' in fields:
     issue.description = fields['description']
