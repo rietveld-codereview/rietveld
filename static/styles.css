@@ -528,6 +528,15 @@ table#queues td {
   width: 100ex;
 }
 
+#trybot-popup-checkboxes-with-categories {
+  columns: 1;
+  -webkit-columns: 1;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  max-height: 300px;
+  width: 550px;
+}
+
 div.trybot-popup-input {
   margin-right: 8px;
 }

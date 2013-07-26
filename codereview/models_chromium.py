@@ -105,6 +105,8 @@ class DefaultBuilderList(db.Model):
       A link containing the documentation of the trybots displayed for this base
       URL.
     """
+    if not base_url:
+      return ''
     return cls.get_url_metadatum(
         memcache_key_prefix='doc_link_',
         base_url=base_url,
@@ -125,6 +127,8 @@ class DefaultBuilderList(db.Model):
       A map of Trybot categories to a list of its builders. The builder names
       are sorted alphabetically.
     """
+    if not base_url:
+      return {}
     builders = cls.get_url_metadatum(
         memcache_key_prefix=cls._DEFAULT_BUILDER_MEMCACHE_KEY,
         base_url=base_url,

@@ -231,15 +231,16 @@
   <div id="trybot-popup" style="display:none;">
     <form method="POST" action="" id="trybotform">
       <input type="hidden" name="xsrf_token" value="{{xsrf_token}}"/>
-      <div id="trybot-popup-checkboxes">
         {% if default_builders.items|length == 1 %}
+          <div id="trybot-popup-checkboxes">
           {% for builder in default_builders.values.0 %}
               <input type="checkbox" name="{{builder}}" id="cb_{{builder}}"><label for="cb_{{builder}}">{{builder}}</label><br>
           {%endfor%}
         {% else %}
+          <div id="trybot-popup-checkboxes-with-categories">
           {% output_categories_and_builders default_builders.items %}
         {% endif %}
-      </div>
+          </div>
       <div class="trybot-button-div">
         <input type="button" value="Update"
                onclick="M_updatePendingTrybots('{{issue.key.id}}', '{{last_patchset.key.id}}', '{{xsrf_token}}')"/>
