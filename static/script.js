@@ -539,6 +539,10 @@ function M_editFlags(issue) {
  */
 function M_editPendingTryJobs(patchset) {
   var checkboxContainer = document.getElementById('trybot-popup-checkboxes');
+  if (! checkboxContainer) {
+    checkboxContainer = document.getElementById(
+        'trybot-popup-checkboxes-with-categories')
+  }
   var checkboxElements = checkboxContainer.getElementsByTagName('input');
   for (var checkbox, i = 0; checkbox = checkboxElements[i]; i++) {
     checkbox.checked = false;
