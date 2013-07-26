@@ -439,7 +439,7 @@ class AbstractRpcServer(object):
     """
     # TODO: Don't require authentication.  Let the server say
     # whether it is necessary.
-    if not self.authenticated:
+    if not self.authenticated and self.auth_function:
       self._Authenticate()
 
     old_timeout = socket.getdefaulttimeout()
@@ -466,6 +466,8 @@ class AbstractRpcServer(object):
           if tries > 3:
             raise
           elif e.code == 401 or e.code == 302:
+            if not self.auth_function:
+              raise
             self._Authenticate()
           elif e.code == 301:
             # Handle permanent redirect manually.
