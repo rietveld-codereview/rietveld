@@ -42,6 +42,10 @@ a {
   color: #4182fa;
 }
 
+a:visited {
+  color: #A710F9;
+}
+
 a.novisit {
   color: #2a55a3;
 }
