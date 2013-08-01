@@ -2175,7 +2175,8 @@ def _get_patchset_info(request, patchset_id):
 def replace_bug(message):
   bugs = re.split(r"[\s,]+", message.group(1))
   base_tracker_url = 'http://code.google.com/p/%s/issues/detail?id=%s'
-  valid_trackers = ('chromium', 'chromium-os', 'chrome-os-partner', 'gyp', 'v8')
+  valid_trackers = ('chromium', 'chromium-os', 'chrome-os-partner', 'gyp',
+                    'skia', 'v8')
   urls = []
   for bug in bugs:
     if not bug:
