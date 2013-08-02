@@ -74,7 +74,7 @@ def setup_env(app_id, host=None, auth_func=None):
 
   # Create shortcuts.
   import codereview
-  from codereview import models, views
+  from codereview import models, models_chromium, views, views_chromium
 
   # Symbols presented to the user.
   predefined_vars = locals().copy()
@@ -85,6 +85,9 @@ def setup_env(app_id, host=None, auth_func=None):
   for i in dir(models):
     if re.match(r'[A-Z][a-z]', i[:2]):
       predefined_vars[i] = getattr(models, i)
+  for i in dir(models_chromium):
+    if re.match(r'[A-Z][a-z]', i[:2]):
+      predefined_vars[i] = getattr(models_chromium, i)
   return predefined_vars
 
 

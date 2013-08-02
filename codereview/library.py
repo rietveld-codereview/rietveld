@@ -16,6 +16,8 @@
 
 import cgi
 
+from xml.etree.ElementTree import Element, SubElement, tostring
+
 from google.appengine.api import memcache
 from google.appengine.api import users
 
@@ -232,6 +234,121 @@ def get_nickname(email, never_me=False, request=None):
   return result
 
 
+class CategoriesNode(django.template.Node):
+  """Renders divs for categories and their builders.
+
+  Renders divs for categories which are hidden by default. Expanding the top
+  level categories displays their subcategories. Expanding the subcategories
+  displays its builders as checkboxes.
+  If no subcategories are specified in categories_to_builders then expanding
+  the top level categories displays its builders as checkboxes.
+
+  Example usage:
+    {% output_categories_and_builders default_builders.items %}
+  """
+
+  def __init__(self, categories_to_builders):
+    """Constructor.
+
+    'categories_to_builders' is the name of the template variable that holds a
+    dictionary of full category names to their builders. If the full category
+    name contains a '|' as a separator then the first part is considered to be
+    the top level category and everything afterwards is considered to be the
+    subcategory.
+    """
+    super(CategoriesNode, self).__init__()
+    self.categories_to_builders = django.template.Variable(
+        categories_to_builders)
+
+  def render(self, context):
+    try:
+      categories_to_builders = self.categories_to_builders.resolve(context)
+    except django.template.VariableDoesNotExist:
+      return ''
+
+    # Dictionary for quick lookup of top level categories.
+    top_level_categories = {}
+    # Top level root element to add top level and sub categories to.
+    root_elem = Element('a')
+
+    for full_category, builders in sorted(categories_to_builders):
+      categories = full_category.split('|')
+      top_level_category = categories[0]
+      if not top_level_categories.get(top_level_category):
+        top_level_categories[top_level_category] = 1
+
+        # This is the first time encountering this top level category create its
+        # anchor and div.
+        triangle_anchor_attrib = {
+            'id': '%s-builders-pointer' % top_level_category,
+            'href': "javascript:M_toggleSection('%s-builders')" % (
+                top_level_category),
+            'class': 'toggled-section closedtriangle'
+        }
+        triangle_anchor_elem = SubElement(
+            parent=root_elem,
+            tag='a',
+            attrib=triangle_anchor_attrib)
+        triangle_anchor_elem.text = top_level_category
+
+        top_level_cat_div_elem = SubElement(
+            parent=root_elem,
+            tag='div',
+            id='%s-builders' % top_level_category,
+            style='display:none')
+        SubElement(parent=root_elem, tag='br')
+
+      sub_category = categories[1] if len(categories) > 1 else None
+      if sub_category:
+        indent_anchor_elem = SubElement(
+            parent=top_level_cat_div_elem,
+            tag='a',
+            style='padding-left:2em')
+        triangle_anchor_attrib = {
+            'id': '%s-builders-pointer' % full_category,
+            'href': "javascript:M_toggleSection('%s-builders')" % full_category,
+            'class': 'toggled-section closedtriangle',
+        }
+        triangle_anchor_elem = SubElement(
+            parent=indent_anchor_elem,
+            tag='a',
+            attrib=triangle_anchor_attrib)
+        triangle_anchor_elem.text = sub_category
+
+        sub_cat_div_elem = SubElement(
+            parent=indent_anchor_elem,
+            tag='div',
+            id='%s-builders' % full_category,
+            style='display:none')
+
+      for builder in builders:
+        builder_div_attrib = {
+            'class': 'trybot-popup-input',
+            'style': 'padding-left:2em',
+        }
+        if sub_category:
+          parent = sub_cat_div_elem
+        else:
+          parent = top_level_cat_div_elem 
+        builder_div_elem = SubElement(
+            parent=parent,
+            tag='div',
+            attrib=builder_div_attrib)
+
+        builder_checkbox_elem = SubElement(
+            parent=builder_div_elem,
+            tag='input',
+            type='checkbox',
+            name=builder,
+            id='cb_%s' % builder,
+            checked='checked')
+        builder_checkbox_elem.text = builder
+
+      SubElement(parent=top_level_cat_div_elem, tag='br')
+
+    return tostring(root_elem, method='html')
+
+
 class NicknameNode(django.template.Node):
   """Renders a nickname for a given email address.
 
@@ -290,6 +407,13 @@ def nicknames(parser, token):
   node = nickname(parser, token)
   node.is_multi = True
   return node
+
+
+@register.tag
+def output_categories_and_builders(parser, token):
+  """Returns the complete category and builders structure."""
+  _, categories_to_builders = token.split_contents()
+  return CategoriesNode(categories_to_builders)
 
 
 @register.filter
