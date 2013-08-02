@@ -42,10 +42,6 @@ a {
   color: #4182fa;
 }
 
-a:visited {
-  color: #A710F9;
-}
-
 a.novisit {
   color: #2a55a3;
 }
@@ -515,6 +511,10 @@ table#queues td {
   padding: 2px;
 }
 
+table#queues a:visited {
+  color:  #a32a91;
+}
+
 #trybot-popup {
   position: fixed;
   overflow: hidden;
@@ -688,7 +688,6 @@ span.visualtab {
   margin: 0px;
   padding: 3px;
   padding-left: 0px;
-
 }
 
 .issue-list #queues a {
