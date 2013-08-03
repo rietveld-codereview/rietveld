@@ -511,7 +511,7 @@ table#queues td {
   padding: 2px;
 }
 
-table#queues a:visited {
+table#queues div.subject a:visited {
   color:  #a32a91;
 }
 
