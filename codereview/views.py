@@ -1016,6 +1016,18 @@ def json_response(func):
   return json_wrapper
 
 
+def access_control_allow_origin_star(func):
+  """Decorator that adds Access-Control-Allow-Origin: * to any HTTPResponse
+  allowing cross-site XHR access to the handler."""
+
+  def allow_origin_access_star_wrapper(request, *args, **kwds):
+    response = func(request, *args, **kwds)
+    response["Access-Control-Allow-Origin"] = "*"
+    return response
+
+  return allow_origin_access_star_wrapper
+
+
 ### Request handlers ###
 
 
@@ -2397,6 +2409,7 @@ def mailissue(request):
   return HttpTextResponse('OK')
 
 
+@access_control_allow_origin_star
 @patchset_required
 def download(request):
   """/download/<issue>_<patchset>.diff - Download a patch set."""
@@ -2564,6 +2577,7 @@ def patch_helper(request, nav_type='patch'):
                   })
 
 
+@access_control_allow_origin_star
 @image_required
 def image(request):
   """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
@@ -2575,6 +2589,7 @@ def image(request):
   return response
 
 
+@access_control_allow_origin_star
 @patch_required
 def download_patch(request):
   """/download/issue<issue>_<patchset>_<patch>.diff - Download patch."""
@@ -2644,6 +2659,7 @@ def _patchset_as_dict(patchset, request=None):
   return values
 
 
+@access_control_allow_origin_star
 @issue_required
 @json_response
 def api_issue(request):
@@ -2654,6 +2670,7 @@ def api_issue(request):
   return values
 
 
+@access_control_allow_origin_star
 @patchset_required
 @json_response
 def api_patchset(request):
