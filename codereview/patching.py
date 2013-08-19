@@ -18,11 +18,11 @@ For a discussion of the unified diff format, see my blog on Artima:
 http://www.artima.com/weblogs/viewpost.jsp?thread=164293
 """
 
-import difflib
 import logging
-import patiencediff
 import re
 import sys
+
+from codereview import patiencediff
 
 
 _CHUNK_RE = re.compile(r"""

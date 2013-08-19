@@ -369,7 +369,9 @@ class Message(db.Model):
   _disapproval = None
 
   def find(self, text):
-    """Returns True when the message says text and is not written by the issue owner."""
+    """Returns True when the message says text and is not written by the issue
+    owner.
+    """
     # Must not be issue owner.
     # Must contain text in a line that doesn't start with '>'.
     return self.issue.owner.email() != self.sender and any(
@@ -978,17 +980,17 @@ class Account(db.Model):
     dirty = False
     if self._drafts is None:
       dirty = self._initialize_drafts()
-    id = issue.key().id()
+    keyid = issue.key().id()
     if have_drafts is None:
       # Beware, this may do a query.
       have_drafts = bool(issue.get_num_drafts(self.user))
     if have_drafts:
-      if id not in self._drafts:
-        self._drafts.append(id)
+      if keyid not in self._drafts:
+        self._drafts.append(keyid)
         dirty = True
     else:
-      if id in self._drafts:
-        self._drafts.remove(id)
+      if keyid in self._drafts:
+        self._drafts.remove(keyid)
         dirty = True
     if dirty:
       self._save_drafts()
