@@ -2451,7 +2451,8 @@ def tarball(request):
     # TODO(adonovan): set SYMTYPE/0755 when Rietveld supports symlinks.
     info.type = tarfile.REGTYPE
     info.mode = 0644
-    delta = request.patchset.modified - datetime.datetime(1970, 1, 1)  # datetime->time_t
+    # datetime->time_t
+    delta = request.patchset.modified - datetime.datetime(1970, 1, 1)
     info.mtime = int(delta.days * 86400 + delta.seconds)
     tar.addfile(info, fileobj=StringIO(data))
 

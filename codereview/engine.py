@@ -156,29 +156,29 @@ def _CleanupTableRowsGenerator(rows, context):
     Rows marked as 'equal' are possibly contracted using _ShortenBuffer().
     Stops on rows marked as 'error'.
   """
-  buffer = []
+  buf = []
   for tag, text in rows:
     if tag == 'equal':
-      buffer.append(text)
+      buf.append(text)
       continue
     else:
-      for t in _ShortenBuffer(buffer, context):
+      for t in _ShortenBuffer(buf, context):
         yield t
-      buffer = []
+      buf = []
     yield text
     if tag == 'error':
       yield None
       break
-  if buffer:
-    for t in _ShortenBuffer(buffer, context):
+  if buf:
+    for t in _ShortenBuffer(buf, context):
       yield t
 
 
-def _ShortenBuffer(buffer, context):
+def _ShortenBuffer(buf, context):
   """Render a possibly contracted series of HTML table rows.
 
   Args:
-    buffer: a list of strings representing HTML table rows.
+    buf: a list of strings representing HTML table rows.
     context: Maximum number of visible context lines. If None all lines are
       returned.
 
@@ -188,17 +188,17 @@ def _ShortenBuffer(buffer, context):
     table row representing the contraction, and the last context
     items.
   """
-  if context is None or len(buffer) < 3*context:
-    for t in buffer:
+  if context is None or len(buf) < 3*context:
+    for t in buf:
       yield t
   else:
     last_id = None
-    for t in buffer[:context]:
+    for t in buf[:context]:
       m = re.match('^<tr( name="hook")? id="pair-(?P<rowcount>\d+)">', t)
       if m:
         last_id = int(m.groupdict().get("rowcount"))
       yield t
-    skip = len(buffer) - 2*context
+    skip = len(buf) - 2*context
     expand_link = []
     if skip > 3*context:
       expand_link.append(('<a href="javascript:M_expandSkipped(%(before)d, '
@@ -225,7 +225,7 @@ def _ShortenBuffer(buffer, context):
            '</span>'
            '</td></tr>\n' % (last_id, last_id, skip,
                              last_id, expand_link, last_id))
-    for t in buffer[-context:]:
+    for t in buf[-context:]:
       yield t
 
 
