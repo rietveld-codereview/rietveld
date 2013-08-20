@@ -37,7 +37,6 @@ See google.appengine.ext.endpoints.users_id_token for reference:
 """
 
 import logging
-import os
 
 from google.appengine.api import oauth
 from google.appengine.api import users
@@ -163,7 +162,7 @@ class AnyAuthUserProperty(db.UserProperty):
       return get_current_user()
     return None
 
-  def get_updated_value_for_datastore(self, unused_model_instance):
+  def get_updated_value_for_datastore(self, _model_instance):
     """Get new value for property to send to datastore.
 
     NOTE: This is adapted from UserProperty.get_updated_value_for_datastore but

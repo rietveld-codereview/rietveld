@@ -105,7 +105,7 @@ def show_reviewers(reviewer_list, arg=None):
   """Render list of links to each reviewer's dashboard with color."""
 
   email_list = []
-  for reviewer, approval in reviewer_list.items():
+  for reviewer, _approval in reviewer_list.items():
     email = reviewer
     if isinstance(email, users.User):
       email = email.email()

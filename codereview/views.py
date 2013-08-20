@@ -2574,7 +2574,8 @@ def tarball(request):
     # TODO(adonovan): set SYMTYPE/0755 when Rietveld supports symlinks.
     info.type = tarfile.REGTYPE
     info.mode = 0644
-    delta = request.patchset.modified - datetime.datetime(1970, 1, 1)  # datetime->time_t
+    # datetime->time_t
+    delta = request.patchset.modified - datetime.datetime(1970, 1, 1)
     info.mtime = int(delta.days * 86400 + delta.seconds)
     tar.addfile(info, fileobj=StringIO(data))
 
@@ -2752,7 +2753,7 @@ def _issue_as_dict(issue, messages, request=None):
   return values
 
 
-def _patchset_as_dict(patchset, request=None):
+def _patchset_as_dict(patchset, comments, request=None):
   """Converts a patchset into a dict."""
   values = {
     'patchset': patchset.key().id(),
@@ -2781,6 +2782,19 @@ def _patchset_as_dict(patchset, request=None):
         'status': patch.status,
         'property_changes': '\n'.join(patch.property_changes),
     }
+    if comments:
+      values['files'][patch.filename]['messages'] = [
+        {
+          'author': library.get_nickname(c.author, True, request),
+          'author_email': c.author.email(),
+          'date': str(c.date),
+          'lineno': c.lineno,
+          'text': c.text,
+          'left': c.left,
+          'draft': c.draft,
+        }
+        for c in models.Comment.gql('WHERE patch = :patch and draft = FALSE '
+                                    'ORDER BY date', patch=patch)]
   return values
 
 
@@ -2789,8 +2803,7 @@ def _patchset_as_dict(patchset, request=None):
 @json_response
 def api_issue(request):
   """/api/<issue> - Gets issue's data as a JSON-encoded dictionary."""
-  messages = ('messages' in request.GET and
-      request.GET.get('messages').lower() == 'true')
+  messages = request.GET.get('messages', 'false').lower() == 'true'
   values = _issue_as_dict(request.issue, messages, request)
   return values
 
@@ -2802,7 +2815,8 @@ def api_patchset(request):
   """/api/<issue>/<patchset> - Gets an issue's patchset data as a JSON-encoded
   dictionary.
   """
-  values = _patchset_as_dict(request.patchset, request)
+  comments = request.GET.get('comments', 'false').lower() == 'true'
+  values = _patchset_as_dict(request.patchset, comments, request)
   return values
 
 
