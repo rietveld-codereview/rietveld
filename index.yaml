@@ -28,6 +28,12 @@ indexes:
 
 - kind: Comment
   properties:
+  - name: draft
+  - name: patch
+  - name: date
+
+- kind: Comment
+  properties:
   - name: left
   - name: lineno
   - name: patch
