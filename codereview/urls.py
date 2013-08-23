@@ -61,6 +61,7 @@ urlpatterns = patterns(
     (r'^(\d+)/draft_message$', 'draft_message'),
     (r'^api/(\d+)/?$', 'api_issue'),
     (r'^api/(\d+)/(\d+)/?$', 'api_patchset'),
+    (r'^api/(\d+)/(\d+)/draft_comments$', 'api_draft_comments'),
     (r'^tarball/(\d+)/(\d+)$', 'tarball'),
     (r'^user/([^/]+)$', 'show_user'),
     (r'^user/([^/]+)/block$', 'block_user'),
