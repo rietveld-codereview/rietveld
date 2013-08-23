@@ -3257,6 +3257,81 @@ def _add_next_prev2(ps_left, ps_right, patch_right):
   patch_right.next_with_comment = next_patch_with_comment
 
 
+def _add_or_update_comment(user, issue, patch, lineno, left, text, message_id):
+  comment = None
+  if message_id:
+    comment = models.Comment.get_by_key_name(message_id, parent=patch)
+    if comment is None or not comment.draft or comment.author != user:
+      comment = None
+      message_id = None
+  if not message_id:
+    # Prefix with 'z' to avoid key names starting with digits.
+    message_id = 'z' + binascii.hexlify(_random_bytes(16))
+
+  if not text.rstrip():
+    if comment is not None:
+      assert comment.draft and comment.author == user
+      comment.delete()  # Deletion
+      comment = None
+      # Re-query the comment count.
+      models.Account.current_user_account.update_drafts(issue)
+  else:
+    if comment is None:
+      comment = models.Comment(key_name=message_id, parent=patch)
+    comment.patch = patch
+    comment.lineno = lineno
+    comment.left = left
+    comment.text = db.Text(text)
+    comment.message_id = message_id
+    comment.put()
+    # The actual count doesn't matter, just that there's at least one.
+    models.Account.current_user_account.update_drafts(issue, 1)
+  return comment
+
+
+@login_required
+@patchset_required
+@post_required
+@json_response
+def api_draft_comments(request):
+  """/api/<issue>/<patchset>/draft_comments - Store a number of draft
+  comments for a particular issue and patchset.
+
+  This API differs from inline_draft in two ways:
+
+  1) api_draft_comments handles multiple comments at once so that
+     clients can upload draft comments in bulk.
+  2) api_draft_comments returns a response in JSON rather than
+     in HTML, which lets clients process the response programmatically.
+
+  Note: creating or editing draft comments is *not* XSRF-protected,
+  because it is not unusual to come back after hours; the XSRF tokens
+  time out after 1 or 2 hours.  The final submit of the drafts for
+  others to view *is* XSRF-protected.
+  """
+  try:
+    def sanitize(comment):
+      patch = models.Patch.get_by_id(int(comment.patch_id),
+                                     parent=request.patchset)
+      assert not patch is None
+      message_id = str(comment.message_id) if message_id in comment else None,
+      return {
+        user: request.user,
+        issue: request.issue,
+        patch: patch,
+        lineno: int(comment.lineno),
+        left: bool(comment.left),
+        text: str(comment.text),
+        message_id: message_id,
+      }
+    return [
+      {message_id: _add_or_update_comment(**comment).message_id}
+      for comment in map(sanitize, json.load(request.data))
+    ]
+  except Exception, err:
+    return HttpTextResponse('An error occurred.', status=500)
+
+
 @post_required
 def inline_draft(request):
   """/inline_draft - Ajax handler to submit an in-line draft comment.
@@ -3307,34 +3382,9 @@ def _inline_draft(request):
   text = request.POST.get('text')
   lineno = int(request.POST['lineno'])
   message_id = request.POST.get('message_id')
-  comment = None
-  if message_id:
-    comment = models.Comment.get_by_key_name(message_id, parent=patch)
-    if comment is None or not comment.draft or comment.author != request.user:
-      comment = None
-      message_id = None
-  if not message_id:
-    # Prefix with 'z' to avoid key names starting with digits.
-    message_id = 'z' + binascii.hexlify(_random_bytes(16))
-
-  if not text.rstrip():
-    if comment is not None:
-      assert comment.draft and comment.author == request.user
-      comment.delete()  # Deletion
-      comment = None
-      # Re-query the comment count.
-      models.Account.current_user_account.update_drafts(issue)
-  else:
-    if comment is None:
-      comment = models.Comment(key_name=message_id, parent=patch)
-    comment.patch = patch
-    comment.lineno = lineno
-    comment.left = left
-    comment.text = db.Text(text)
-    comment.message_id = message_id
-    comment.put()
-    # The actual count doesn't matter, just that there's at least one.
-    models.Account.current_user_account.update_drafts(issue, 1)
+  comment = _add_or_update_comment(user=request.user, issue=issue, patch=patch,
+                                   lineno=lineno, left=left,
+                                   text=text, message_id=message_id)
   issue.calculate_draft_count_by_user()
   issue_fut = db.put_async(issue)
 
