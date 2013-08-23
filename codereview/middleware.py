@@ -93,6 +93,21 @@ class PropagateExceptionMiddleware(object):
     return HttpResponse(content, status=status, content_type=content_type)
 
 
+class RedirectDotVersionMiddleware(object):
+  """Work around the -dot- version problem with HTTPS-SNI certificate."""
+  def process_request(self, request):
+    if request.method == 'POST':
+      return
+    host = request.get_host().split(':')[0]
+    parts = host.split('.')
+    if (len(parts) > 3 and
+        parts[-1] == 'com' and
+        parts[-2] in ('appspot', 'googleplex')):
+      host = '-dot-'.join(parts[:-3] + ['.'.join(parts[-3:])])
+      return HttpResponsePermanentRedirect(
+          'https://%s%s' % (host, request.get_full_path()))
+
+
 class RedirectToHTTPSMiddleware(object):
   """Redirect HTTP requests to the equivalent HTTPS resource."""
   def process_request(self, request):
