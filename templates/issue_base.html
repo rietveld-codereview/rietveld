@@ -22,17 +22,17 @@
     |
     <a href="{%url codereview.views.starred%}">Starred</a>
     &nbsp;&nbsp;&nbsp;
-    <a href="{%url codereview.views.all%}?closed=0">Open</a>
+    <a href="{%url codereview.views.view_all%}?closed=0">Open</a>
     |
-    <a href="{%url codereview.views.all%}?closed=1">Closed</a>
+    <a href="{%url codereview.views.view_all%}?closed=1">Closed</a>
     |
-    <a href="{%url codereview.views.all%}">All</a>
+    <a href="{%url codereview.views.view_all%}">All</a>
   {%else%}
     <a class="novisit" href="{%url codereview.views.index%}?closed=0">Open Issues</a>
     |
     <a class="novisit" href="{%url codereview.views.index%}?closed=1">Closed Issues</a>
     |
-    <a class="novisit" href="{%url codereview.views.all%}">All Issues</a>
+    <a class="novisit" href="{%url codereview.views.view_all%}">All Issues</a>
     |
     <a class="novisit" href="{{sign_in}}">Sign in</a>
     with your <a href="https://www.google.com/accounts/NewAccount">Google
