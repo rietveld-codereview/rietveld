@@ -367,7 +367,7 @@ class BlockForm(forms.Form):
       help_text='Should this user be blocked')
 
 
-FORM_CONTEXT_VALUES = [(x, '%d lines' % x) for x in models.CONTEXT_CHOICES]
+FORM_CONTEXT_VALUES = [(z, '%d lines' % z) for z in models.CONTEXT_CHOICES]
 FORM_CONTEXT_VALUES.append(('', 'Whole file'))
 
 
@@ -1034,7 +1034,7 @@ def access_control_allow_origin_star(func):
 def index(request):
   """/ - Show a list of review issues"""
   if request.user is None:
-    return all(request, index_call=True)
+    return view_all(request, index_call=True)
   else:
     return mine(request)
 
@@ -1195,7 +1195,7 @@ def _paginate_issues_with_cursor(page_url,
   return _inner_paginate(request, issues, template, params)
 
 
-def all(request, index_call=False):
+def view_all(request, index_call=False):
   """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
   closed = request.GET.get('closed', '')
   if closed in ('0', 'false'):
@@ -1218,7 +1218,7 @@ def all(request, index_call=False):
     query.filter('closed =', closed)
   query.order('-modified')
 
-  return _paginate_issues(reverse(all),
+  return _paginate_issues(reverse(view_all),
                           request,
                           query,
                           'all.html',
@@ -2179,15 +2179,15 @@ def patchset(request):
 @login_required
 def account(request):
   """/account/?q=blah&limit=10&timestamp=blah - Used for autocomplete."""
-  def searchAccounts(property, domain, added, response):
+  def searchAccounts(prop, domain, added, response):
     query = request.GET.get('q').lower()
     limit = _clean_int(request.GET.get('limit'), 10, 10, 100)
 
     accounts = models.Account.all()
-    accounts.filter("lower_%s >= " % property, query)
-    accounts.filter("lower_%s < " % property, query + u"\ufffd")
+    accounts.filter("lower_%s >= " % prop, query)
+    accounts.filter("lower_%s < " % prop, query + u"\ufffd")
     accounts.filter("blocked =", False)
-    accounts.order("lower_%s" % property)
+    accounts.order("lower_%s" % prop)
     for account in accounts:
       if account.key() in added:
         continue
@@ -3662,9 +3662,9 @@ def star(request):
   account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
     account.stars = []
-  id = request.issue.key().id()
-  if id not in account.stars:
-    account.stars.append(id)
+  keyid = request.issue.key().id()
+  if keyid not in account.stars:
+    account.stars.append(keyid)
     account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
@@ -3679,9 +3679,9 @@ def unstar(request):
   account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
     account.stars = []
-  id = request.issue.key().id()
-  if id in account.stars:
-    account.stars[:] = [i for i in account.stars if i != id]
+  keyid = request.issue.key().id()
+  if keyid in account.stars:
+    account.stars[:] = [i for i in account.stars if i != keyid]
     account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
@@ -3770,10 +3770,10 @@ def search(request):
       return HttpTextResponse('Invalid arguments', status=400)
   logging.info('%s' % form.cleaned_data)
   keys_only = form.cleaned_data['keys_only'] or False
-  format = form.cleaned_data['format'] or 'html'
+  requested_format = form.cleaned_data['format'] or 'html'
   limit = form.cleaned_data['limit']
   with_messages = form.cleaned_data['with_messages']
-  if format == 'html':
+  if requested_format == 'html':
     keys_only = False
     limit = limit or DEFAULT_LIMIT
   else:
@@ -3826,7 +3826,7 @@ def search(request):
   q.order(sorted_by)
 
   # Update the cursor value in the result.
-  if format == 'html':
+  if requested_format == 'html':
     nav_params = dict(
         (k, v) for k, v in form.cleaned_data.iteritems() if v is not None)
     return _paginate_issues_with_cursor(
