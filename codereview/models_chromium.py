@@ -192,6 +192,7 @@ class DefaultBuilderList(db.Model):
     for obj in cls.all():
       tryserver_name = obj.key().name()
       try:
+        # pylint: disable=W0212
         successful[tryserver_name] = obj._update_builders(tryserver_name)
       except (ValueError, urlfetch.Error):
         logging.error(sys.exc_info()[1])
@@ -243,7 +244,7 @@ class DefaultBuilderList(db.Model):
     old_categories = set(old_categories_to_builders)
     added_categories = sorted(new_categories - old_categories)
     removed_categories = sorted(old_categories - new_categories)
-    changes= []
+    changes = []
     for added_category in added_categories:
       changes.append(('added builders to new category %s' % added_category,
                      categories_to_builders[added_category]))

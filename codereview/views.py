@@ -2883,7 +2883,7 @@ def diff(request):
   _add_next_prev(patchset, patch)
   src_url = _map_base_url(request.issue.base)
   if src_url and not src_url.endswith('/'):
-    src_url = src_url + '/';
+    src_url = src_url + '/'
   return respond(request, 'diff.html',
                  {'issue': request.issue,
                   'patchset': patchset,
