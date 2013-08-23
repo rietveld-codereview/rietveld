@@ -146,7 +146,7 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
     text = text[:-1]
   try:
     text = unicode(text, "utf-8")
-  except:
+  except UnicodeDecodeError:
     pass
   # Expand all tabs.
   # If mark_tabs is true, we retain one \t character as a marker during
@@ -282,11 +282,11 @@ def WordDiff(line1, line2, diff_params):
   # Strings may have been left undecoded up to now. Assume UTF-8.
   try:
     line1 = unicode(line1, "utf8")
-  except:
+  except UnicodeDecodeError:
     pass
   try:
     line2 = unicode(line2, "utf8")
-  except:
+  except UnicodeDecodeError:
     pass
 
   a = re.findall(exp, line1, re.U)

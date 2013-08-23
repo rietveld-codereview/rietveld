@@ -23,7 +23,7 @@ from codereview import feeds
 urlpatterns = patterns(
     'codereview.views',
     (r'^$', 'index'),
-    (r'^all$', 'all'),
+    (r'^all$', 'view_all'),
     (r'^mine$', 'mine'),
     (r'^starred$', 'starred'),
     (r'^new$', 'new'),
