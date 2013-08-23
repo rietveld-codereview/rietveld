@@ -177,6 +177,51 @@ class AnyAuthUserProperty(db.UserProperty):
     return db.AUTO_UPDATE_UNCHANGED
 
 
+class NdbAnyAuthUserProperty(ndb.UserProperty):
+  """An extension of the ndb.UserProperty which also accepts OAuth users.
+
+  The default ndb.UserProperty only considers cookie-based Auth users.
+
+  This property differs from AnyAuthUserProperty (the db version) due to
+  differences between ndb and db. Using
+
+    class Foo(db.Model):
+      bar = AnyAuthUserProperty(auto_current_user=True)
+
+  then an instance f = Foo() will immediately have f.bar equal to the current
+  user, even if it hasn't been "put" to the datastore yet whereas
+
+    class FooNDB(ndb.Model):
+      bar = NdbAnyAuthUserProperty(auto_current_user=True)
+
+  with f = FooNDB() will have f.bar equal to None until the entity has been
+  stored.
+
+  To make the behavior here the same as for db, something similar to
+
+  ('https://github.com/GoogleCloudPlatform/endpoints-proto-datastore/blob'
+   '/511c8ca87d7548b90e9966495e9ebffd5eecab6e/endpoints_proto_datastore/'
+   'ndb/properties.py#L215')
+
+  could be implementated.
+  """
+
+  def _prepare_for_put(self, entity):
+    """Custom hook to prepare the entity for a datastore put.
+
+    If auto_current_user or auto_current_user_add is used, will
+    set the current user using the get_current_user() method from this module.
+
+    Args:
+      entity: A Protobuf entity to store data.
+    """
+    if (self._auto_current_user or
+        (self._auto_current_user_add and not self._has_value(entity))):
+      value = get_current_user()
+      if value is not None:
+        self._store_value(entity, value)
+
+
 def is_current_user_admin():
   """Determines if the current user associated with a request is an admin.
 
