@@ -624,7 +624,7 @@ def download_binary(request):
   return response
 
 
-def update_default_builders(request):
+def update_default_builders(_request):
   """/restricted/update_default_builders - Updates list of default builders."""
   try:
     (successful, failed) = models_chromium.DefaultBuilderList.update()
@@ -678,7 +678,7 @@ def update_tryservers(request):
   return HttpResponse(content, content_type='text/plain')
 
 
-def delete_old_pending_jobs(request):
+def delete_old_pending_jobs(_request):
   """/restricted/delete_old_pending_jobs
 
   Trigger task to delete old pending jobs.

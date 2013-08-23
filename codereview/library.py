@@ -410,7 +410,7 @@ def nicknames(parser, token):
 
 
 @register.tag
-def output_categories_and_builders(parser, token):
+def output_categories_and_builders(_parser, token):
   """Returns the complete category and builders structure."""
   _, categories_to_builders = token.split_contents()
   return CategoriesNode(categories_to_builders)
