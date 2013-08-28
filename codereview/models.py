@@ -343,8 +343,8 @@ class TryJobResult(db.Model):
   FAIL = (FAILURE, EXCEPTION)
   # Define the priority level of result value when updating it.
   PRIORITIES = (
-      (-1, None),
       (TRYPENDING,),
+      (-1, None),
       (RETRY,),
       OK,
       FAIL,
