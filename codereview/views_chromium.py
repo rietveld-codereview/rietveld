@@ -337,6 +337,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
       else:
         logging.info('Result irrelevant: new=%s old=%s %s', result,
                      try_obj.result, keyname)
+        return True
 
       if try_obj.project and try_obj.project != project:
         logging.critical(
