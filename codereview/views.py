@@ -2462,12 +2462,12 @@ def tarball(request):
         add_entry('a/', patch.get_content())  # before
       except FetchError:  # I/O problem?
         logging.exception('tarball: patch(%s, %s).get_content failed' %
-                          (patch.key().id(), patch.filename()))
+                          (patch.key().id(), patch.filename))
     try:
       add_entry('b/', patch.get_patched_content())  # after
     except FetchError:  # file deletion?  I/O problem?
       logging.exception('tarball: patch(%s, %s).get_patched_content failed' %
-                        (patch.key().id(), patch.filename()))
+                        (patch.key().id(), patch.filename))
 
   tar.close()
   temp.flush()
