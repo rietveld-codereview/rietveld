@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Copyright 2011 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +17,11 @@
 
 import datetime
 import json
+import unittest
+
+import setup
+setup.process_args()
+
 
 from django.http import HttpRequest
 
@@ -97,7 +103,7 @@ class TestPublish(TestCase):
 class TestSearch(TestCase):
 
     def setUp(self):
-        """"Create two test issues and users."""
+        """Create two test issues and users."""
         super(TestSearch, self).setUp()
         user = User('bar@example.com')
         models.Account.get_account_for_user(user)
@@ -137,3 +143,182 @@ class TestSearch(TestCase):
                          'application/json; charset=utf-8')
         payload = json.loads(response.content)
         self.assertEqual(len(payload['results']), 1)
+
+
+class TestModifierCount(TestCase):
+    """Test modifier counts for the latest patchset."""
+
+    def line_count(self, lines):
+        if lines == 1:
+            return ''
+        return ",%d", lines
+
+    def makePatch(self, add_lines, remove_lines):
+        patch = (
+            "Index: cc/layers/layer.cc\n"
+            "==============================="
+            "====================================\n"
+            "--- a/cc/layers/layer.cc\n"
+            "+++ b/cc/layers/layer.cc\n"
+            "@@ -905%s +904%s @@"
+            " void Layer::PushPropertiesTo(LayerImpl* layer) {\n") % (
+            (self.line_count(add_lines),
+             self.line_count(remove_lines)))
+        for i in range(0, remove_lines):
+            patch += "-base::Passed(&original_request)));\n"
+        for i in range(0, add_lines):
+            patch += "+base::Passed(&new_request)));\n"
+
+        return patch
+
+    def setUp(self):
+        super(TestModifierCount, self).setUp()
+        self.user = User('foo@example.com')
+        self.login('foo@example.com')
+
+    def test_empty_patch(self):
+        issue = models.Issue(subject="test with 0 lines")
+        issue.local_base = False
+        issue.put()
+        added, removed = views._get_modified_counts(issue)
+        self.assertEqual(0, added)
+        self.assertEqual(0, removed)
+
+    def test_add_patch(self):
+        issue = models.Issue(subject="test with 1 line removed")
+        issue.local_base = False
+        issue.put()
+        ps = models.PatchSet(parent=issue, issue=issue)
+        ps.data = self.makePatch(1, 0)
+        ps.save()
+        patches = engine.ParsePatchSet(ps)
+        db.put(patches)
+        added, removed = views._get_modified_counts(issue)
+        self.assertEqual(1, added)
+        self.assertEqual(0, removed)
+
+    def test_remove_patch(self):
+        issue = models.Issue(subject="test with 1 line removed")
+        issue.local_base = False
+        issue.put()
+        ps = models.PatchSet(parent=issue, issue=issue)
+        ps.data = self.makePatch(0, 1)
+        ps.save()
+        patches = engine.ParsePatchSet(ps)
+        db.put(patches)
+        added, removed = views._get_modified_counts(issue)
+        self.assertEqual(0, added)
+        self.assertEqual(1, removed)
+
+    def test_both_patch(self):
+        issue = models.Issue(subject="test with changes")
+        issue.local_base = False
+        issue.put()
+        ps = models.PatchSet(parent=issue, issue=issue)
+        ps.data = self.makePatch(5, 7)
+        ps.save()
+        patches = engine.ParsePatchSet(ps)
+        db.put(patches)
+        added, removed = views._get_modified_counts(issue)
+        self.assertEqual(5, added)
+        self.assertEqual(7, removed)
+
+
+class TestQualifiers(TestCase):
+    """Test qualifiers for messages."""
+
+    def test_qualifier_unknown(self):
+        s = views._get_qualifier(-10, 0, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A code review of unknown size.")
+        s = views._get_qualifier(0, 0, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A code review of unknown size.")
+
+    def test_qualifier_no_holiday(self):
+        s = views._get_qualifier(1, 0, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A wee code review.")
+        s = views._get_qualifier(0, 1, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A wee code review.")
+        s = views._get_qualifier(2, 0, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A tiny code review.")
+        s = views._get_qualifier(0, 2, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A tiny code review.")
+
+        s = views._get_qualifier(3, 1, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A tiny code review.")
+        s = views._get_qualifier(2, 3, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A small code review.")
+        s = views._get_qualifier(20, 9, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A small code review.")
+        s = views._get_qualifier(10, 20, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A medium-sized code review.")
+        s = views._get_qualifier(90, 9, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A medium-sized code review.")
+        s = views._get_qualifier(10, 90, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A code review.")
+        s = views._get_qualifier(200, 99, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A code review.")
+        s = views._get_qualifier(100, 200, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A large code review.")
+        s = views._get_qualifier(900, 99, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A large code review.")
+        s = views._get_qualifier(100, 900, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A freakin' huge code review.")
+        s = views._get_qualifier(1000, 999, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A freakin' huge code review.")
+        s = views._get_qualifier(1000, 1000, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A Jovian code review.")
+        s = views._get_qualifier(2000, 999, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A Jovian code review.")
+        s = views._get_qualifier(2000, 1000, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A month-long code review.")
+        s = views._get_qualifier(3000, 999, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A month-long code review.")
+        s = views._get_qualifier(0, 4000, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A whopping big code review.")
+        s = views._get_qualifier(4990, 9, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A whopping big code review.")
+        s = views._get_qualifier(5000, 0, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "The mother of all code reviews.")
+        s = views._get_qualifier(9999, 0, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "The mother of all code reviews.")
+        s = views._get_qualifier(0, 10000, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "The grandmother of all code reviews.")
+        s = views._get_qualifier(9999, 10000, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "The grandmother of all code reviews.")
+        s = views._get_qualifier(10000, 10000, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A category 5 code review.")
+        s = views._get_qualifier(50000, 50000, datetime.date(2000, 1, 10))
+        self.assertEqual(s, "A category 5 code review.")
+
+    def test_qualifier_holiday_au(self):
+        s = views._get_qualifier(1, 1, datetime.date(2000, 1, 26))
+        self.assertEqual(s, "A ripper of a code review.")
+
+    def test_qualifier_holiday_ir(self):
+        s = views._get_qualifier(1, 1, datetime.date(2000, 3, 17))
+        self.assertEqual(s, "A code review that's only small.")
+
+    def test_qualifier_holiday_pirate(self):
+        s = views._get_qualifier(1, 1, datetime.date(2000, 9, 19))
+        self.assertEqual(s, "A swig o' code for ye.")
+
+    def test_qualifier_holiday_halloween(self):
+        s = views._get_qualifier(1, 1, datetime.date(2000, 10, 31))
+        self.assertEqual(s, "A mildly dismaying code review.")
+
+        # 13 is special
+        s = views._get_qualifier(6, 6, datetime.date(2000, 10, 31))
+        self.assertEqual(s, "A somewhat disturbing code review.")
+        s = views._get_qualifier(7, 7, datetime.date(2000, 10, 31))
+        self.assertEqual(s, "A somewhat disturbing code review.")
+        s = views._get_qualifier(6, 7, datetime.date(2000, 10, 31))
+        self.assertEqual(
+            s, "Just your bad luck, a somewhat disturbing code review.")
+
+    def test_qualifier_holiday_aprilfool(self):
+        s = views._get_qualifier(1, 1, datetime.date(2000, 4, 1))
+        self.assertEqual(s, "A massive code review.")
+
+
+if __name__ == '__main__':
+  unittest.main()

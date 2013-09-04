@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(ROOT, '..', 'google_appengine'))
 sys.path.append(os.path.join(LIB, 'django-1.3'))
 sys.path.append(os.path.join(LIB, 'fancy_urllib'))
 sys.path.append(os.path.join(LIB, 'simplejson'))
-sys.path.append(os.path.join(LIB, 'webob'))
+sys.path.append(os.path.join(LIB, 'webob-1.2.3'))
 sys.path.append(os.path.join(LIB, 'yaml', 'lib'))
 sys.path.append(ROOT)
 
@@ -65,11 +65,13 @@ def setup_env(app_id, host=None, auth_func=None):
   from google.appengine.api import memcache
   from google.appengine.api.users import User
   from google.appengine.ext import db
+  from google.appengine.ext import ndb
   remote_api_stub.ConfigureRemoteDatastore(
       None, '/_ah/remote_api', auth_func, host)
 
   # Initialize environment.
   os.environ['SERVER_SOFTWARE'] = ''
+  os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
   import appengine_config
 
   # Create shortcuts.

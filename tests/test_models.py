@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Copyright 2012 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +14,12 @@
 # limitations under the License.
 
 """Tests for models functions and helpers."""
+
+import unittest
+
+import setup
+setup.process_args()
+
 
 from codereview.models import Issue
 
@@ -52,3 +59,7 @@ class TestCollaboratorEmailsFromDescription(TestCase):
     collaborators = Issue._collaborator_emails_from_description(
         'Hello world!\nCOLLABORATOR=one@one.com\nCOLLABORATOR=two@two.com')
     self.assertEqual(['one@one.com', 'two@two.com'], collaborators)
+
+
+if __name__ == '__main__':
+  unittest.main()

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Copyright 2013 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +15,12 @@
 
 import json
 import os
+import unittest
 import urllib
+
+import setup
+setup.process_args()
+
 
 from google.appengine.api import oauth
 from google.appengine.api import users
@@ -184,3 +190,7 @@ class TestAuthUtils(TestCase):
     self.oauth_login('oauth@mail.com', is_admin=True)
 
     self.assertTrue(auth_utils.is_current_user_admin())
+
+
+if __name__ == '__main__':
+  unittest.main()

@@ -64,20 +64,23 @@ update_revision:
 	@echo "---[Updating REVISION]---"
 	@echo "$(VERSION_TAG)" >REVISION
 
-update: update_revision mapreduce
+update: update_revision mapreduce update_backend
 	@echo "---[Updating $(APPID)]---"
-	$(APPCFG) $(APPCFG_FLAGS) update . --application $(APPID) --version $(VERSION)
-	$(APPCFG) $(APPCFG_FLAGS) backends update . --application $(APPID) --version $(VERSION)
+	$(APPCFG) $(APPCFG_FLAGS) update . --oauth2 --application $(APPID) --version $(VERSION)
+
+update_backend: update_revision mapreduce
+	@echo "---[Updating backend $(APPID)]---"
+	$(APPCFG) $(APPCFG_FLAGS) backends update . --oauth2 --application $(APPID) --version $(VERSION)
 
 upload: update
 
 deploy: update
 
 update_indexes:
-	$(APPCFG) $(APPCFG_FLAGS) update_indexes .
+	$(APPCFG) $(APPCFG_FLAGS) update_indexes . --oauth2 --application $(APPID)
 
 vacuum_indexes:
-	$(APPCFG) $(APPCFG_FLAGS) vacuum_indexes .
+	$(APPCFG) $(APPCFG_FLAGS) vacuum_indexes . --oauth2 --application $(APPID)
 
 test:
 	$(PYTHON) tests/run_tests.py $(SDK_PATH)

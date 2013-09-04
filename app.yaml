@@ -65,8 +65,8 @@ inbound_services:
 - warmup
 
 builtins:
-- appstats: on
-#- deferred: on
+# To reenable appstats, do not forget to update appengine_config.py too.
+#- appstats: on
 - remote_api: on
 
 libraries:
