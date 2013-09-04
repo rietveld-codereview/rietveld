@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # Copyright 2011 Google Inc.
 #
@@ -12,6 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+import unittest
+
+import setup
+setup.process_args()
+
 
 from email.message import Message
 from email.mime.multipart import MIMEMultipart
@@ -207,3 +214,7 @@ class TestIncomingMail(TestCase):
     views._process_incoming_mail('\r\n'.join(msg), 'reply@example.com')
     imsg = models.Message.all().ancestor(self.issue).get()
     self.assertEqual(imsg.text, u'\ufffd')
+
+
+if __name__ == '__main__':
+  unittest.main()

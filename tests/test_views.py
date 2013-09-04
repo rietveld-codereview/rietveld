@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Copyright 2011 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +17,11 @@
 
 import datetime
 import json
+import unittest
+
+import setup
+setup.process_args()
+
 
 from django.http import HttpRequest
 
@@ -175,8 +181,8 @@ class TestModifierCount(TestCase):
         issue.local_base = False
         issue.put()
         added, removed = views._get_modified_counts(issue)
-        self.assertEqual(0, added);
-        self.assertEqual(0, removed);
+        self.assertEqual(0, added)
+        self.assertEqual(0, removed)
 
     def test_add_patch(self):
         issue = models.Issue(subject="test with 1 line removed")
@@ -188,8 +194,8 @@ class TestModifierCount(TestCase):
         patches = engine.ParsePatchSet(ps)
         db.put(patches)
         added, removed = views._get_modified_counts(issue)
-        self.assertEqual(1, added);
-        self.assertEqual(0, removed);
+        self.assertEqual(1, added)
+        self.assertEqual(0, removed)
 
     def test_remove_patch(self):
         issue = models.Issue(subject="test with 1 line removed")
@@ -201,8 +207,8 @@ class TestModifierCount(TestCase):
         patches = engine.ParsePatchSet(ps)
         db.put(patches)
         added, removed = views._get_modified_counts(issue)
-        self.assertEqual(0, added);
-        self.assertEqual(1, removed);
+        self.assertEqual(0, added)
+        self.assertEqual(1, removed)
 
     def test_both_patch(self):
         issue = models.Issue(subject="test with changes")
@@ -214,8 +220,8 @@ class TestModifierCount(TestCase):
         patches = engine.ParsePatchSet(ps)
         db.put(patches)
         added, removed = views._get_modified_counts(issue)
-        self.assertEqual(5, added);
-        self.assertEqual(7, removed);
+        self.assertEqual(5, added)
+        self.assertEqual(7, removed)
 
 
 class TestQualifiers(TestCase):
@@ -314,4 +320,5 @@ class TestQualifiers(TestCase):
         self.assertEqual(s, "A massive code review.")
 
 
-
+if __name__ == '__main__':
+  unittest.main()
