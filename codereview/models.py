@@ -382,14 +382,20 @@ class Message(db.Model):
   def approval(self):
     """Is True when the message represents an approval of the review."""
     if self._approval is None:
-      self._approval = self.find('lgtm') and not self.find('not lgtm')
+      if self.sender == self.issue.owner.email():
+        self._approval = False
+      else:
+        self._approval = self.find('lgtm') and not self.disapproval
     return self._approval
 
   @property
   def disapproval(self):
     """Is True when the message represents a disapproval of the review."""
     if self._disapproval is None:
-      self._disapproval = self.find('not lgtm')
+      if self.sender == self.issue.owner.email():
+        self._disapproval = False
+      else:
+        self._disapproval = self.find('not lgtm')
     return self._disapproval
 
 
@@ -828,11 +834,15 @@ class Account(db.Model):
     super(Account, self).put()
 
   @classmethod
+  def get_id_for_email(cls, email):
+    return '<%s>' % email
+
+  @classmethod
   def get_account_for_user(cls, user):
     """Get the Account for a user, creating a default one if needed."""
     email = user.email()
     assert email
-    key = '<%s>' % email
+    key = cls.get_id_for_email(email)
     # Since usually the account already exists, first try getting it
     # without the transaction implied by get_or_insert().
     account = cls.get_by_key_name(key)
