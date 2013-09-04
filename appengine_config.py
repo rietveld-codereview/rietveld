@@ -11,7 +11,8 @@ logging.info('Loading %s from %s', __name__, __file__)
 
 # Custom webapp middleware to add Appstats.
 def webapp_add_wsgi_middleware(app):
-  app = recording.appstats_wsgi_middleware(app)
+  # If reenabling appstats, do not forget to reeanble it in app.yaml too.
+  #app = recording.appstats_wsgi_middleware(app)
   return app
 
 # Custom Appstats path normalization.
