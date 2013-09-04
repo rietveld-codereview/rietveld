@@ -3568,6 +3568,163 @@ def _get_draft_details(request, comments):
   return '\n'.join(output)
 
 
+def _get_current_qualifiers(day, month):
+  """Gets the qualifiers for the message subject based on the day.
+
+  Returns a dictionary where keys are thresholds and values are
+  qualifier strings. For each key, the value assigned to it should
+  be used for patchsets with a line change count less than the key.
+
+  If the patchset is equal to or larger than all of the keys, the
+  value for the largest key should be used."""
+  
+  QUALIFIERS = {
+    1: "A code review of unknown size.",
+    2: "A wee code review.",
+    5: "A tiny code review.",
+    30: "A small code review.",
+    100: "A medium-sized code review.",
+    300: "A code review.",
+    1000: "A large code review.",
+    2000: "A freakin' huge code review.",
+    3000: "A Jovian code review.",
+    4000: "A month-long code review.",
+    5000: "A whopping big code review.",
+    10000: "The mother of all code reviews.",
+    20000: "The grandmother of all code reviews.",
+    20001: "A category 5 code review.",
+    }
+
+  QUALIFIERS_AU = {
+    1: "A code review of unknown size.",
+    2: "A mozzie bite of a code review.",
+    5: "A ripper of a code review.",
+    30: "A good on ya mate code review.",
+    100: "A she'll be right code review.",
+    300: "A fair crack of the whip code review.",
+    1000: "A whopper of a code review.",
+    2000: "Crikey! that's a code review.",
+    3000: "Are you right mate? code review.",
+    4000: "Are you fair dinkum? code review.",
+    5000: "You've got to be kidding? code review.",
+    10000: "A two carton code review.",
+    20000: "Two utes worth of code review.",
+    20001: "A bloody ginormous code review.",
+    }
+
+  QUALIFIERS_IR = {
+    1: "A code review of unknown size.",
+    2: "Hardly a code review at all at all.",
+    5: "A code review that's only small.",
+    30: "A bit of an auld code review.",
+    100: "A middlin' code review.",
+    300: "A plain auld code review.",
+    1000: "A large code review.",
+    2000: "A fair auld code review.",
+    3000: "Rakes of code reviewin'.",
+    4000: "A code review into the middle of next week.",
+    5000: "A massive huge code review altogether.",
+    10000: "A code review I wouldn't wish on a dog.",
+    20000: "Code reviewin' that's far too much work to be healthy.",
+    20001: "Begorrah! Tis an unholy brutal code review!",
+    }
+
+  QUALIFIERS_ARRR = {
+    1: "A code review o' size unbeknownst.",
+    2: "A bit o' code not fit fer ballast.",
+    5: "A swig o' code for ye.",
+    30: "Arr, some salty code for yer reviewin'.",
+    100: "Arr! A fathom of code fer reviewin': lest ye be addled.",
+    300: "A code review better 'n the plank.",
+    1000: "Avast! A code review from th' briny deep.",
+    2000: "Shiver me timbers! A hogshead o' code awaites ye.",
+    3000: "Begad! A mighty flagship o' code reviews awaits thee.",
+    4000: "Gangway! This handsome fleet be chock full o' code for reviewin'.",
+    5000: "Blimey! This butt o' code won't fit in yer binnacle, old salt!",
+    10000: "Hard to port! We be in Davy Jones' grip with this code review!",
+    20000: "The most monsterous a'review been seen in a hundred year!",
+    20001: "Abandon ship! the most terrible review a'seen by man!",
+    }
+
+  QUALIFIERS_AAAH = {
+    1: "A code review of vague and mysterious size.",
+    2: "A slightly foreboding code review.",
+    5: "A mildly dismaying code review.",
+
+    # exactly 13 has a prefix
+    13: "A somewhat disturbing code review.",
+    14: "Just your bad luck, a somewhat disturbing code review.",
+    30: "A somewhat disturbing code review.",
+    
+    100: "A moderately creepy code review.",
+    300: "A plainly spooky code review.",
+    1000: "A simply scary code review.",
+    2000: "A hair-raising code review.",
+    3000: "A quite dreadful code review.",
+    4000: "An absolutely terrifying code review.",
+    5000: "A completely horrifying code review.",
+    10000: "An extremely frightening code review.",
+    20000: "An utterly dreadful code review.",
+    20001: "A relentless code review of undying torment.",
+    }
+
+  QUALIFIERS_APR = {
+    1: "A code review of unknown size.",
+    30: "A massive code review.",
+    300: "A gigantic code review.",
+    500: "Confidential! A code review for your eyes only.",
+    1000: "This code review will self destruct in 30 seconds.",
+    2000: "A microscopic code review.",
+    3000: "A tiny little code review.",
+    5000: "A negligible code review.",
+    5001: "An itty-bitty code review.",
+    }
+
+  if month == 1 and day == 26:
+    return QUALIFIERS_AU
+  if month == 3 and day == 17:
+    return QUALIFIERS_IR
+  if month == 4 and day == 1:
+    return QUALIFIERS_APR
+  if month == 9 and day == 19:
+    return QUALIFIERS_ARRR
+  if month == 10 and day == 31:
+    return QUALIFIERS_AAAH
+  return QUALIFIERS
+
+
+def _get_qualifier(modified_count_added,
+                   modified_count_removed,
+                   today=datetime.date.today()):
+  """Returns the qualifier for the message subject line."""
+  qualifiers = _get_current_qualifiers(today.day, today.month)
+
+  modified_count = modified_count_added + modified_count_removed
+
+  ordered_qualifiers = sorted(qualifiers)
+
+  for threshold in ordered_qualifiers:
+    if modified_count < int(threshold):
+      return qualifiers[threshold]
+
+  return qualifiers[ordered_qualifiers[-1]]
+
+
+def _get_modified_counts(issue):
+  """Helper to determine the modified line counts of the latest patch set."""
+  modified_added_count = 0
+  modified_removed_count = 0
+
+  # Count the modified lines in the patchset.
+  patchsets = list(issue.patchset_set.order('created'))
+  if patchsets:
+    for patch in patchsets[-1].patch_set.order('filename'):
+      modified_added_count += patch.num_added
+      modified_removed_count += patch.num_removed
+
+  return modified_added_count, modified_removed_count
+
+
 def _make_message(request, issue, message, comments=None, send_mail=False,
                   draft=None, in_reply_to=None):
   """Helper to create a Message instance and optionally send an email."""
@@ -3647,11 +3804,16 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     reply_to = ', '.join(reply_to)
     description = (issue.description or '').replace('\r\n', '\n')
     home = request.build_absolute_uri(reverse(index))
+    modified_added_count, modified_removed_count = _get_modified_counts(issue)
+    qualifier = _get_qualifier(modified_added_count, modified_removed_count)
     context.update({'reviewer_nicknames': reviewer_nicknames,
                     'cc_nicknames': cc_nicknames,
                     'my_nickname': my_nickname, 'url': url,
                     'message': message, 'details': details,
                     'description': description, 'home': home,
+                    'qualifier': qualifier,
+                    'added_lines' : modified_added_count,
+                    'removed_lines': modified_removed_count,
                     })
     for key, value in context.iteritems():
       if isinstance(value, str):
