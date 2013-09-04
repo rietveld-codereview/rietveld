@@ -484,38 +484,33 @@ class Message(db.Model):
   _approval = None
   _disapproval = None
 
-  def find(self, text):
-    """Returns True when the message says text and is not written by the issue
-    owner.
+  def find(self, text, owner_allowed=False):
+    """Returns True when the message says |text|.
+
+    - Must not be written by the issue owner.
+    - Must contain |text| in a line that doesn't start with '>'.
+    - Must not be commit-bot.
     """
-    # Must not be issue owner.
-    # Must contain text in a line that doesn't start with '>'.
-    # Must not be issue owner not commit-bot.
-    return (
-        self.sender not in (
-          self.issue.owner.email(), 'commit-bot@chromium.org') and
-        any(
-          True for line in self.text.lower().splitlines()
-          if not line.strip().startswith('>') and text in line))
+    if not owner_allowed and self.issue.owner.email() == self.sender:
+      return False
+    if self.sender == 'commit-bot@chromium.org':
+      return False
+    return any(
+        True for line in self.text.lower().splitlines()
+        if not line.strip().startswith('>') and text in line)
 
   @property
   def approval(self):
     """Is True when the message represents an approval of the review."""
     if self._approval is None:
-      if self.sender == self.issue.owner.email():
-        self._approval = False
-      else:
-        self._approval = self.find('lgtm') and not self.disapproval
+      self._approval = self.find('lgtm') and not self.disapproval
     return self._approval
 
   @property
   def disapproval(self):
     """Is True when the message represents a disapproval of the review."""
     if self._disapproval is None:
-      if self.sender == self.issue.owner.email():
-        self._disapproval = False
-      else:
-        self._disapproval = self.find('not lgtm')
+      self._disapproval = self.find('not lgtm')
     return self._disapproval
 
 
