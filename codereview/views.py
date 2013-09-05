@@ -1704,7 +1704,7 @@ def upload_complete(request, patchset_id=None):
       return HttpTextResponse(
           'No patch set exists with that id (%s)' % patchset_id, status=403)
     # Add delta calculation task.
-    taskqueue.add(url=reverse(calculate_delta),
+    taskqueue.add(url=reverse(task_calculate_delta),
                   params={'key': str(patchset.key())},
                   queue_name='deltacalculation')
   else:
@@ -4296,6 +4296,7 @@ def account_delete(_request):
 @login_required
 @xsrf_required
 def migrate_entities(request):
+  """Migrates entities from the specified user to the signed in user."""
   msg = None
   if request.method == 'POST':
     form = MigrateEntitiesForm(request.POST)
@@ -4322,7 +4323,9 @@ def migrate_entities(request):
 
 @post_required
 def task_migrate_entities(request):
-  """/tasks/migrate_entities - Migrates entities from one account to another."""
+  """/restricted/tasks/migrate_entities - Migrates entities from one account to
+  another.
+  """
   kind = request.POST.get('kind')
   old = request.POST.get('old')
   new = request.POST.get('new')
@@ -4555,8 +4558,8 @@ def customized_upload_py(request):
 
 
 @post_required
-def calculate_delta(request):
-  """/calculate_delta - Calculate deltas for a patchset.
+def task_calculate_delta(request):
+  """/restricted/tasks/calculate_delta - Calculate deltas for a patchset.
 
   This URL is called by taskqueue to calculate deltas behind the
   scenes. Returning a HttpResponse with any 2xx status means that the
@@ -4723,7 +4726,8 @@ def oauth2callback(request):
 
 @admin_required
 def set_client_id_and_secret(request):
-  """/admin/set-client-id-and-secret - Allows admin to set Client ID and Secret.
+  """/restricted/set-client-id-and-secret - Allows admin to set Client ID and
+  Secret.
 
   These values, from the Google APIs console, are required to validate
   OAuth 2.0 tokens within auth_utils.py.
