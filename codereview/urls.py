@@ -64,7 +64,6 @@ urlpatterns = patterns(
     (r'^api/(\d+)/(\d+)/draft_comments$', 'api_draft_comments'),
     (r'^tarball/(\d+)/(\d+)$', 'tarball'),
     (r'^user/([^/]+)$', 'show_user'),
-    (r'^user/([^/]+)/block$', 'block_user'),
     (r'^inline_draft$', 'inline_draft'),
     (r'^repos$', 'repos'),
     (r'^repo_new$', 'repo_new'),
@@ -87,9 +86,10 @@ urlpatterns = patterns(
     (r'^get-access-token$', 'get_access_token'),
     (r'^oauth2callback$', 'oauth2callback'),
     # Restricted access.
+    (r'^restricted/set-client-id-and-secret$', 'set_client_id_and_secret'),
     (r'^restricted/tasks/calculate_delta$', 'task_calculate_delta'),
     (r'^restricted/tasks/migrate_entities$', 'task_migrate_entities'),
-    (r'^restricted/set-client-id-and-secret$', 'set_client_id_and_secret'),
+    (r'^restricted/user/([^/]+)/block$', 'block_user'),
     (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
     (r'^_ah/mail/(.*)', 'incoming_mail'),
     )
