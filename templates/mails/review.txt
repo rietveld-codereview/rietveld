@@ -1,4 +1,4 @@
-{%autoescape off%}{{qualifier}} Reviewers: {{reviewer_nicknames}},
+{%autoescape off%}Reviewers: {{reviewer_nicknames}},
 
 {%if message%}Message:
 {{message|wordwrap:"72"}}
@@ -10,7 +10,7 @@
 
 Please review this at {{url}}{%if files%}
 
-Affected files +{{added_lines}}, -{{removed_lines}}:
+Affected files (+{{added_lines}}, -{{removed_lines}} lines):
 {% for file in files %}  {{file}}
 {% endfor %}
 {%endif%}{%if patch%}
