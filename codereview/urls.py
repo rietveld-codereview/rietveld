@@ -80,17 +80,18 @@ urlpatterns = patterns(
     (r'^(\d+)/patchset/(\d+)/delete$', 'delete_patchset'),
     (r'^account$', 'account'),
     (r'^use_uploadpy$', 'use_uploadpy'),
-    (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
-    (r'^_ah/mail/(.*)', 'incoming_mail'),
     (r'^xsrf_token$', 'xsrf_token'),
     # patching upload.py on the fly
     (r'^static/upload.py$', 'customized_upload_py'),
     (r'^search$', 'search'),
-    (r'^tasks/calculate_delta$', 'calculate_delta'),
-    (r'^tasks/migrate_entities$', 'task_migrate_entities'),
     (r'^get-access-token$', 'get_access_token'),
     (r'^oauth2callback$', 'oauth2callback'),
-    (r'^admin/set-client-id-and-secret$', 'set_client_id_and_secret'),
+    # Restricted access.
+    (r'^restricted/tasks/calculate_delta$', 'task_calculate_delta'),
+    (r'^restricted/tasks/migrate_entities$', 'task_migrate_entities'),
+    (r'^restricted/set-client-id-and-secret$', 'set_client_id_and_secret'),
+    (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
+    (r'^_ah/mail/(.*)', 'incoming_mail'),
     )
 
 feed_dict = {
