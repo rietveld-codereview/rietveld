@@ -36,12 +36,8 @@ handlers:
   static_dir: static
 #  secure: always
 
-# URL of schedules tasks.  See cron.yaml.
+# Admin-only URLs like tasks or cron jobs. See cron.yaml and queue.yaml.
 - url: /restricted/.*
-  script: main.application
-  login: admin
-
-- url: /tasks/migrate_entities
   script: main.application
   login: admin
 
@@ -57,7 +53,7 @@ handlers:
 admin_console:
   pages:
   - name: Client ID and Secret Settings
-    url: /admin/set-client-id-and-secret
+    url: /restricted/set-client-id-and-secret
 
 inbound_services:
 - mail
