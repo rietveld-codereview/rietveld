@@ -3568,6 +3568,21 @@ def _get_draft_details(request, comments):
   return '\n'.join(output)
 
 
+def _get_modified_counts(issue):
+  """Helper to determine the modified line counts of the latest patch set."""
+  modified_added_count = 0
+  modified_removed_count = 0
+
+  # Count the modified lines in the patchset.
+  patchsets = list(issue.patchset_set.order('created'))
+  if patchsets:
+    for patch in patchsets[-1].patch_set.order('filename'):
+      modified_added_count += patch.num_added
+      modified_removed_count += patch.num_removed
+
+  return modified_added_count, modified_removed_count
+
+
 def _make_message(request, issue, message, comments=None, send_mail=False,
                   draft=None, in_reply_to=None):
   """Helper to create a Message instance and optionally send an email."""
