@@ -52,13 +52,13 @@ serve: update_revision
 	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) .
 
 serve_remote: update_revision
-	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) --address 0.0.0.0 .
+	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) --host 0.0.0.0  --admin_host 0.0.0.0 .
 
 serve_email: update_revision
 	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) --enable_sendmail .
 
 serve_remote_email: update_revision
-	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) --enable_sendmail --address 0.0.0.0 .
+	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) --enable_sendmail --host 0.0.0.0 --admin_host 0.0.0.0 .
 
 update_revision:
 	@echo "---[Updating REVISION]---"
