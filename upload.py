@@ -1612,10 +1612,10 @@ class GitVCS(VersionControlSystem):
                       silent_ok=True)
     return status.splitlines()
 
-  def GetFileContent(self, file_hash, is_binary):
+  def GetFileContent(self, file_hash):
     """Returns the content of a file identified by its git hash."""
     data, retcode = RunShellWithReturnCode(["git", "show", file_hash],
-                                            universal_newlines=not is_binary)
+                                            universal_newlines=False)
     if retcode:
       ErrorExit("Got error status from 'git show %s'" % file_hash)
     return data
@@ -1640,18 +1640,22 @@ class GitVCS(VersionControlSystem):
     else:
       status = "M"
 
-    is_image = self.IsImage(filename)
-    is_binary = self.IsBinaryData(base_content) or is_image
-
     # Grab the before/after content if we need it.
     # Grab the base content if we don't have it already.
     if base_content is None and hash_before:
-      base_content = self.GetFileContent(hash_before, is_binary)
+      base_content = self.GetFileContent(hash_before)
+
+    is_binary = self.IsImage(filename)
+    if base_content:
+      is_binary = is_binary or self.IsBinaryData(base_content)
+
     # Only include the "after" file if it's an image; otherwise it
     # it is reconstructed from the diff.
-    if is_image and hash_after:
-      new_content = self.GetFileContent(hash_after, is_binary)
-
+    if hash_after:
+      new_content = self.GetFileContent(hash_after)
+      is_binary = is_binary or self.IsBinaryData(new_content)
+      if not is_binary:
+        new_content = None
     return (base_content, new_content, is_binary, status)
 
 
