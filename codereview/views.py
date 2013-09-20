@@ -2050,6 +2050,8 @@ def _get_patchset_info(request, patchset_id):
     patchset.n_drafts = sum(c.ps_key == patchset.key() for c in drafts)
     patchset.patches = None
     patchset.parsed_patches = None
+    patchset.total_added = 0
+    patchset.total_removed = 0
     if patchset_id == patchset.key().id():
       patchset.patches = list(patchset.patch_set.order('filename'))
       try:
@@ -2111,6 +2113,9 @@ def _get_patchset_info(request, patchset_id):
               logging.error(
                   'Issue %d: %d is missing from %s',
                   issue.key().id(), delta, patchset_id_mapping)
+          if not patch.is_binary:
+            patchset.total_added += patch.num_added
+            patchset.total_removed += patch.num_removed
       except DeadlineExceededError:
         logging.exception('DeadlineExceededError in _get_patchset_info')
         if attempt > 2:
