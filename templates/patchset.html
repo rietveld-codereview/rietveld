@@ -40,7 +40,7 @@
       <th>Unified diffs</th>
       <th>Side-by-side diffs</th>
       <th>Delta from patch set</th>
-      <th colspan="3">Stats</th>
+      <th colspan="3">Stats <font style='font-weight: normal'>(<i>+{{patchset.total_added}} line{{patchset.total_added|pluralize}}, -{{patchset.total_removed}} line{{patchset.total_removed|pluralize}}</i>)</font></th>
       <th>Patch</th>
     </tr>
 
@@ -67,8 +67,12 @@
              title="Delta from patch set {{delta.0}}">{{delta.0}}</a>
         {%endfor%}
         </td>
-        <td style="white-space: nowrap">{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
-        <td style="white-space: nowrap">+{{patch.num_added}} line{{patch.num_added|pluralize}}, -{{patch.num_removed}} line{{patch.num_removed|pluralize}}</td>
+        {%if patch.is_binary%}
+          <td style="white-space: nowrap" colspan="2"><i>Binary file</i></td>
+        {%else%}
+          <td style="white-space: nowrap">{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
+          <td style="white-space: nowrap">+{{patch.num_added}} line{{patch.num_added|pluralize}}, -{{patch.num_removed}} line{{patch.num_removed|pluralize}}</td>
+        {%endif%}
         <td style="white-space: nowrap">
           {%if patch.num_comments or patch.num_drafts%}<b>{%endif%}
             {{patch.num_comments}} comment{{patch.num_comments|pluralize}}
