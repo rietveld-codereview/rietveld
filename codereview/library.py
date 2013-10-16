@@ -15,6 +15,7 @@
 """Django template library for Rietveld."""
 
 import cgi
+import math
 
 from google.appengine.api import memcache
 from google.appengine.api import users
@@ -301,3 +302,32 @@ def num_drafts(issue, user):
   :returns: Drafts for given object.
   """
   return issue.get_num_drafts(user)
+
+
+@register.filter
+def format_duration(seconds):
+  """Convert a number of seconds into human readable compact string."""
+  if not seconds:
+    return seconds
+  seconds = int(seconds)
+  prefix = ''
+  if seconds < 0:
+    prefix = '-'
+    seconds = -seconds
+  minutes = math.floor(seconds / 60)
+  seconds -= minutes * 60
+  hours = math.floor(minutes / 60)
+  minutes -= hours * 60
+  days = math.floor(hours / 24)
+  hours -= days * 24
+  out = []
+  if days > 0:
+    out.append('%dd' % days)
+  if hours > 0 or days > 0:
+    out.append('%02dh' % hours)
+  if minutes > 0 or hours > 0 or days > 0:
+    out.append('%02dm' % minutes)
+  if seconds > 0 and not out:
+    # Skip seconds unless there's only seconds.
+    out.append('%02ds' % seconds)
+  return prefix + ''.join(out).lstrip('0')

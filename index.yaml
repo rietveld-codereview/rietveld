@@ -26,6 +26,16 @@ indexes:
   - name: blocked
   - name: lower_nickname
 
+- kind: AccountStatsDay
+  properties:
+  - name: name
+  - name: score
+
+- kind: AccountStatsMulti
+  properties:
+  - name: name
+  - name: score
+
 - kind: Comment
   properties:
   - name: draft
@@ -179,6 +189,11 @@ indexes:
   - name: issue
   - name: date
     direction: desc
+
+- kind: Message
+  ancestor: yes
+  properties:
+  - name: date
 
 - kind: Patch
   properties:

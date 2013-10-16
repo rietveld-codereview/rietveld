@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import calendar
+import datetime
 """App Engine data model (schema) definition for Rietveld."""
 
 import itertools
@@ -20,12 +22,14 @@ import logging
 import md5
 import os
 import re
+import sys
 import time
 
 from google.appengine.api import memcache
 from google.appengine.api import urlfetch
-from google.appengine.ext import db
 from google.appengine.api.users import User
+from google.appengine.ext import db
+from google.appengine.ext import ndb
 
 from django.conf import settings
 
@@ -1051,3 +1055,355 @@ class Account(db.Model):
     when = int(time.time()) // 3600 + offset
     m.update(str(when))
     return m.hexdigest()
+
+
+### Statistics ###
+
+
+def compute_score(stats):
+  """Calculates the score used for the leaderboard.
+
+  If this function is changed, every AccountStats* must be stored again to
+  update the score. Lower, the better.
+
+  If this function is updated, also update the legend in
+  templates/leaderboard.html.
+  """
+  score = stats.median_latency
+  if score is None:
+    return AccountStatsBase.NULL_SCORE
+  # - Penalize people who do not respond to their reviews.
+  # - People without any lgtm have a bonus +100 score downgrade.
+  value = float(score) / stats.nb_reviewed / stats.percent_reviewed
+  if not stats.nb_lgtmed:
+    value += 100
+  return value
+
+
+class AccountStatsBase(ndb.Model):
+  """Base class for Statistics for a single user covering a specific time span.
+
+  Parent is always the corresponding Account.
+
+  There's 3 types of entity types:
+  1. Single day summary. AccountStatsDay. Key name is 'YYYY-MM-DD'.
+  2. Single month summary. AccountStatsMulti. Key name is 'YYYY-MM'.
+  3. 'XX last days' rolling summary. AccountStatsMulti. Key name is the string
+     'XX'.
+
+  The statistics encompass all the reviews WHERE THE INITIAL EMAIL WAS SENT IN
+  THE DAY. This is important, it's not 'when the issue was created' neither when
+  the reviewer woke up. This means finally reviewing a week old CL will worsen
+  your score of last week. This could create a bad incentive, but if you punted
+  on a review for a week, the author already hates you anyway.
+
+  WARNING: entities can be updated several days after the day they represent, as
+  stated in the previous paragraph.
+
+  CLs where no message was ever sent are not considered, since the date is
+  pinned on the first message.
+
+  Users that never created an Issue are not considered. See
+  views.figure_out_real_accounts().
+
+  In each case, the entity won't exist if the user had no activity, so the
+  number of entities scales linearly with the activty going on. More
+  specifically for the rolling summary, the entity will only exist if the user
+  had activity in the past XX days, as it will be deleted otherwise on the next
+  cron job run.
+
+  This entity is written by a cron job once per day per account that had
+  activity, so it doesn't need to be updated in a transaction, reducing the
+  strain on the datastore. By precomputing the rolling summary, it makes
+  displaying the leaderboard seamless performance-wise.
+  """
+  # These values are types of review where no latency can be calculated:
+  # - NORMAL (1): A normal code review.
+  # - IGNORED (2): The reviewer hasn't reviewed yet.
+  # - DRIVE_BY (3): The reviewer sent a comment while not being on the reviewer
+  #                 list before commenting.
+  # - NOT_REQUESTED (4): A reviewer commented on an Issue before the author
+  #                      published a request for review, so no latency can be
+  #                      calculated.
+  # - OUTGOING (5): Set for the issue author so he can track how many CLs he
+  #                 sent.
+  NORMAL, IGNORED, DRIVE_BY, NOT_REQUESTED, OUTGOING = range(1, 6)
+  REVIEW_TYPES = [
+    None,
+    'normal',
+    'ignored',
+    'drive-by',
+    'not requested',
+    'outgoing',
+  ]
+
+  # Store this value instead of None when the score would be None. Must be a
+  # float.
+  NULL_SCORE = sys.float_info.max
+
+  # Saved so incomplete cronjob/taskqueue execution can be safely recovered.
+  modified = ndb.DateTimeProperty(auto_now=True)
+
+  # Issues. The actual issues considered. Must be non-empty.
+  issues = ndb.IntegerProperty(repeated=True)
+  # Latencies. List of "request to review" latencies in seconds. Must be in the
+  # same order than issues. Issues not reviewed are to be set to < 0.
+  latencies = ndb.IntegerProperty(repeated=True)
+  # Number of LGTMs for each issue in .issues.
+  lgtms = ndb.IntegerProperty(repeated=True)
+  # Type of review. Must be one of NORMAL, IGNORED, NOT_REQUESTED, OUTGOING.
+  review_types = ndb.IntegerProperty(repeated=True)
+
+  # Computed properties.
+
+  # The same value as .key.id(). Used to do a quick search for every
+  # instances for a specific day, month or rolling summary for the leaderboard.
+  name = ndb.ComputedProperty(lambda x: x.key.id())
+  # Used for the leaderboard. Do not use ComputeProperty() so
+  # task_refresh_all_stats_score can determine if the entity needs to be saved
+  # again or not.
+  score = ndb.FloatProperty(default=NULL_SCORE)
+
+  @property
+  def nb_reviewed(self):
+    """Total reviews requests where the user replied where a latency can be
+    calculated.
+    """
+    return sum(
+        self.review_types[i] != self.OUTGOING and self.latencies[i] >= 0
+        for i in xrange(len(self.issues)))
+
+  @property
+  def nb_ignored(self):
+    """Number of issues the user didn't review yet but should."""
+    return sum(r == self.IGNORED for r in self.review_types)
+
+  @property
+  def nb_issues(self):
+    """Number of issues either reviewed or ignored excluding outgoing issues."""
+    return sum(r != self.OUTGOING for r in self.review_types)
+
+  @property
+  def nb_lgtmed(self):
+    """Number of issues LGTMed."""
+    return sum(
+        self.review_types[i] != self.OUTGOING and self.lgtms[i] > 0
+        for i in xrange(len(self.issues)))
+
+  @property
+  def nb_drive_by(self):
+    """Number of issues that got a drive by by this user, e.g. the user never
+    got a formal issue review request.
+    """
+    return sum(r == self.DRIVE_BY for r in self.review_types)
+
+  @property
+  def nb_not_requested(self):
+    """Number of issues where the reviewer sent his comments without the author
+    even asking for a review. This can happen if the author asked for a review
+    out of band, like by IM.
+    """
+    return sum(r == self.NOT_REQUESTED for r in self.review_types)
+
+  @property
+  def nb_outgoing(self):
+    """Number of issues the user sent."""
+    return sum(r == self.OUTGOING for r in self.review_types)
+
+  @property
+  def self_love(self):
+    """How much the user likes to auto-congratulate himself on his own reviews.
+    """
+    # self.self_love + self.nb_lgtmed == sum(l > 0 for l in self.lgtms[i])
+    return sum(
+        self.review_types[i] == self.OUTGOING and self.lgtms[i] > 0
+        for i in xrange(len(self.issues)))
+
+  @property
+  def latencies_sorted(self):
+    return sorted(self.latencies)
+
+  @property
+  def median_latency(self):
+    """Calculates the median latency to store in the datastore."""
+    latencies = sorted(l for l in self.latencies if l >= 0)
+    if not latencies:
+      return None
+    length = len(latencies)
+    if (length & 1) == 0:
+      return (latencies[length/2] + latencies[length/2-1]) / 2.
+    else:
+      return latencies[length/2]
+
+  @property
+  def average_latency(self):
+    """The average review latency.
+
+    The average is much less useful than the median, since the distribution is
+    more Poisson-like than a bell curve.
+    """
+    latencies = [l for l in self.latencies if l >= 0]
+    if not latencies:
+      return None
+    return sum(latencies) / float(len(latencies))
+
+  @property
+  def percent_reviewed(self):
+    """Percentage of issues reviewed out of total incoming issues."""
+    if not self.nb_issues:
+      return 0
+    return self.nb_reviewed * 100. / self.nb_issues
+
+  @property
+  def percent_lgtm(self):
+    """Percentage of issues LGTMed out of total incoming issues."""
+    if not self.nb_issues:
+      return 0
+    return self.nb_lgtmed * 100. / self.nb_issues
+
+  @property
+  def user(self):
+    """Returns the corresponding Account key: the user's email address."""
+    return self.key.parent().id()[1:-1]
+
+  @property
+  def user_short(self):
+    """Strips the last part of domain off |.user| to save space."""
+    return self.key.parent().id()[1:-1].rsplit('.', 1)[0]
+
+  def _pre_put_hook(self):
+    """Updates the score before saving."""
+    # Save headaches and asserts internal consistency. This code can be
+    # commented out once its is known to work.
+    assert (
+        len(self.issues) == len(self.lgtms) == len(self.latencies) ==
+        len(self.review_types)), str(self)
+    assert all(i >= 0 for i in self.lgtms), str(self)
+    assert all(i >= -1 for i in self.latencies), str(self)
+    assert all(self.NORMAL <= i <= self.OUTGOING for i in self.review_types), (
+        str(self))
+    for i in xrange(len(self.issues)):
+      r = self.review_types[i]
+      lg = self.lgtms[i]
+      la = self.latencies[i]
+      assert not (lg and r == self.IGNORED), str(self)
+      if la >= 0:
+        assert r in (self.NORMAL, self.DRIVE_BY, self.NOT_REQUESTED), str(self)
+      else:
+        assert r in (self.IGNORED, self.OUTGOING), str(self)
+
+    # Always recalculate the score.
+    self.score = compute_score(self)
+
+  def to_dict(self):
+    out = super(AccountStatsBase, self).to_dict()
+    del out['modified']
+    return out
+
+
+class AccountStatsDay(AccountStatsBase):
+  """Statistics for a single day.
+
+  Using a separate entity type for summaries saves an index.
+  """
+  days = 1
+
+
+class AccountStatsMulti(AccountStatsBase):
+  # Cache the number of days covered by this entity.
+  _days = None
+
+  @property
+  def days(self):
+    """Number of days covered by this entity.
+
+    Guaranteed to be >=1.
+    """
+    if not self._days:
+      if self.name.isdigit():
+        # It is a rolling summary.
+        self._days = int(self.name)
+      else:
+        quarter = quarter_to_months(self.name)
+        if not quarter:
+          # It's a month.
+          year, month = self.name.split('-', 1)
+          self._days = calendar.monthrange(int(year), int(month))[1]
+        else:
+          self._days = sum(
+              calendar.monthrange(map(int, i.split('-')))[1] for i in quarter)
+    return self._days
+
+  @property
+  def per_day_reviews_received(self):
+    """Average number of issues incoming per day."""
+    return float(self.nb_issues) / self.days
+
+  @property
+  def per_day_reviews_done(self):
+    """Average number of reviews done per day.
+
+    Including drive bys, unrequested and self reviews.
+    """
+    return float(self.nb_reviewed) / self.days
+
+
+def quarter_to_months(when):
+  """Manually handles the form 'YYYY-QX'."""
+  quarter = re.match(r'^(\d\d\d\d-)[qQ]([1-4])$', when)
+  if not quarter:
+    return None
+  prefix = quarter.group(1)
+  # Convert the quarter into 3 months group.
+  base = (int(quarter.group(2)) - 1) * 4 + 1
+  return ['%s%02d' % (prefix, i) for i in range(base, base+3)]
+
+
+def verify_account_statistics_name(name):
+  """Returns True if the key name is valid for an entity."""
+  if name.isdigit():
+    # Only allows 30 rolling days for now.
+    return name == '30'
+
+  if not re.match(r'^\d\d\d\d-\d\d(|-\d\d)$', name):
+    return False
+  # At that point, it's guaranteed to be somewhat date formed. Validate it's a
+  # valid calendar day or month.
+  parts = map(int, name.split('-'))
+  # Accept only years [2008-current].
+  if parts[0] > datetime.date.today().year or parts[0] < 2008:
+    return False
+
+  try:
+    # Verify the calendar date.
+    if len(parts) == 3:
+      datetime.date(*parts)
+    else:
+      datetime.date(*parts, day=1)
+    return True
+  except ValueError:
+    return False
+
+
+def sum_account_statistics(out, items):
+  """Updates |out| entity with the sum of all |items|.
+
+  Returns True if the entity changed, False if the same values were calculated.
+  In that case, it's not necessary to save the entity back in the datastore,
+  it's unchanged.
+  """
+  prev_issues = out.issues
+  prev_latencies = out.latencies
+  prev_lgtms = out.lgtms
+  prev_review_types = out.review_types
+
+  out.issues = sum((i.issues for i in items), [])
+  out.latencies = sum((i.latencies for i in items), [])
+  out.lgtms = sum((i.lgtms for i in items), [])
+  out.review_types = sum((i.review_types for i in items), [])
+  out.score = compute_score(out)
+  return (
+      prev_issues != out.issues or
+      prev_latencies != out.latencies or
+      prev_lgtms != out.lgtms or
+      prev_review_types != out.review_types)
