@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import calendar
-import functools
 """Views for Rietveld."""
 
 import binascii
+import calendar
 import cgi
 import datetime
 import email  # see incoming_mail()
 import email.utils
+import functools
 import itertools
 import json
 import logging
