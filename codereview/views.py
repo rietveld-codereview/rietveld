@@ -709,7 +709,7 @@ def _notify_issue(request, issue, message):
 
   Args:
     request: The request object.
-    issue: Issue whose owner, reviewers, CC are to be notified.
+    issue: Issue whose owner and reviewers are to be notified.
     message: Text of message to send, e.g. 'Created'.
 
   The current user and the issue's subject and URL are appended to the message.
@@ -722,8 +722,6 @@ def _notify_issue(request, issue, message):
   emails.add(issue.owner.email())
   if issue.reviewers:
     emails.update(issue.reviewers)
-  if issue.cc:
-    emails.update(issue.cc)
   if request.user:
     # Do not XMPP the person who made the rietveld modifications.
     # See https://code.google.com/p/rietveld/issues/detail?id=401.
@@ -2434,13 +2432,6 @@ def edit(request):
       db.run_in_transaction(_delete_cached_contents, list(patchset.patch_set))
   issue.calculate_updates_for()
   issue.put()
-  if issue.closed == was_closed:
-    message = 'Edited'
-  elif issue.closed:
-    message = 'Closed'
-  else:
-    message = 'Reopened'
-  _notify_issue(request, issue, message)
 
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
@@ -2485,7 +2476,6 @@ def delete(request):
               models.Message, models.Content, models.TryJobResult]:
     tbd += cls.gql('WHERE ANCESTOR IS :1', issue)
   db.delete(tbd)
-  _notify_issue(request, issue, 'Deleted')
   return HttpResponseRedirect(reverse(mine))
 
 
@@ -2508,7 +2498,6 @@ def delete_patchset(request):
         if ps_id in patch.delta:
           patches.append(patch)
   db.run_in_transaction(_patchset_delete, ps_delete, patches)
-  _notify_issue(request, issue, 'Patchset deleted')
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
@@ -2546,7 +2535,6 @@ def close(request):
     if new_description:
       issue.description = new_description
   issue.put()
-  _notify_issue(request, issue, 'Closed')
   return HttpTextResponse('Closed')
 
 
@@ -2660,7 +2648,6 @@ def description(request):
   issue = request.issue
   issue.description = request.POST.get('description')
   issue.put()
-  _notify_issue(request, issue, 'Changed')
   return HttpTextResponse('')
 
 
@@ -2698,7 +2685,6 @@ def fields(request):
   if 'subject' in fields:
     issue.subject = fields['subject']
   issue.put()
-  _notify_issue(request, issue, 'Changed')
   return HttpTextResponse('')
 
 
