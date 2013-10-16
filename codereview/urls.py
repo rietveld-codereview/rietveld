@@ -17,12 +17,22 @@
 # NOTE: Must import *, since Django looks for things here, e.g. handler500.
 from django.conf.urls.defaults import *
 import django.views.defaults
+from django.views.generic.simple import redirect_to
 
 from codereview import feeds
 
 urlpatterns = patterns(
     'codereview.views',
     (r'^$', 'index'),
+
+    (r'^leaderboard/?$', redirect_to, {'url': '/leaderboard/30'}),
+    (r'^leaderboard_json/(.+)$', 'leaderboard_json'),
+    (r'^leaderboard/(.+)$', 'leaderboard'),
+    (r'^user/(?P<user>[^/]+)/stats/?$', redirect_to,
+        {'url': '/user/%(user)s/stats/30'}),
+    (r'^user/([^/]+)/stats/([^/]+)$', 'show_user_stats'),
+    (r'^user/([^/]+)/stats_json/([^/]+)$', 'show_user_stats_json'),
+
     (r'^all$', 'view_all'),
     (r'^mine$', 'mine'),
     (r'^starred$', 'starred'),
@@ -77,6 +87,14 @@ urlpatterns = patterns(
     (r'^user_popup/(.+)$', 'user_popup'),
     (r'^(\d+)/patchset/(\d+)$', 'patchset'),
     (r'^(\d+)/patchset/(\d+)/delete$', 'delete_patchset'),
+
+    (r'^restricted/cron/update_yesterday_stats$',
+        'cron_update_yesterday_stats'),
+    (r'^restricted/tasks/refresh_all_stats_score$',
+        'task_refresh_all_stats_score'),
+    (r'^restricted/tasks/update_stats$', 'task_update_stats'),
+    (r'^restricted/update_stats$', 'update_stats'),
+
     (r'^account$', 'account'),
     (r'^use_uploadpy$', 'use_uploadpy'),
     (r'^xsrf_token$', 'xsrf_token'),

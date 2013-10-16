@@ -33,22 +33,17 @@ class TestCase(_TestCase):
   """
 
   def _fixture_setup(self):  # defined in django.test.TestCase
-    pass
-
-  def _fixture_teardown(self):  # defined in django.test.TestCase
-    pass
-
-  def setUp(self):
-    super(TestCase, self).setUp()
     self.testbed = testbed.Testbed()
     self.testbed.activate()
     self.testbed.init_memcache_stub()
     self.testbed.init_datastore_v3_stub()
     self.testbed.init_user_stub()
 
-  def tearDown(self):
+  def _fixture_teardown(self):  # defined in django.test.TestCase
     self.testbed.deactivate()
-    super(TestCase, self).tearDown()
+
+  def tearDown(self):
+    THIS_IS_NOT_CALLED_GO_FIGURE
 
   def login(self, email):
     """Logs in a user identified by email."""

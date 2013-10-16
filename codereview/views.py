@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import calendar
+import functools
 """Views for Rietveld."""
-
 
 import binascii
 import cgi
@@ -30,6 +31,7 @@ import random
 import re
 import tarfile
 import tempfile
+import time
 import urllib
 from cStringIO import StringIO
 from xml.etree import ElementTree
@@ -37,17 +39,19 @@ from xml.etree import ElementTree
 from google.appengine.api import mail
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
-from google.appengine.api import users
 from google.appengine.api import urlfetch
+from google.appengine.api import users
 from google.appengine.api import xmpp
+from google.appengine.datastore import datastore_query
 from google.appengine.ext import db
+from google.appengine.ext import ndb
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.runtime import apiproxy_errors
 
 from django import forms
 # Import settings as django_settings to avoid name conflict with settings().
 from django.conf import settings as django_settings
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
 from django.shortcuts import render_to_response
 import django.template
 from django.template import RequestContext
@@ -599,6 +603,13 @@ class ClientIDAndSecretForm(forms.Form):
   additional_client_ids = StringListField()
 
 
+class UpdateStatsForm(forms.Form):
+  tasks_to_trigger = forms.CharField(
+      required=True, max_length=2000,
+      help_text='Coma separated items.',
+      widget=forms.TextInput(attrs={'size': '100'}))
+
+
 ### Exceptions ###
 
 
@@ -754,6 +765,10 @@ def _notify_issue(request, issue, message):
       return False
 
 
+def format_header(head):
+  return ('http_' + head).replace('-', '_').upper()
+
+
 class HttpTextResponse(HttpResponse):
   def __init__(self, *args, **kwargs):
     kwargs['content_type'] = 'text/plain; charset=utf-8'
@@ -853,6 +868,25 @@ def admin_required(func):
     return func(request, *args, **kwds)
 
   return admin_wrapper
+
+
+def task_queue_required(name):
+  """Returns a function decorator for a task queue named |name|."""
+
+  def decorate_task_queue(func):
+
+    @functools.wraps(func)
+    @post_required
+    def task_queue_wrapper(request, *args, **kwargs):
+      actual = request.META.get(format_header('X-AppEngine-QueueName'))
+      if actual != name:
+        logging.error('Task queue name doesn\'t match; %s != %s', actual, name)
+        return HttpTextResponse('Can only be run as a task queue.', status=403)
+      return func(request, *args, **kwargs)
+
+    return task_queue_wrapper
+
+  return decorate_task_queue
 
 
 def issue_required(func):
@@ -2095,6 +2129,8 @@ def _get_patchset_info(request, patchset_id):
     patchset.n_drafts = sum(c.ps_key == patchset.key() for c in drafts)
     patchset.patches = None
     patchset.parsed_patches = None
+    patchset.total_added = 0
+    patchset.total_removed = 0
     if patchset_id == patchset.key().id():
       patchset.patches = list(patchset.patch_set.order('filename'))
       # Reorder the list of patches to put .h files before .cc.
@@ -2158,6 +2194,9 @@ def _get_patchset_info(request, patchset_id):
               logging.error(
                   'Issue %d: %d is missing from %s',
                   issue.key().id(), delta, patchset_id_mapping)
+          if not patch.is_binary:
+            patchset.total_added += patch.num_added
+            patchset.total_removed += patch.num_removed
       except DeadlineExceededError:
         logging.exception('DeadlineExceededError in _get_patchset_info')
         if attempt > 2:
@@ -2739,8 +2778,8 @@ def _issue_as_dict(issue, messages, request=None):
     'commit': issue.commit,
   }
   if messages:
-    values['messages'] = [
-      {
+    values['messages'] = sorted(
+      ({
         'sender': m.sender,
         'recipients': m.recipients,
         'date': str(m.date),
@@ -2748,8 +2787,8 @@ def _issue_as_dict(issue, messages, request=None):
         'approval': m.approval,
         'disapproval': m.disapproval,
       }
-      for m in models.Message.gql('WHERE ANCESTOR IS :1', issue)
-    ]
+      for m in models.Message.gql('WHERE ANCESTOR IS :1', issue)),
+      key=lambda x: x['date'])
   return values
 
 
@@ -4310,7 +4349,8 @@ def migrate_entities(request):
         taskqueue.add(url=reverse(task_migrate_entities),
                       params={'kind': kind,
                               'old': old_account_key,
-                              'new': new_account_key})
+                              'new': new_account_key},
+                      queue_name='migrate-entities')
       msg = (u'Migration job started. The issues, repositories and branches'
              u' created with your old account (%s) will be moved to your'
              u' current account (%s) in a background task and should'
@@ -4321,7 +4361,7 @@ def migrate_entities(request):
   return respond(request, 'migrate_entities.html', {'form': form, 'msg': msg})
 
 
-@post_required
+@task_queue_required('migrate-entities')
 def task_migrate_entities(request):
   """/restricted/tasks/migrate_entities - Migrates entities from one account to
   another.
@@ -4359,7 +4399,8 @@ def task_migrate_entities(request):
     db.put(tbd)
     taskqueue.add(url=reverse(task_migrate_entities),
                   params={'kind': kind, 'old': old, 'new': new,
-                          'key': str(tbd[-1].key())})
+                          'key': str(tbd[-1].key())},
+                  queue_name='migrate-entities')
   return HttpResponse()
 
 
@@ -4557,7 +4598,7 @@ def customized_upload_py(request):
   return HttpResponse(source, content_type='text/x-python; charset=utf-8')
 
 
-@post_required
+@task_queue_required('deltacalculation')
 def task_calculate_delta(request):
   """/restricted/tasks/calculate_delta - Calculate deltas for a patchset.
 
@@ -4744,3 +4785,1013 @@ def set_client_id_and_secret(request):
   else:
     form = ClientIDAndSecretForm()
     return respond(request, 'set_client_id_and_secret.html', {'form': form})
+
+
+### Statistics.
+
+
+DATE_FORMAT = '%Y-%m-%d'
+
+
+def update_stats(request):
+  """Endpoint that will trigger a taskqueue to update the score of all
+  AccountStatsBase derived entities.
+  """
+  if IS_DEV:
+    # Sadly, there is no way to know the admin port.
+    dashboard = 'http://%s:8000/taskqueue' % os.environ['SERVER_NAME']
+  else:
+    # Do not use app_identity.get_application_id() since we need the 's~'.
+    appid = os.environ['APPLICATION_ID']
+    versionid = os.environ['CURRENT_VERSION_ID']
+    dashboard = (
+        'https://appengine.google.com/queues?queue_name=update-stats&'
+        'app_id=%s&version_id=%s&' % (appid, versionid))
+  msg = ''
+  if request.method != 'POST':
+    form = UpdateStatsForm()
+    return respond(
+        request,
+        'admin_update_stats.html',
+        {'form': form, 'dashboard': dashboard, 'msg': msg})
+
+  form = UpdateStatsForm(request.POST)
+  if not form.is_valid():
+    form = UpdateStatsForm()
+    msg = 'Invalid form data.'
+    return respond(
+        request,
+        'admin_update_stats.html',
+        {'form': form, 'dashboard': dashboard, 'msg': msg})
+
+  tasks_to_trigger = form.cleaned_data['tasks_to_trigger'].split(',')
+  tasks_to_trigger = filter(None, (t.strip().lower() for t in tasks_to_trigger))
+  today = datetime.datetime.utcnow().date()
+
+  tasks = []
+  if not tasks_to_trigger:
+    msg = 'No task to trigger.'
+  # Special case 'refresh'.
+  elif (len(tasks_to_trigger) == 1 and
+        tasks_to_trigger[0] in ('destroy', 'refresh')):
+    taskqueue.add(
+        url=reverse(task_refresh_all_stats_score),
+        params={'destroy': str(int(tasks_to_trigger[0] == 'destroy'))},
+        queue_name='refresh-all-stats-score')
+    msg = 'Triggered %s.' % tasks_to_trigger[0]
+  else:
+    tasks = []
+    for task in tasks_to_trigger:
+      if task in ('monthly', '30'):
+        tasks.append(task)
+      elif models.verify_account_statistics_name(task):
+        if task.count('-') == 2:
+          tasks.append(task)
+        else:
+          # It's a month. Add every single day of the month as long as it's
+          # before today.
+          year, month = map(int, task.split('-'))
+          days = calendar.monthrange(year, month)[1]
+          tasks.extend(
+              '%s-%02d' % (task, d + 1) for d in range(days)
+              if datetime.date(year, month, d + 1) < today)
+      else:
+        msg = 'Invalid item.'
+        break
+    else:
+      if len(set(tasks)) != len(tasks):
+        msg = 'Duplicate items found.'
+      else:
+        taskqueue.add(
+            url=reverse(task_update_stats),
+            params={'tasks': json.dumps(tasks), 'date': str(today)},
+            queue_name='update-stats')
+        msg = 'Triggered the following tasks: %s.' % ', '.join(tasks)
+  logging.info(msg)
+  return respond(
+      request,
+      'admin_update_stats.html',
+      {'form': form, 'dashboard': dashboard, 'msg': msg})
+
+
+def cron_update_yesterday_stats(_request):
+  """Daily cron job to trigger all the necessary task queue.
+
+  - Triggers a task to update daily summaries.
+  - This task will then trigger a task to update rolling summaries.
+  - This task will then trigger a task to update monthly summaries.
+
+  Using 3 separate tasks to space out datastore contention and reduces the
+  scope of each task so the complete under 10 minutes, making retries softer
+  on the system when the datastore throws exceptions or the load for the day
+  is high.
+  """
+  today = datetime.datetime.utcnow().date()
+  day = str(today - datetime.timedelta(days=1))
+  tasks = [day, '30', 'monthly']
+  taskqueue.add(
+      url=reverse(task_update_stats),
+      params={'tasks': json.dumps(tasks), 'date': str(today)},
+      queue_name='update-stats')
+  out = 'Triggered tasks for day %s: %s' % (day, ', '.join(tasks))
+  logging.info(out)
+  return HttpTextResponse(out)
+
+
+def figure_out_real_accounts(people_involved, people_caches):
+  """Removes people that are known to be role accounts or mailing lists.
+
+  Sadly, Account instances are created even for mailing lists (!) but mailing
+  lists never create an issue, so assume that a reviewer that never created an
+  issue is a nobody.
+
+  Arguments:
+    people_involved: set or list of email addresses to scan.
+    people_caches: a lookup cache of already resolved email addresses.
+
+  Returns:
+    list of the email addresses that are not nobodies.
+  """
+  # Using '+' as a filter removes a fair number of WATCHLISTS entries.
+  people_involved = set(
+      i for i in people_involved
+      if ('+' not in i and
+        not i.startswith('commit-bot') and
+        not i.endswith('gserviceaccount.com')))
+  people_involved -= people_caches['fake']
+
+  # People we are still unsure about that need to be looked up.
+  people_to_look_for = list(people_involved - people_caches['real'])
+
+  futures = [
+    models.Issue.all(keys_only=True).filter('owner =', users.User(r)).run(
+        limit=1)
+    for r in people_to_look_for
+  ]
+  for i, future in enumerate(futures):
+    account_email = people_to_look_for[i]
+    if not list(future):
+      people_caches['fake'].add(account_email)
+      people_involved.remove(account_email)
+    else:
+      people_caches['real'].add(account_email)
+  return people_involved
+
+
+def search_relevant_first_email_for_user(
+    issue_owner, messages, user, people_caches):
+  """Calculates which Message is representative for the request latency for this
+  review for this user.
+
+  Returns:
+  - index in |messages| that is the most representative for this user as a
+    reviewer or None if no Message is relevant at all. In that case, the caller
+    should fall back to Issue.created.
+  - bool if it looks like a drive-by.
+
+  It is guaranteed that the index returned is a Message sent either by
+  |issue_owner| or |user|.
+  """
+  # Shortcut. No need to calculate the value.
+  if issue_owner == user:
+    return None, False
+
+  # Search for the first of:
+  # - message by the issue owner sent to the user or to mailing lists.
+  # - message by the user, for DRIVE_BY and NOT_REQUESTED.
+  # Otherwise, return None.
+  last_owner_message_index = None
+  for i, m in enumerate(messages):
+    if m.sender == issue_owner:
+      last_owner_message_index = i
+      if user in m.recipients:
+        return i, False
+      # Detect the use case where a request for review is sent to a mailing list
+      # and a random reviewer picks it up. We don't want to downgrade the
+      # reviewer from a proper review down to DRIVE_BY, so mark it as the
+      # important message for everyone. A common usecase is code reviews on
+      # golang-dev@googlegroups.com.
+      recipients = set(m.recipients) - set([m.sender, issue_owner])
+      if not figure_out_real_accounts(recipients, people_caches):
+        return i, False
+    elif m.sender == user:
+      # The issue owner didn't send a request specifically to this user but the
+      # dude replied anyway. It can happen if the user was on the cc list with
+      # user+cc@example.com. In that case, use the last issue owner email.
+      # We want to use this message for latency calculation DRIVE_BY and
+      # NOT_REQUESTED.
+      if last_owner_message_index is not None:
+        return last_owner_message_index, True
+      # issue_owner is MIA.
+      return i, True
+    else:
+      # Maybe a reviewer added 'user' on the review on its behalf. Likely
+      # m.sender wants to defer the review to someone else.
+      if user in m.recipients:
+        return i, False
+  # Sends the last Message index if there is any.
+  return last_owner_message_index, False
+
+
+def process_issue(
+    start, day_to_process, message_index, drive_by, issue_owner, messages,
+    user):
+  """Calculates 'latency', 'lgtms' and 'review_type' for a reviewer on an Issue.
+
+  Arguments:
+  - start: moment to use to calculate the latency. Can be either the moment a
+           Message was sent or Issue.created if no other signal exists.
+  - day_to_process: the day to look for for new 'events'.
+  - message_index: result of search_relevant_first_email_for_user().
+  - drive_by: the state of things looks like a DRIVE_BY or a NOT_REQUESTED.
+  - issue_owner: shortcut for issue.owner.email().
+  - messages: shortcut for issue.message_set sorted by date. Cannot be empty.
+  - user: user to calculate latency.
+
+  A Message must have been sent on day_to_process that would imply data,
+  otherwise None, None is returned.
+  """
+  assert isinstance(start, datetime.datetime)
+  assert isinstance(day_to_process, datetime.date)
+  assert message_index is None or 0 <= message_index < len(messages)
+  assert drive_by in (True, False)
+  assert issue_owner.count('@') == 1
+  assert all(isinstance(m, models.Message) for m in messages)
+  assert user.count('@') == 1
+
+  lgtms = sum(
+      m.sender == user and
+      m.find('lgtm', owner_allowed=True) and
+      not m.find('no lgtm', owner_allowed=True)
+      for m in messages)
+
+  # TODO(maruel): Check for the base username part, e.g.:
+  # if user.split('@', 1)[0] == issue_owner.split('@', 1)[0]:
+  # For example, many people have both matching @google.com and @chromium.org
+  # accounts.
+  if user == issue_owner:
+    if not any(m.date.date() == day_to_process for m in messages):
+      return -1, None, None
+    # There's no concept of review latency for OUTGOING reviews.
+    return -1, lgtms, models.AccountStatsBase.OUTGOING
+
+  if message_index is None:
+    # Neither issue_owner nor user sent an email, ignore.
+    return -1, None, None
+
+  if drive_by:
+    # Tricky case. Need to determine the difference between NOT_REQUESTED and
+    # DRIVE_BY. To determine if an issue is NOT_REQUESTED, look if the owner
+    # never sent a request for review in the previous messages.
+    review_type = (
+      models.AccountStatsBase.NOT_REQUESTED
+      if messages[message_index].sender == user
+      else models.AccountStatsBase.DRIVE_BY)
+  else:
+    review_type = models.AccountStatsBase.NORMAL
+
+  for m in messages[message_index:]:
+    if m.sender == user:
+      if m.date.date() < day_to_process:
+        # It was already updated on a previous day. Skip calculation.
+        return -1, None, None
+      return int((m.date - start).total_seconds()), lgtms, review_type
+
+  # 'user' didn't send a message, so no latency can be calculated.
+  assert not lgtms
+  return -1, lgtms, models.AccountStatsBase.IGNORED
+
+
+def yield_people_issue_to_update(day_to_process, issues, messages_looked_up):
+  """Yields all the combinations of user-day-issue that needs to be updated.
+
+  Arguments:
+  - issues: set() of all the Issue touched.
+  - messages_looked_up: list of one int to count the number of Message looked
+    up.
+
+  Yields:
+   - tuple user, day, issue_id, latency, lgtms, review_type.
+  """
+  assert isinstance(day_to_process, datetime.datetime)
+  assert not issues and isinstance(issues, set)
+  assert [0] == messages_looked_up
+
+  day_to_process_date = day_to_process.date()
+  # Cache people that are valid accounts or not to reduce datastore lookups.
+  people_caches = {'fake': set(), 'real': set()}
+  # dict((user, day) -> set(issue_id)) mapping of
+  # the AccountStatsDay that will need to be recalculated.
+  need_to_update = {}
+  # TODO(maruel): Use asynchronous programming to start moving on to the next
+  # issue right away. This means creating our own Future instances.
+
+  cursor = None
+  while True:
+    query = models.Message.all(keys_only=True).filter(
+        'date >=', day_to_process).order('date')
+    # Someone sane would ask: why the hell do this? I don't know either but
+    # that's the only way to not have it throw an exception after 60 seconds.
+    if cursor:
+      query.with_cursor(start_cursor=cursor)
+    message_keys = query.fetch(100)
+    if not message_keys:
+      # We're done, no more cursor.
+      break
+    cursor = query.cursor()
+    for message_key in message_keys:
+      # messages_looked_up may be overcounted, as the messages on the next day
+      # on issues already processed will be accepted as valid, until a new issue
+      # is found.
+      messages_looked_up[0] += 1
+      issue_key = message_key.parent()
+      issue_id = issue_key.id()
+      if issue_id in issues:
+        # This issue was already processed.
+        continue
+
+      # Aggressively fetch data concurrently.
+      message_future = db.get_async(message_key)
+      issue_future = db.get_async(issue_key)
+      messages_futures = models.Message.all().ancestor(issue_key).run(
+          batch_size=1000)
+      if message_future.get_result().date.date() > day_to_process_date:
+        # Now on the next day. It is important to stop, especially when looking
+        # at very old CLs.
+        messages_looked_up[0] -= 1
+        cursor = None
+        break
+
+      # Make sure to not process this issue a second time.
+      issues.add(issue_id)
+      issue = issue_future.get_result()
+      # Sort manually instead of using .order('date') to save one index. Strips
+      # off any Message after day_to_process.
+      messages = sorted(
+          (m for m in messages_futures if m.date.date() <= day_to_process_date),
+          key=lambda x: x.date)
+
+      # Updates the dict of the people-day pairs that will need to be updated.
+      issue_owner = issue.owner.email()
+      # Ignore issue.reviewers since it can change over time. Sadly m.recipients
+      # also contains people cc'ed so take care of these manually.
+      people_to_consider = set(m.sender for m in messages)
+      people_to_consider.add(issue_owner)
+      for m in messages:
+        for r in m.recipients:
+          if (any(n.sender == r for n in messages) or
+              r in issue.reviewers or
+              r not in issue.cc):
+            people_to_consider.add(r)
+
+      # 'issue_owner' is by definition a real account. Save one datastore
+      # lookup.
+      people_caches['real'].add(issue_owner)
+
+      for user in figure_out_real_accounts(people_to_consider, people_caches):
+        message_index, drive_by = search_relevant_first_email_for_user(
+            issue_owner, messages, user, people_caches)
+        if (message_index == None or
+            ( drive_by and
+              messages[message_index].sender == user and
+              not any(m.sender == issue_owner
+                      for m in messages[:message_index]))):
+          # There's no important message, calculate differently by using the
+          # issue creation date.
+          start = issue.created
+        else:
+          start = messages[message_index].date
+
+        # Note that start != day_to_process_date
+        start_str = str(start.date())
+        user_issue_set = need_to_update.setdefault((user, start_str), set())
+        if not issue_id in user_issue_set:
+          user_issue_set.add(issue_id)
+          latency, lgtms, review_type = process_issue(
+              start, day_to_process_date, message_index, drive_by, issue_owner,
+              messages, user)
+          if review_type is None:
+            # process_issue() determined there is nothing to update.
+            continue
+          yield user, start_str, issue_id, latency, lgtms, review_type
+    if not cursor:
+      break
+
+
+@task_queue_required('update-stats')
+def task_update_stats(request):
+  """Dispatches the relevant task to execute.
+
+  Can dispatch either update_daily_stats, update_monthly_stats or
+  update_rolling_stats.
+  """
+  tasks = json.loads(request.POST.get('tasks'))
+  date_str = request.POST.get('date')
+  cursor = request.POST.get('cursor')
+  countdown = 15
+  if not tasks:
+    msg = 'Nothing to execute!?'
+    logging.warning(msg)
+    out = HttpTextResponse(msg)
+  else:
+    # Dispatch the task to execute.
+    task = tasks.pop(0)
+    logging.info('Running %s.', task)
+    if task.count('-') == 2:
+      out, cursor = update_daily_stats(
+          cursor, datetime.datetime.strptime(task, DATE_FORMAT))
+    elif task == 'monthly':
+      # The only reason day is used is in case a task queue spills over the next
+      # day.
+      day = datetime.datetime.strptime(date_str, DATE_FORMAT)
+      out, cursor = update_monthly_stats(cursor, day)
+    elif task == '30':
+      yesterday = (
+          datetime.datetime.strptime(date_str, DATE_FORMAT)
+          - datetime.timedelta(days=1)).date()
+      out, cursor = update_rolling_stats(cursor, yesterday)
+    else:
+      msg = 'Unknown task %s, ignoring.' % task
+      cursor = ''
+      logging.error(msg)
+      out = HttpTextResponse(msg)
+
+    if cursor:
+      # Not done yet!
+      tasks.insert(0, task)
+      countdown = 0
+
+  if out.status_code == 200 and tasks:
+    logging.info('%d tasks to go!\n%s', len(tasks), ', '.join(tasks))
+    # Space out the task queue execution by 15s to reduce the risk of
+    # datastore inconsistency to get in the way, since no transaction is used.
+    # This means to process a full month, it'll include 31*15s = 7:45 minutes
+    # delay. 15s is not a lot but we are in an hurry!
+    taskqueue.add(
+        url=reverse(task_update_stats),
+        params={'tasks': json.dumps(tasks), 'date': date_str, 'cursor': cursor},
+        queue_name='update-stats',
+        countdown=countdown)
+  return out
+
+
+def update_daily_stats(cursor, day_to_process):
+  """Updates the statistics about every reviewer for the day.
+
+  Note that joe@google != joe@chromium, so make sure to always review with the
+  right email address or your stats will suffer.
+
+  The goal here is:
+  - detect all the active reviewers in the past day.
+  - for each of them, update their statistics for the past day.
+
+  There can be thousands of CLs modified in a single day so throughput
+  efficiency is important here, as it has only 10 minutes to complete.
+  """
+  assert not cursor
+  start = time.time()
+  # Look at all messages sent in the day. The issues associated to these
+  # messages are the issues we care about.
+  issues = set()
+  # Use a list so it can be modified inside the generator.
+  messages_looked_up = [0]
+  total = 0
+  try:
+    chunk_size = 10
+    max_futures = 200
+    futures = []
+    items = []
+    for packet in yield_people_issue_to_update(
+        day_to_process, issues, messages_looked_up):
+      user, day, issue_id, latency, lgtms, review_type = packet
+      account_key = ndb.Key('Account', models.Account.get_id_for_email(user))
+      found = False
+      for item in items:
+        # A user could touch multiple issues in a single day.
+        if item.key.id() == day and item.key.parent() == account_key:
+          found = True
+          break
+      else:
+        # Find the object and grab it. Do not use get_or_insert() to save a
+        # transaction and double-write.
+        item = models.AccountStatsDay.get_by_id(
+            day, parent=account_key, use_cache=False)
+        if not item:
+          # Create a new one.
+          item = models.AccountStatsDay(id=day, parent=account_key)
+
+      if issue_id in item.issues:
+        # It was already there, update.
+        i = item.issues.index(issue_id)
+
+        # Either one of them has latency value, either both match.
+        assert (
+          item.latencies[i] == latency or
+          (item.latencies[i] == -1 or latency == -1))
+
+        if (item.latencies[i] == latency and
+            item.lgtms[i] == lgtms and
+            item.review_types[i] == review_type):
+          # Skip.
+          continue
+
+        # Make sure to not "downgrade" the object.
+        if item.lgtms[i] > lgtms:
+          # Never lower the number of lgtms.
+          continue
+
+        if item.latencies[i] >= 0 and latency == -1:
+          # Unchanged or "lower priority", no need to store again.
+          continue
+
+        item.latencies[i] = latency
+        item.lgtms[i] = lgtms
+        item.review_types[i] = review_type
+      else:
+        # TODO(maruel): Sort?
+        item.issues.append(issue_id)
+        item.latencies.append(latency)
+        item.lgtms.append(lgtms)
+        item.review_types.append(review_type)
+
+      if not found:
+        items.append(item)
+        if len(items) == chunk_size:
+          futures.extend(ndb.put_multi_async(items, use_cache=False))
+          total += chunk_size
+          items = []
+          futures = [f for f in futures if not f.done()]
+          while len(futures) > max_futures:
+            # Slow down to limit memory usage.
+            ndb.Future.wait_any(futures)
+            futures = [f for f in futures if not f.done()]
+
+    if items:
+      futures.extend(ndb.put_multi_async(items, use_cache=False))
+      total += len(items)
+    ndb.Future.wait_all(futures)
+    result = 200
+  except (db.Timeout, DeadlineExceededError):
+    result = 500
+
+  out = (
+      '%s\n'
+      '%d messages\n'
+      '%d issues\n'
+      'Updated %d items\n'
+      'In %.1fs\n') % (
+        day_to_process.date(), messages_looked_up[0], len(issues),
+        total, time.time() - start)
+  if result == 200:
+    logging.info(out)
+  else:
+    logging.error(out)
+  return HttpTextResponse(out, status=result), ''
+
+
+def update_rolling_stats(cursor, reference_day):
+  """Looks at all accounts and recreates all the rolling 30 days
+  AccountStatsMulti summaries.
+
+  Note that during the update, the leaderboard will be inconsistent.
+
+  Only do 1000 accounts at a time since there's a memory leak in the function.
+  """
+  assert cursor is None or isinstance(cursor, basestring)
+  assert isinstance(reference_day, datetime.date)
+  start = time.time()
+  total = 0
+  total_deleted = 0
+  try:
+    # Process *all* the accounts.
+    duration = '30'
+    chunk_size = 10
+    futures = []
+    items = []
+    to_delete = []
+    accounts = 0
+    while True:
+      query = models.Account.all(keys_only=True)
+      if cursor:
+        query.with_cursor(start_cursor=cursor)
+      account_keys = query.fetch(100)
+      if not account_keys:
+        # We're done, no more cursor.
+        cursor = ''
+        break
+
+      a_key = ''
+      for a_key in account_keys:
+        accounts += 1
+        a_key = ndb.Key.from_old_key(a_key)
+        # TODO(maruel): If date of each issue was saved in the entity, this
+        # would not be necessary, assuming the entity doesn't become itself
+        # corrupted.
+        rolling_future = models.AccountStatsMulti.get_by_id_async(
+            duration, parent=a_key)
+        days = [
+          str(reference_day - datetime.timedelta(days=i))
+          for i in xrange(int(duration))
+        ]
+        days_keys = [
+          ndb.Key(flat=[models.AccountStatsDay, d], parent=a_key) for d in days
+        ]
+        valid_days = filter(None, ndb.get_multi(days_keys))
+        if not valid_days:
+          rolling = rolling_future.get_result()
+          if rolling:
+            to_delete.append(rolling.key)
+            if len(to_delete) == chunk_size:
+              futures.extend(ndb.delete_multi_async(to_delete))
+              total_deleted += chunk_size
+              to_delete = []
+              futures = [f for f in futures if not f.done()]
+          continue
+
+        # Always override the content.
+        rolling = models.AccountStatsMulti(id=duration, parent=a_key)
+        # Sum all the daily instances into the rolling summary. Always start
+        # over because it's not just adding data, it's also removing data from
+        # the day that got excluded from the rolling summary.
+        if models.sum_account_statistics(rolling, valid_days):
+          items.append(rolling)
+          if len(items) == chunk_size:
+            futures.extend(ndb.put_multi_async(items))
+            total += chunk_size
+            items = []
+            futures = [f for f in futures if not f.done()]
+      cursor = query.cursor()
+      if accounts == 1000 or (time.time() - start) > 300:
+        # Limit memory usage.
+        logging.info('%d accounts, last was %s', accounts, a_key.id()[1:-1])
+        break
+
+    if items:
+      futures.extend(ndb.put_multi_async(items))
+      total += len(items)
+    if to_delete:
+      futures.extend(ndb.delete_multi_async(to_delete))
+      total_deleted += len(to_delete)
+    ndb.Future.wait_all(futures)
+    result = 200
+  except (db.Timeout, DeadlineExceededError):
+    result = 500
+
+  out = '%s\nLooked up %d accounts\nStored %d items\nDeleted %d\nIn %.1fs\n' % (
+      reference_day, accounts, total, total_deleted, time.time() - start)
+  if result == 200:
+    logging.info(out)
+  else:
+    logging.error(out)
+  return HttpTextResponse(out, status=result), cursor
+
+
+def update_monthly_stats(cursor, day_to_process):
+  """Looks at all AccountStatsDay instance updated on that day and updates the
+  corresponding AccountStatsMulti instance.
+
+  This taskqueue updates all the corresponding monthly AccountStatsMulti
+  summaries by looking at all AccountStatsDay.modified.
+  """
+  today = datetime.datetime.utcnow().date()
+  start = time.time()
+  total = 0
+  skipped = 0
+  try:
+    # The biggest problem here is not time but memory usage so limit the number
+    # of ongoing futures.
+    max_futures = 200
+    futures = []
+    days_stats_fetched = 0
+    yielded = 0
+    options = ndb.QueryOptions(keys_only=True)
+    q = models.AccountStatsDay.query(default_options=options)
+    q.filter(models.AccountStatsDay.modified >= day_to_process)
+    months_to_regenerate = set()
+    while True:
+      curs = datastore_query.Cursor(urlsafe=cursor or '')
+      day_stats_keys, next_curs, more = q.fetch_page(100, start_cursor=curs)
+      if not more:
+        cursor = ''
+        break
+      cursor = next_curs.urlsafe()
+      days_stats_fetched += len(day_stats_keys)
+      if not (days_stats_fetched % 1000):
+        logging.info('Scanned %d AccountStatsDay.', days_stats_fetched)
+
+      # Create a batch of items to process.
+      batch = []
+      for key in day_stats_keys:
+        month_name = key.id().rsplit('-', 1)[0]
+        account_name = key.parent().id()
+        lookup_key = '%s-%s' % (month_name, account_name)
+        if not lookup_key in months_to_regenerate:
+          batch.append((month_name, account_name))
+        months_to_regenerate.add(lookup_key)
+
+      for month_name, account_id in batch:
+        yielded += 1
+        if not (yielded % 1000):
+          logging.info(
+              '%d items done, %d skipped, %d yielded %d futures.',
+              total, skipped, yielded, len(futures))
+
+        account_key = ndb.Key('Account', account_id)
+        monthly = models.AccountStatsMulti.get_by_id(
+            month_name, parent=account_key, use_cache=False)
+        if not monthly:
+          # Create a new one.
+          monthly = models.AccountStatsMulti(id=month_name, parent=account_key)
+        elif monthly.modified.date() == today:
+          # It was modified today, skip it.
+          skipped += 1
+          continue
+
+        days_in_month = calendar.monthrange(*map(int, month_name.split('-')))[1]
+        days_name = [
+          month_name + '-%02d' % (i + 1) for i in range(days_in_month)
+        ]
+        days_keys = [
+          ndb.Key(models.AccountStatsDay, d, parent=account_key)
+          for d in days_name
+        ]
+        days = [d for d in ndb.get_multi(days_keys, use_cache=False) if d]
+        assert days, (month_name, account_id)
+        if models.sum_account_statistics(monthly, days):
+          futures.extend(ndb.put_multi_async([monthly], use_cache=False))
+          total += 1
+          while len(futures) > max_futures:
+            # Slow down to limit memory usage.
+            ndb.Future.wait_any(futures)
+            futures = [f for f in futures if not f.done()]
+        else:
+          skipped += 1
+
+      if (time.time() - start) > 400:
+        break
+
+    ndb.Future.wait_all(futures)
+    result = 200
+  except (db.Timeout, DeadlineExceededError) as e:
+    logging.error(str(e))
+    result = 500
+
+  out = '%s\nStored %d items\nSkipped %d\nIn %.1fs\n' % (
+      day_to_process.date(), total, skipped, time.time() - start)
+  if result == 200:
+    logging.info(out)
+  else:
+    logging.error(out)
+  return HttpTextResponse(out, status=result), cursor
+
+
+@task_queue_required('refresh-all-stats-score')
+def task_refresh_all_stats_score(request):
+  """Updates all the scores or destroy them all.
+
+  - Updating score is necessary when models.compute_score() is changed.
+  - Destroying the instances is necessary if
+    search_relevant_first_email_for_user() or process_issue() are modified.
+  """
+  start = time.time()
+  cls_name = request.POST.get('cls') or 'Day'
+  destroy = int(request.POST.get('destroy', '0'))
+  cursor = datastore_query.Cursor(urlsafe=request.POST.get('cursor'))
+  task_count = int(request.POST.get('task_count', '0'))
+  assert cls_name in ('Day', 'Multi')
+  cls = (
+      models.AccountStatsDay
+      if cls_name == 'Day' else models.AccountStatsMulti)
+
+  # Task queues are given 10 minutes. Do it in 9 minutes chunks to protect
+  # against most timeout conditions.
+  timeout = 540
+  updated = 0
+  skipped = 0
+  try:
+    futures = []
+    chunk_size = 10
+    items = []
+    more = True
+    if destroy:
+      options = ndb.QueryOptions(keys_only=True)
+    else:
+      options = ndb.QueryOptions()
+    while more:
+      batch, cursor, more = cls.query(default_options=options).fetch_page(
+          20, start_cursor=cursor)
+      if destroy:
+        futures.extend(ndb.delete_multi_async(batch))
+        updated += len(batch)
+      else:
+        for i in batch:
+          score = models.compute_score(i)
+          if i.score != score:
+            items.append(i)
+            if len(items) == chunk_size:
+              futures.extend(ndb.put_multi_async(items))
+              updated += chunk_size
+              items = []
+              futures = [f for f in futures if not f.done()]
+          else:
+            skipped += 1
+      if time.time() - start >= timeout:
+        break
+    if items:
+      futures.extend(ndb.put_multi_async(items))
+      updated += chunk_size
+    ndb.Future.wait_all(futures)
+    if not more and cls_name == 'Day':
+      # Move to the Multi instances.
+      more = True
+      cls_name = 'Multi'
+      cursor = datastore_query.Cursor()
+    if more:
+      taskqueue.add(
+          url=reverse(task_refresh_all_stats_score),
+          params={
+            'cls': cls_name,
+            'cursor': cursor.urlsafe(),
+            'destroy': str(destroy),
+            'task_count': str(task_count+1),
+          },
+          queue_name='refresh-all-stats-score')
+    result = 200
+  except (db.Timeout, DeadlineExceededError):
+    result = 500
+  out = 'Index: %d\nType = %s\nStored %d items\nSkipped %d\nIn %.1fs\n' % (
+      task_count, cls.__name__, updated, skipped, time.time() - start)
+  if result == 200:
+    logging.info(out)
+  else:
+    logging.error(out)
+  return HttpTextResponse(out, status=result)
+
+
+def quarter_to_months(when):
+  """Manually handles the forms 'YYYY' or 'YYYY-QX'."""
+  today = datetime.datetime.utcnow().date()
+  if when.isdigit() and 2008 <= int(when) <= today.year:
+    # Select the whole year.
+    year = int(when)
+    if year == today.year:
+      out = ['%04d-%02d' % (year, i + 1) for i in range(today.month)]
+    else:
+      out = ['%04d-%02d' % (year, i + 1) for i in range(12)]
+  else:
+    quarter = re.match(r'^(\d\d\d\d-)[qQ]([1-4])$', when)
+    if not quarter:
+      return None
+    prefix = quarter.group(1)
+    # Convert the quarter into 3 months group.
+    base = (int(quarter.group(2)) - 1) * 3 + 1
+    out = ['%s%02d' % (prefix, i) for i in range(base, base+3)]
+
+  logging.info('Expanded to %s' % ', '.join(out))
+  return out
+
+
+def show_user_impl(user, when):
+  months = None
+  if not models.verify_account_statistics_name(when):
+    months = quarter_to_months(when)
+    if not months:
+      return None
+
+  account_key = ndb.Key('Account', models.Account.get_id_for_email(user))
+  # Determines which entity class should be loaded by the number of '-'.
+  cls = (
+      models.AccountStatsDay
+      if when.count('-') == 2 else models.AccountStatsMulti)
+  if months:
+    # Normalize to 'q'.
+    when = when.lower()
+    # Loads the stats for the 3 months and merge them.
+    keys = [ndb.Key(cls, i, parent=account_key) for i in months]
+    values = filter(None, ndb.get_multi(keys))
+    stats = cls(id=when, parent=account_key)
+    models.sum_account_statistics(stats, values)
+  else:
+    stats = cls.get_by_id(when, parent=account_key)
+    if not stats:
+      # It's a valid date or rolling summary key, so if there's nothing, just
+      # return the fact there's no data with an empty object.
+      stats = cls(id=when, parent=account_key)
+  return stats
+
+
+@user_key_required
+def show_user_stats(request, when):
+  stats = show_user_impl(request.user_to_show.email(), when)
+  if not stats:
+    return HttpResponseNotFound()
+  incoming = [
+    {
+      'issue': stats.issues[i],
+      'latency': stats.latencies[i],
+      'lgtms': stats.lgtms[i],
+      'review_type':
+          models.AccountStatsBase.REVIEW_TYPES[stats.review_types[i]],
+    } for i in xrange(len(stats.issues))
+    if stats.review_types[i] != models.AccountStatsBase.OUTGOING
+  ]
+  outgoing = [
+    {
+      'issue': stats.issues[i],
+      'lgtms': stats.lgtms[i],
+    } for i in xrange(len(stats.issues))
+    if stats.review_types[i] == models.AccountStatsBase.OUTGOING
+  ]
+  return respond(
+      request,
+      'user_stats.html',
+      {
+        'account': request.user_to_show,
+        'incoming': incoming,
+        'outgoing': outgoing,
+        'stats': stats,
+        'when': when,
+      })
+
+
+@json_response
+@user_key_required
+def show_user_stats_json(request, when):
+  stats = show_user_impl(request.user_to_show.email(), when)
+  if not stats:
+    return HttpResponseNotFound()
+  return stats.to_dict()
+
+
+def leaderboard_impl(when, limit):
+  """Returns the leaderboard for this Rietveld instance on |when|.
+
+  It returns the list of the reviewers sorted by their score for
+  the past weeks, a specific day or month or a quarter.
+  """
+  when = when.lower()
+  months = None
+  if not models.verify_account_statistics_name(when):
+    months = quarter_to_months(when)
+    if not months:
+      return None
+
+  cls = (
+      models.AccountStatsDay
+      if when.count('-') == 2 else models.AccountStatsMulti)
+  if months:
+    # Use the IN operator to simultaneously select the 3 months.
+    results = cls.query().filter(
+        cls.name.IN(months)).order(cls.score).fetch(limit)
+    # Then merge all the results accordingly.
+    tops = {}
+    for i in results:
+      tops.setdefault(i.user, []).append(i)
+    for key, values in tops.iteritems():
+      values.sort(key=lambda x: x.name)
+      out = models.AccountStatsMulti(id=when, parent=values[0].key.parent())
+      models.sum_account_statistics(out, values)
+      tops[key] = out
+    tops = sorted(tops.itervalues(), key=lambda x: x.score)
+  else:
+    # Grabs the pre-calculated entities or daily entity.
+    tops = cls.query().filter(cls.name == when).order(cls.score).fetch(limit)
+
+  # Remove anyone with a None score.
+  return [t for t in tops if t.score is not None]
+
+
+def stats_to_dict(t):
+  """Adds value 'user'.
+
+  It is a meta property so it is not included in to_dict() by default.
+  """
+  o = t.to_dict()
+  o['user'] = t.user
+  return o
+
+
+@json_response
+def leaderboard_json(request, when):
+  limit = _clean_int(request.GET.get('limit'), 300, 1, 1000)
+  data = leaderboard_impl(when, limit)
+  if data is None:
+    return HttpResponseNotFound()
+  return [stats_to_dict(t) for t in data]
+
+
+def leaderboard(request, when):
+  """Prints the leaderboard for this Rietveld instance."""
+  limit = _clean_int(request.GET.get('limit'), 300, 1, 1000)
+  data = leaderboard_impl(when, limit)
+  if data is None:
+    return HttpResponseNotFound()
+  tops = []
+  shame = []
+  for i in data:
+    if i.score == models.AccountStatsBase.NULL_SCORE:
+      shame.append(i)
+    else:
+      tops.append(i)
+  return respond(
+      request, 'leaderboard.html', {'tops': tops, 'shame': shame, 'when': when})
