@@ -1,7 +1,12 @@
 cron:
+- description: Create AccountStatistics for the past day.
+  url: /restricted/cron/update_yesterday_stats
+  schedule: every day 00:01
+
 #- description: Update the default builder list
 #  url: /restricted/update_default_builders
 #  schedule: every 12 hours
+
 - description: Delete old pending jobs
   url: /restricted/delete_old_pending_jobs
   schedule: every 12 hours
