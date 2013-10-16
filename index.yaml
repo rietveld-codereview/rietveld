@@ -76,6 +76,26 @@ indexes:
 - kind: Issue
   properties:
   - name: closed
+  - name: commit
+  - name: modified
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: commit
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: commit
+  - name: private
+  - name: modified
+
+- kind: Issue
+  properties:
+  - name: closed
   - name: owner
   - name: created
 
@@ -204,3 +224,14 @@ indexes:
   properties:
   - name: issue
   - name: created
+
+- kind: PatchSet
+  ancestor: yes
+  properties:
+  - name: created
+    direction: desc
+
+- kind: TryJobResult
+  properties:
+  - name: result
+  - name: timestamp
