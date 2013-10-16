@@ -4859,13 +4859,14 @@ def process_issue(
   A Message must have been sent on day_to_process that would imply data,
   otherwise None, None is returned.
   """
-  assert isinstance(start, datetime.datetime)
-  assert isinstance(day_to_process, datetime.date)
-  assert message_index is None or 0 <= message_index < len(messages)
-  assert drive_by in (True, False)
-  assert issue_owner.count('@') == 1
-  assert all(isinstance(m, models.Message) for m in messages)
-  assert user.count('@') == 1
+  assert isinstance(start, datetime.datetime), start
+  assert isinstance(day_to_process, datetime.date), day_to_process
+  assert message_index is None or 0 <= message_index < len(messages), (
+      message_index)
+  assert drive_by in (True, False), drive_by
+  assert issue_owner.count('@') == 1, issue_owner
+  assert all(isinstance(m, models.Message) for m in messages), messages
+  assert user.count('@') == 1, user
 
   lgtms = sum(
       m.sender == user and
@@ -4906,7 +4907,7 @@ def process_issue(
       return int((m.date - start).total_seconds()), lgtms, review_type
 
   # 'user' didn't send a message, so no latency can be calculated.
-  assert not lgtms
+  assert not lgtms, lgtms
   return -1, lgtms, models.AccountStatsBase.IGNORED
 
 
@@ -4921,9 +4922,9 @@ def yield_people_issue_to_update(day_to_process, issues, messages_looked_up):
   Yields:
    - tuple user, day, issue_id, latency, lgtms, review_type.
   """
-  assert isinstance(day_to_process, datetime.datetime)
-  assert not issues and isinstance(issues, set)
-  assert [0] == messages_looked_up
+  assert isinstance(day_to_process, datetime.datetime), day_to_process
+  assert not issues and isinstance(issues, set), issues
+  assert [0] == messages_looked_up, messages_looked_up
 
   day_to_process_date = day_to_process.date()
   # Cache people that are valid accounts or not to reduce datastore lookups.
@@ -5096,7 +5097,7 @@ def update_daily_stats(cursor, day_to_process):
   There can be thousands of CLs modified in a single day so throughput
   efficiency is important here, as it has only 10 minutes to complete.
   """
-  assert not cursor
+  assert not cursor, cursor
   start = time.time()
   # Look at all messages sent in the day. The issues associated to these
   # messages are the issues we care about.
@@ -5135,7 +5136,7 @@ def update_daily_stats(cursor, day_to_process):
         # Either one of them has latency value, either both match.
         assert (
           item.latencies[i] == latency or
-          (item.latencies[i] == -1 or latency == -1))
+          (item.latencies[i] == -1 or latency == -1)), item
 
         if (item.latencies[i] == latency and
             item.lgtms[i] == lgtms and
@@ -5205,8 +5206,8 @@ def update_rolling_stats(cursor, reference_day):
 
   Only do 1000 accounts at a time since there's a memory leak in the function.
   """
-  assert cursor is None or isinstance(cursor, basestring)
-  assert isinstance(reference_day, datetime.date)
+  assert cursor is None or isinstance(cursor, basestring), cursor
+  assert isinstance(reference_day, datetime.date), reference_day
   start = time.time()
   total = 0
   total_deleted = 0
@@ -5406,7 +5407,7 @@ def task_refresh_all_stats_score(request):
   destroy = int(request.POST.get('destroy', '0'))
   cursor = datastore_query.Cursor(urlsafe=request.POST.get('cursor'))
   task_count = int(request.POST.get('task_count', '0'))
-  assert cls_name in ('Day', 'Multi')
+  assert cls_name in ('Day', 'Multi'), cls_name
   cls = (
       models.AccountStatsDay
       if cls_name == 'Day' else models.AccountStatsMulti)
