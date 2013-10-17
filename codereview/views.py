@@ -5133,15 +5133,10 @@ def update_daily_stats(cursor, day_to_process):
         # It was already there, update.
         i = item.issues.index(issue_id)
 
-        # Either one of them has latency value, either both match.
-        assert (
-          item.latencies[i] == latency or
-          (item.latencies[i] == -1 or latency == -1)), item
-
         if (item.latencies[i] == latency and
             item.lgtms[i] == lgtms and
             item.review_types[i] == review_type):
-          # Skip.
+          # Was already calculated, skip.
           continue
 
         # Make sure to not "downgrade" the object.
@@ -5152,6 +5147,15 @@ def update_daily_stats(cursor, day_to_process):
         if item.latencies[i] >= 0 and latency == -1:
           # Unchanged or "lower priority", no need to store again.
           continue
+
+        if (item.latencies[i] >= 0 and latency >= 0 and
+            item.latencies[i] != latency):
+          # That's rare, the new calculated latency doesn't match the previously
+          # calculated latency. File an error but let it go.
+          logging.error(
+              'New calculated latency doesn\'t match previously calculated '
+              'value.\n%s != %s\nItem %d in:\n%s',
+              item.latencies[i], latency, i, item)
 
         item.latencies[i] = latency
         item.lgtms[i] = lgtms
