@@ -804,7 +804,8 @@ def try_patchset(request):
                                     revision=revision,
                                     clobber=clobber,
                                     tests=tests,
-                                    reason=reason)
+                                    reason=reason,
+                                    requester=request.user)
       jobs_to_save.append(try_job)
 
     if jobs_to_save:
