@@ -361,7 +361,7 @@ class TryJobResult(db.Model):
   parent_name = db.StringProperty()
   slave = db.StringProperty()
   buildnumber = db.IntegerProperty()
-  reason = db.StringProperty()
+  reason = db.StringProperty(multiline=True)
   revision = db.StringProperty()
   timestamp = db.DateTimeProperty(auto_now_add=True)
   clobber = db.BooleanProperty()
