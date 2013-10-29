@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import calendar
-import datetime
 """App Engine data model (schema) definition for Rietveld."""
 
+import calendar
+import datetime
 import itertools
 import json
 import logging
@@ -156,6 +156,14 @@ class Issue(db.Model):
   def num_messages(self, val):
     """Setter for num_messages."""
     self.n_messages_sent = val
+
+  @property
+  def patchsets(self):
+    return self.patchset_set.order('created')
+
+  @property
+  def messages(self):
+    return self.message_set.order('date')
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n.
@@ -323,6 +331,179 @@ class Issue(db.Model):
       finally:
         self.__class__.modified.auto_now = True
 
+  def get_patchset_info(self, last_attempt, user, patchset_id):
+    """Returns a list of patchsets for the issue, and calculates/caches data
+    into the |patchset_id|'th one with a variety of non-standard attributes.
+
+    Args:
+      last_attempt (bool) - If this is the last attempt we're making at getting
+        patchset_info (due to DeadlineExceededErrors), this should be True,
+        otherwise False.
+      user (User) - The user to include drafts for.
+      patchset_id (int) - The ID of the PatchSet to calculated info for.
+        If this is None, it defaults to the newest PatchSet for this Issue.
+    """
+    patchsets = list(self.patchsets)
+    try:
+      if not patchset_id and patchsets:
+        patchset_id = patchsets[-1].key().id()
+
+      if user:
+        drafts = list(Comment.gql(
+          'WHERE ANCESTOR IS :1 AND draft = TRUE AND author = :2', self, user))
+      else:
+        drafts = []
+      comments = list(
+        Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE', self))
+      # TODO(andi) Remove draft_count attribute, we already have _num_drafts
+      # and it's additional magic.
+      self.draft_count = len(drafts)
+      for c in drafts:
+        c.ps_key = c.patch.patchset.key()  # Issues a query!
+      patchset_id_mapping = {}  # Maps from patchset id to its ordering number.
+      for patchset in patchsets:
+        patchset_id_mapping[patchset.key().id()] = len(patchset_id_mapping) + 1
+        patchset.n_drafts = sum(c.ps_key == patchset.key() for c in drafts)
+        patchset.patches_cache = None
+        patchset.parsed_patches = None
+        patchset.total_added = 0
+        patchset.total_removed = 0
+        if patchset_id == patchset.key().id():
+          patchset.patches_cache = list(patchset.patches)
+          for patch in patchset.patches_cache:
+            pkey = patch.key()
+            patch._num_comments = sum(c.parent_key() == pkey for c in comments)
+            if user:
+              patch._num_my_comments = sum(
+                  c.parent_key() == pkey and c.author == user
+                  for c in comments)
+            else:
+              patch._num_my_comments = 0
+            patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
+            if not patch.delta_calculated:
+              if last_attempt:
+                # Too many patchsets or files and we're not able to generate the
+                # delta links.  Instead of giving a 500, try to render the page
+                # without them.
+                patch.delta = []
+              else:
+                # Compare each patch to the same file in earlier patchsets to
+                # see if they differ, so that we can generate the delta patch
+                # urls.  We do this once and cache it after.  It's specifically
+                # not done on upload because we're already doing too much
+                # processing there.  NOTE: this function will clear out
+                # patchset.data to reduce memory so don't ever call
+                # patchset.put() after calling it.
+                patch.delta = _calculate_delta(patch, patchset_id, patchsets)
+                patch.delta_calculated = True
+                # A multi-entity put would be quicker, but it fails when the
+                # patches have content that is large.  App Engine throws
+                # RequestTooLarge.  This way, although not as efficient, allows
+                # multiple refreshes on an issue to get things done, as opposed
+                # to an all-or-nothing approach.
+                patch.put()
+            # Reduce memory usage: if this patchset has lots of added/removed
+            # files (i.e. > 100) then we'll get MemoryError when rendering the
+            # response.  Each Patch entity is using a lot of memory if the
+            # files are large, since it holds the entire contents.  Call
+            # num_chunks and num_drafts first though since they depend on text.
+            # These are 'active' properties and have side-effects when looked
+            # up.
+            # pylint: disable=W0104
+            patch.num_chunks
+            patch.num_drafts
+            patch.num_added
+            patch.num_removed
+            patch.text = None
+            patch._lines = None
+            patch.parsed_deltas = []
+            for delta in patch.delta:
+              # If delta is not in patchset_id_mapping, it's because of internal
+              # corruption.
+              if delta in patchset_id_mapping:
+                patch.parsed_deltas.append([patchset_id_mapping[delta], delta])
+              else:
+                logging.error(
+                    'Issue %d: %d is missing from %s',
+                    self.key().id(), delta, patchset_id_mapping)
+            if not patch.is_binary:
+              patchset.total_added += patch.num_added
+              patchset.total_removed += patch.num_removed
+      return patchsets
+    finally:
+      # Reduce memory usage (see above comment).
+      for patchset in patchsets:
+        patchset.parsed_patches = None
+
+
+def _calculate_delta(patch, patchset_id, patchsets):
+  """Calculates which files in earlier patchsets this file differs from.
+
+  Args:
+    patch: The file to compare.
+    patchset_id: The file's patchset's key id.
+    patchsets: A list of existing patchsets.
+
+  Returns:
+    A list of patchset ids.
+  """
+  delta = []
+  if patch.no_base_file:
+    return delta
+  for other in patchsets:
+    if patchset_id == other.key().id():
+      break
+    if not hasattr(other, 'parsed_patches'):
+      other.parsed_patches = None  # cache variable for already parsed patches
+    if other.data or other.parsed_patches:
+      # Loading all the Patch entities in every PatchSet takes too long
+      # (DeadLineExceeded) and consumes a lot of memory (MemoryError) so instead
+      # just parse the patchset's data.  Note we can only do this if the
+      # patchset was small enough to fit in the data property.
+      if other.parsed_patches is None:
+        # Late-import engine because engine imports modules.
+        from codereview import engine
+
+        # PatchSet.data is stored as db.Blob (str). Try to convert it
+        # to unicode so that Python doesn't need to do this conversion
+        # when comparing text and patch.text, which is db.Text
+        # (unicode).
+        try:
+          other.parsed_patches = engine.SplitPatch(other.data.decode('utf-8'))
+        except UnicodeDecodeError:  # Fallback to str - unicode comparison.
+          other.parsed_patches = engine.SplitPatch(other.data)
+        other.data = None  # Reduce memory usage.
+      for filename, text in other.parsed_patches:
+        if filename == patch.filename:
+          if text != patch.text:
+            delta.append(other.key().id())
+          break
+      else:
+        # We could not find the file in the previous patchset. It must
+        # be new wrt that patchset.
+        delta.append(other.key().id())
+    else:
+      # other (patchset) is too big to hold all the patches inside itself, so
+      # we need to go to the datastore.  Use the index to see if there's a
+      # patch against our current file in other.
+      query = Patch.all()
+      query.filter("filename =", patch.filename)
+      query.filter("patchset =", other.key())
+      other_patches = query.fetch(100)
+      if other_patches and len(other_patches) > 1:
+        logging.info("Got %s patches with the same filename for a patchset",
+                     len(other_patches))
+      for op in other_patches:
+        if op.text != patch.text:
+          delta.append(other.key().id())
+          break
+      else:
+        # We could not find the file in the previous patchset. It must
+        # be new wrt that patchset.
+        delta.append(other.key().id())
+
+  return delta
+
 
 class PatchSet(db.Model):
   """A set of patchset uploaded together.
@@ -338,6 +519,10 @@ class PatchSet(db.Model):
   modified = db.DateTimeProperty(auto_now=True)
   n_comments = db.IntegerProperty(default=0)
 
+  @property
+  def patches(self):
+    return self.patch_set.order('filename')
+
   def update_comment_count(self, n):
     """Increment the n_comments property by n."""
     self.n_comments = self.num_comments + n
@@ -351,6 +536,47 @@ class PatchSet(db.Model):
     """
     # For older patchsets n_comments is None.
     return self.n_comments or 0
+
+  def calculate_deltas(self):
+    patchset_id = self.key().id()
+    patchsets = None
+    for patch in self.patch_set.filter('delta_calculated =', False):
+      if patchsets is None:
+        # patchsets is retrieved on first iteration because patchsets
+        # isn't needed outside the loop at all.
+        patchsets = list(self.issue.patchsets)
+      patch.delta = _calculate_delta(patch, patchset_id, patchsets)
+      patch.delta_calculated = True
+      patch.put()
+
+  def nuke(self):
+    ps_id = self.key().id()
+    patches = []
+    for patchset in self.issue.patchsets:
+      if patchset.created <= self.created:
+        continue
+      patches.extend(
+        p for p in patchset.patches if p.delta_calculated and ps_id in p.delta)
+
+    def _patchset_delete(patches):
+      """Transactional helper for delete_patchset.
+
+      Args:
+        patches: Patches that have delta against patches of ps_delete.
+
+      """
+      patchset_id = self.key().id()
+      tbp = []
+      for patch in patches:
+        patch.delta.remove(patchset_id)
+        tbp.append(patch)
+      if tbp:
+        db.put(tbp)
+      tbd = [self]
+      for cls in [Patch, Comment]:
+        tbd += cls.gql('WHERE ANCESTOR IS :1', self)
+      db.delete(tbd)
+    db.run_in_transaction(_patchset_delete, patches)
 
 
 class Message(db.Model):
