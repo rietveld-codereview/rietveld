@@ -944,17 +944,6 @@ def editor_required(func):
 
 
 def issue_editor_required(func):
-  """Decorator that processes the issue_id argument and insists you own it."""
-
-  @issue_required
-  @editor_required
-  def issue_editor_wrapper(request, *args, **kwds):
-    return func(request, *args, **kwds)
-
-  return issue_editor_wrapper
-
-
-def issue_editor_required(func):
   """Decorator that processes the issue_id argument and insists the user has
   permission to edit it."""
 
@@ -1031,7 +1020,7 @@ def patch_filename_required(func):
                      {'issue': request.issue,
                       'patchset': request.patchset,
                       'patch': None,
-                      'patchsets': request.issue.patchset_set,
+                      'patchsets': request.issue.patchsets,
                       'filename': patch_filename})
     patch.patchset = request.patchset
     request.patch = patch
@@ -1582,14 +1571,14 @@ def upload(request):
 
         content_entities = []
         new_content_entities = []
-        patches = list(patchset.patch_set)
+        patches = list(patchset.patches)
         existing_patches = {}
-        patchsets = list(issue.patchset_set)
+        patchsets = list(issue.patchsets)
         if len(patchsets) > 1:
           # Only check the last uploaded patchset for speed.
-          last_patch_set = patchsets[-2].patch_set
+          last_patch_list = patchsets[-2].patches
           patchsets = None  # Reduce memory usage.
-          for opatch in last_patch_set:
+          for opatch in last_patch_list:
             if opatch.content:
               existing_patches[opatch.filename] = opatch
         for patch in patches:
@@ -1744,6 +1733,7 @@ def upload_complete(request, patchset_id=None):
   # Check for completeness
   errors = []
   if request.issue.local_base and patchset is not None:
+    # Use of patch_set here is OK because this is part of the v1 upload code.
     query = patchset.patch_set.filter('is_binary =', False)
     query = query.filter('status =', None)  # all uploaded file have a status
     if query.count() > 0:
@@ -2010,203 +2000,40 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
   return emails
 
 
-def _reorder_patches_by_filename(patches):
-  """Reorder a list of patches to put C/C++ headers before sources."""
-  splits = [os.path.splitext(patch.filename) for patch in patches]
-  for i in range(len(splits) - 1):
-    if (splits[i][0] == splits[i+1][0] and
-        splits[i][1] in ['.c', '.cc', '.cpp'] and
-        splits[i+1][1] in ['.h', '.hxx', '.hpp']):
-      patches[i:i+2] = [patches[i+1], patches[i]]
-
-
-def _calculate_delta(patch, patchset_id, patchsets):
-  """Calculates which files in earlier patchsets this file differs from.
-
-  Args:
-    patch: The file to compare.
-    patchset_id: The file's patchset's key id.
-    patchsets: A list of existing patchsets.
-
-  Returns:
-    A list of patchset ids.
-  """
-  delta = []
-  if patch.no_base_file:
-    return delta
-  for other in patchsets:
-    if patchset_id == other.key().id():
-      break
-    if not hasattr(other, 'parsed_patches'):
-      other.parsed_patches = None  # cache variable for already parsed patches
-    if other.data or other.parsed_patches:
-      # Loading all the Patch entities in every PatchSet takes too long
-      # (DeadLineExceeded) and consumes a lot of memory (MemoryError) so instead
-      # just parse the patchset's data.  Note we can only do this if the
-      # patchset was small enough to fit in the data property.
-      if other.parsed_patches is None:
-        # PatchSet.data is stored as db.Blob (str). Try to convert it
-        # to unicode so that Python doesn't need to do this conversion
-        # when comparing text and patch.text, which is db.Text
-        # (unicode).
-        try:
-          other.parsed_patches = engine.SplitPatch(other.data.decode('utf-8'))
-        except UnicodeDecodeError:  # Fallback to str - unicode comparison.
-          other.parsed_patches = engine.SplitPatch(other.data)
-        other.data = None  # Reduce memory usage.
-      for filename, text in other.parsed_patches:
-        if filename == patch.filename:
-          if text != patch.text:
-            delta.append(other.key().id())
-          break
-      else:
-        # We could not find the file in the previous patchset. It must
-        # be new wrt that patchset.
-        delta.append(other.key().id())
-    else:
-      # other (patchset) is too big to hold all the patches inside itself, so
-      # we need to go to the datastore.  Use the index to see if there's a
-      # patch against our current file in other.
-      query = models.Patch.all()
-      query.filter("filename =", patch.filename)
-      query.filter("patchset =", other.key())
-      other_patches = query.fetch(100)
-      if other_patches and len(other_patches) > 1:
-        logging.info("Got %s patches with the same filename for a patchset",
-                     len(other_patches))
-      for op in other_patches:
-        if op.text != patch.text:
-          delta.append(other.key().id())
-          break
-      else:
-        # We could not find the file in the previous patchset. It must
-        # be new wrt that patchset.
-        delta.append(other.key().id())
-
-  return delta
-
-
 def _get_patchset_info(request, patchset_id):
-  """ Returns a list of patchsets for the issue.
+  """Returns a list of patchsets for the issue.
 
   Args:
-    request: Django Request object.
-    patchset_id: The id of the patchset that the caller is interested in.  This
-      is the one that we generate delta links to if they're not available.  We
-      can't generate for all patchsets because it would take too long on issues
-      with many patchsets.  Passing in None is equivalent to doing it for the
-      last patchset.
+    patchset_id: The id of the patchset that the caller is interested in.
+      This is the one that we generate delta links to if they're not
+      available.  We can't generate for all patchsets because it would take
+      too long on issues with many patchsets.  Passing in None is equivalent
+      to doing it for the last patchset.
 
   Returns:
     A 3-tuple of (issue, patchsets, HttpResponse).
-    If HttpResponse is not None, further processing should stop and it should be
-    returned.
+    If HttpResponse is not None, further processing should stop and it should
+    be returned.
   """
   issue = request.issue
-  patchsets = list(issue.patchset_set.order('created'))
+  patchsets = None
   response = None
-  if not patchset_id and patchsets:
-    patchset_id = patchsets[-1].key().id()
-
-  if request.user:
-    drafts = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = TRUE'
-                                     '  AND author = :2',
-                                     issue, request.user))
+  attempt = _clean_int(request.GET.get('attempt'), 0, 0)
+  if attempt < 0:
+    response = HttpTextResponse('Invalid parameter', status=404)
   else:
-    drafts = []
-  comments = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE',
-                                     issue))
-  # TODO(andi) Remove draft_count attribute, we already have issue._num_drafts
-  # and it's additional magic.
-  issue.draft_count = len(drafts)
-  for c in drafts:
-    c.ps_key = c.patch.patchset.key()  # Issues a query!
-  patchset_id_mapping = {}  # Maps from patchset id to its ordering number.
-  for patchset in patchsets:
-    patchset_id_mapping[patchset.key().id()] = len(patchset_id_mapping) + 1
-    patchset.n_drafts = sum(c.ps_key == patchset.key() for c in drafts)
-    patchset.patches = None
-    patchset.parsed_patches = None
-    patchset.total_added = 0
-    patchset.total_removed = 0
-    if patchset_id == patchset.key().id():
-      patchset.patches = list(patchset.patch_set.order('filename'))
-      # Reorder the list of patches to put .h files before .cc.
-      _reorder_patches_by_filename(patchset.patches)
-      try:
-        attempt = _clean_int(request.GET.get('attempt'), 0, 0)
-        if attempt < 0:
-          response = HttpTextResponse('Invalid parameter', status=404)
-          break
-        for patch in patchset.patches:
-          pkey = patch.key()
-          patch._num_comments = sum(c.parent_key() == pkey for c in comments)
-          if request.user:
-            patch._num_my_comments = sum(
-                c.parent_key() == pkey and c.author == request.user
-                for c in comments)
-          else:
-            patch._num_my_comments = 0
-          patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
-          if not patch.delta_calculated:
-            if attempt > 2:
-              # Too many patchsets or files and we're not able to generate the
-              # delta links.  Instead of giving a 500, try to render the page
-              # without them.
-              patch.delta = []
-            else:
-              # Compare each patch to the same file in earlier patchsets to see
-              # if they differ, so that we can generate the delta patch urls.
-              # We do this once and cache it after.  It's specifically not done
-              # on upload because we're already doing too much processing there.
-              # NOTE: this function will clear out patchset.data to reduce
-              # memory so don't ever call patchset.put() after calling it.
-              patch.delta = _calculate_delta(patch, patchset_id, patchsets)
-              patch.delta_calculated = True
-              # A multi-entity put would be quicker, but it fails when the
-              # patches have content that is large.  App Engine throws
-              # RequestTooLarge.  This way, although not as efficient, allows
-              # multiple refreshes on an issue to get things done, as opposed to
-              # an all-or-nothing approach.
-              patch.put()
-          # Reduce memory usage: if this patchset has lots of added/removed
-          # files (i.e. > 100) then we'll get MemoryError when rendering the
-          # response.  Each Patch entity is using a lot of memory if the files
-          # are large, since it holds the entire contents.  Call num_chunks and
-          # num_drafts first though since they depend on text.
-          # These are 'active' properties and have side-effects when looked up.
-          # pylint: disable=W0104
-          patch.num_chunks
-          patch.num_drafts
-          patch.num_added
-          patch.num_removed
-          patch.text = None
-          patch._lines = None
-          patch.parsed_deltas = []
-          for delta in patch.delta:
-            # If delta is not in patchset_id_mapping, it's because of internal
-            # corruption.
-            if delta in patchset_id_mapping:
-              patch.parsed_deltas.append([patchset_id_mapping[delta], delta])
-            else:
-              logging.error(
-                  'Issue %d: %d is missing from %s',
-                  issue.key().id(), delta, patchset_id_mapping)
-          if not patch.is_binary:
-            patchset.total_added += patch.num_added
-            patchset.total_removed += patch.num_removed
-      except DeadlineExceededError:
-        logging.exception('DeadlineExceededError in _get_patchset_info')
-        if attempt > 2:
-          response = HttpTextResponse(
-              'DeadlineExceededError - create a new issue.')
-        else:
-          response = HttpResponseRedirect('%s?attempt=%d' %
-                                          (request.path, attempt + 1))
-        break
-  # Reduce memory usage (see above comment).
-  for patchset in patchsets:
-    patchset.parsed_patches = None
+    last_attempt = attempt > 2
+    try:
+      patchsets = issue.get_patchset_info(last_attempt, request.user,
+                                          patchset_id)
+    except DeadlineExceededError:
+      logging.exception('DeadlineExceededError in _get_patchset_info')
+      if last_attempt:
+        response = HttpTextResponse(
+          'DeadlineExceededError - create a new issue.')
+      else:
+        response =  HttpResponseRedirect('%s?attempt=%d' %
+                                        (request.path, attempt + 1))
   return issue, patchsets, response
 
 
@@ -2268,7 +2095,7 @@ def show(request, form=None):
       first_patch = last_patchset.patches[0]
   messages = []
   has_draft_message = False
-  for msg in issue.message_set.order('date'):
+  for msg in issue.messages:
     if not msg.draft:
       messages.append(msg)
     elif msg.draft and request.user and msg.sender == request.user.email():
@@ -2297,22 +2124,22 @@ def show(request, form=None):
     if try_job.parent_name and len(builds_to_parents[try_job.builder]) > 1:
       try_job.builder = try_job.parent_name + ':' + try_job.builder
 
-  return respond(request, 'issue.html',
-                 {'issue': issue, 'patchsets': patchsets,
-                  'messages': messages, 'form': form,
-                  'last_patchset': last_patchset,
-                  'num_patchsets': num_patchsets,
-                  'first_patch': first_patch,
-                  'has_draft_message': has_draft_message,
-                  'is_editor': issue.edit_allowed,
-                  'src_url': src_url,
-                  'default_builders':
-                      models_chromium.DefaultBuilderList.get_builders(
-                          issue.base),
-                  'trybot_documentation_link':
-                      models_chromium.DefaultBuilderList.get_doc_link(
-                          issue.base),
-                  })
+  return respond(request, 'issue.html', {
+    'default_builders':
+      models_chromium.DefaultBuilderList.get_builders(issue.base),
+    'first_patch': first_patch,
+    'form': form,
+    'has_draft_message': has_draft_message,
+    'is_editor': issue.edit_allowed,
+    'issue': issue,
+    'last_patchset': last_patchset,
+    'messages': messages,
+    'num_patchsets': num_patchsets,
+    'patchsets': patchsets,
+    'src_url': src_url,
+    'trybot_documentation_link':
+      models_chromium.DefaultBuilderList.get_doc_link(issue.base),
+  })
 
 
 @patchset_required
@@ -2428,20 +2255,21 @@ def edit(request):
   issue.reviewers = reviewers
   issue.cc = cc
   if base_changed:
-    for patchset in issue.patchset_set:
-      db.run_in_transaction(_delete_cached_contents, list(patchset.patch_set))
+    for patchset in issue.patchsets:
+      db.run_in_transaction(_delete_cached_contents,
+                            list(patchset.patches))
   issue.calculate_updates_for()
   issue.put()
 
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
-def _delete_cached_contents(patch_set):
+def _delete_cached_contents(patch_list):
   """Transactional helper for edit() to delete cached contents."""
   # TODO(guido): No need to do this in a transaction.
   patches = []
   contents = []
-  for patch in patch_set:
+  for patch in patch_list:
     try:
       content = patch.content
     except db.Error:
@@ -2487,39 +2315,8 @@ def delete_patchset(request):
 
   There is no way back.
   """
-  issue = request.issue
-  ps_delete = request.patchset
-  ps_id = ps_delete.key().id()
-  patchsets_after = issue.patchset_set.filter('created >', ps_delete.created)
-  patches = []
-  for patchset in patchsets_after:
-    for patch in patchset.patch_set:
-      if patch.delta_calculated:
-        if ps_id in patch.delta:
-          patches.append(patch)
-  db.run_in_transaction(_patchset_delete, ps_delete, patches)
-  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
-
-
-def _patchset_delete(ps_delete, patches):
-  """Transactional helper for delete_patchset.
-
-  Args:
-    ps_delete: The patchset to be deleted.
-    patches: Patches that have delta against patches of ps_delete.
-
-  """
-  patchset_id = ps_delete.key().id()
-  tbp = []
-  for patch in patches:
-    patch.delta.remove(patchset_id)
-    tbp.append(patch)
-  if tbp:
-    db.put(tbp)
-  tbd = [ps_delete]
-  for cls in [models.Patch, models.Comment, models.TryJobResult]:
-    tbd += cls.gql('WHERE ANCESTOR IS :1', ps_delete)
-  db.delete(tbd)
+  request.patchset.nuke()
+  return HttpResponseRedirect(reverse(show, args=[request.issue.key().id()]))
 
 
 @post_required
@@ -2755,7 +2552,7 @@ def _issue_as_dict(issue, messages, request=None):
     'closed': issue.closed,
     'cc': issue.cc,
     'reviewers': issue.reviewers,
-    'patchsets': [p.key().id() for p in issue.patchset_set.order('created')],
+    'patchsets': [p.key().id() for p in issue.patchsets],
     'description': issue.description,
     'subject': issue.subject,
     'issue': issue.key().id(),
@@ -2891,7 +2688,7 @@ def diff(request):
   patchset = request.patchset
   patch = request.patch
 
-  patchsets = list(request.issue.patchset_set.order('created'))
+  patchsets = list(request.issue.patchsets)
 
   context = _get_context_for_user(request)
   column_width = _get_column_width_for_user(request)
@@ -3125,7 +2922,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
   if isinstance(data, HttpResponse) and data.status_code != 302:
     return data
 
-  patchsets = list(request.issue.patchset_set.order('created'))
+  patchsets = list(request.issue.patchsets)
 
   if data["patch_right"]:
     _add_next_prev2(data["ps_left"], data["ps_right"], data["patch_right"])
@@ -3198,8 +2995,7 @@ def _add_next_prev(patchset, patch):
   patch.prev = patch.next = None
   patches = models.Patch.all().filter('patchset =', patchset.key()).order(
       'filename').fetch(1000)
-  _reorder_patches_by_filename(patches)
-  patchset.patches = patches  # Required to render the jump to select.
+  patchset.patches_cache = patches  # Required to render the jump to select.
 
   comments_by_patch, drafts_by_patch = _get_comment_counts(
      models.Account.current_user_account, patchset)
@@ -3242,7 +3038,7 @@ def _add_next_prev2(ps_left, ps_right, patch_right):
   patch_right.prev = patch_right.next = None
   patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
                                   ps_right))
-  ps_right.patches = patches  # Required to render the jump to select.
+  ps_right.patches_cache = patches  # Required to render the jump to select.
 
   n_comments, n_drafts = _get_comment_counts(
     models.Account.current_user_account, ps_right)
@@ -3453,12 +3249,10 @@ def _get_affected_files(issue, full_diff=False):
   files = []
   modified_count = 0
   diff = ''
-  patchsets = list(issue.patchset_set.order('created'))
+  patchsets = list(issue.patchsets)
   if len(patchsets):
     patchset = patchsets[-1]
-    patches = list(patchset.patch_set.order('filename'))
-    _reorder_patches_by_filename(patches)
-    for patch in patches:
+    for patch in patchset.patches:
       file_str = ''
       if patch.status:
         file_str += patch.status + ' '
@@ -3637,12 +3431,12 @@ def _get_draft_comments(request, issue, preview=False):
   comments = []
   tbd = []
   # XXX Should request all drafts for this issue once, now we can.
-  for patchset in issue.patchset_set.order('created'):
+  for patchset in issue.patchsets:
     ps_comments = list(models.Comment.gql(
         'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
         patchset, request.user))
     if ps_comments:
-      patches = dict((p.key(), p) for p in patchset.patch_set)
+      patches = dict((p.key(), p) for p in patchset.patches)
       for p in patches.itervalues():
         p.patchset = patchset
       for c in ps_comments:
@@ -3731,9 +3525,9 @@ def _get_modified_counts(issue):
   modified_removed_count = 0
 
   # Count the modified lines in the patchset.
-  patchsets = list(issue.patchset_set.order('created'))
+  patchsets = list(issue.patchsets)
   if patchsets:
-    for patch in patchsets[-1].patch_set.order('filename'):
+    for patch in patchsets[-1].patches:
       modified_added_count += patch.num_added
       modified_removed_count += patch.num_removed
 
@@ -4607,16 +4401,7 @@ def task_calculate_delta(request):
     return HttpResponse()
   if patchset is None:  # e.g. PatchSet was deleted inbetween
     return HttpResponse()
-  patchset_id = patchset.key().id()
-  patchsets = None
-  for patch in patchset.patch_set.filter('delta_calculated =', False):
-    if patchsets is None:
-      # patchsets is retrieved on first iteration because patchsets
-      # isn't needed outside the loop at all.
-      patchsets = list(patchset.issue.patchset_set.order('created'))
-    patch.delta = _calculate_delta(patch, patchset_id, patchsets)
-    patch.delta_calculated = True
-    patch.put()
+  patchset.calculate_deltas()
   return HttpResponse()
 
 
@@ -4991,7 +4776,7 @@ def process_issue(
   - message_index: result of search_relevant_first_email_for_user().
   - drive_by: the state of things looks like a DRIVE_BY or a NOT_REQUESTED.
   - issue_owner: shortcut for issue.owner.email().
-  - messages: shortcut for issue.message_set sorted by date. Cannot be empty.
+  - messages: shortcut for issue.messages sorted by date. Cannot be empty.
   - user: user to calculate latency.
 
   A Message must have been sent on day_to_process that would imply data,

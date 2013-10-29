@@ -546,7 +546,7 @@ def conversions(request):
 @patchset_required
 def lint(request):
   """/lint/<issue>_<patchset> - Lint a patch set."""
-  patches = list(request.patchset.patch_set)
+  patches = list(request.patchset.patches)
   for patch in patches:
     if not _lint_patch(patch):
       continue

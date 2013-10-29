@@ -65,7 +65,7 @@ login_warned = false;
   <div>{%include "view_details_select.html"%}</div>
   <div style="margin-top: 5px;">
     Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{patchset.key.id}});">
-      {% for jump_patch in patchset.patches %}
+      {% for jump_patch in patchset.patches_cache %}
         <option value="{{jump_patch.filename}}"
          {%ifequal jump_patch.key.id patch.key.id%} selected="selected"{%endifequal%}>{{jump_patch.filename}}</option>
       {% endfor %}
