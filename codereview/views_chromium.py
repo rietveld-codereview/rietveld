@@ -42,7 +42,7 @@ from codereview import patching
 from codereview import views
 from codereview.views import admin_required, issue_editor_required
 from codereview.views import login_required, patch_required, patchset_required
-from codereview.views import post_required, respond, reverse, xsrf_required
+from codereview.views import require_methods, respond, reverse, xsrf_required
 
 
 ### Forms ###
@@ -84,7 +84,7 @@ class TryserversForm(forms.Form):
 def key_required(func):
   """Decorator that insists that you are using a specific key."""
 
-  @post_required
+  @require_methods('POST')
   def key_wrapper(request, *args, **kwds):
     key = request.POST.get('password')
     if request.user or not key:
@@ -751,7 +751,7 @@ def delete_old_pending_jobs_task(request):
   return HttpResponse(msg, content_type='text/plain')
 
 
-@post_required
+@require_methods('POST')
 @xsrf_required
 @patchset_required
 @views.json_response
