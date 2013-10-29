@@ -782,15 +782,21 @@ class HttpHtmlResponse(HttpResponse):
 ### Decorators for request handlers ###
 
 
-def post_required(func):
-  """Decorator that returns an error unless request.method == 'POST'."""
-
-  def post_wrapper(request, *args, **kwds):
-    if request.method != 'POST':
-      return HttpTextResponse('This requires a POST request.', status=405)
-    return func(request, *args, **kwds)
-
-  return post_wrapper
+def require_methods(*methods):
+  """Returns a decorator which produces an error unless request.method is one
+  of |methods|.
+  """
+  def decorator(func):
+    @functools.wraps(func)
+    def wrapped(request, *args, **kwds):
+      if request.method not in methods:
+        allowed = ', '.join(methods)
+        rsp = HttpTextResponse('This requires a specific method: %s' % allowed,
+                               status=405)
+        rsp['Allow'] = allowed
+      return func(request, *args, **kwds)
+    return wrapped
+  return decorator
 
 
 def login_required(func):
@@ -810,7 +816,7 @@ def xsrf_required(func):
 
   This only checks if the method is POST; it lets other method go
   through unchallenged.  Apply after @login_required and (if
-  applicable) @post_required.  This decorator is mutually exclusive
+  applicable) @require_methods('POST').  This decorator is mutually exclusive
   with @upload_required.
   """
 
@@ -874,7 +880,7 @@ def task_queue_required(name):
   def decorate_task_queue(func):
 
     @functools.wraps(func)
-    @post_required
+    @require_methods('POST')
     def task_queue_wrapper(request, *args, **kwargs):
       actual = request.META.get(format_header('X-AppEngine-QueueName'))
       if actual != name:
@@ -1503,7 +1509,7 @@ def use_uploadpy(request):
   return respond(request, 'use_uploadpy.html')
 
 
-@post_required
+@require_methods('POST')
 @upload_required
 def upload(request):
   """/upload - Like new() or add(), but from the upload.py script.
@@ -1612,7 +1618,7 @@ def upload(request):
   return HttpTextResponse(msg)
 
 
-@post_required
+@require_methods('POST')
 @patch_required
 @upload_required
 def upload_content(request):
@@ -1665,7 +1671,7 @@ def upload_content(request):
   return HttpTextResponse('OK')
 
 
-@post_required
+@require_methods('POST')
 @patchset_required
 @upload_required
 def upload_patch(request):
@@ -1706,7 +1712,7 @@ def upload_patch(request):
   return HttpTextResponse(msg)
 
 
-@post_required
+@require_methods('POST')
 @issue_editor_required
 @upload_required
 def upload_complete(request, patchset_id=None):
@@ -1885,7 +1891,7 @@ def _get_data_url(form):
   return data, url, separate_patches
 
 
-@post_required
+@require_methods('POST')
 @issue_editor_required
 @xsrf_required
 def add(request):
@@ -2293,7 +2299,7 @@ def _delete_cached_contents(patch_list):
     db.put(patches)
 
 
-@post_required
+@require_methods('POST')
 @issue_editor_required
 @xsrf_required
 def delete(request):
@@ -2307,7 +2313,7 @@ def delete(request):
   return HttpResponseRedirect(reverse(mine))
 
 
-@post_required
+@require_methods('POST')
 @patchset_editor_required
 @xsrf_required
 def delete_patchset(request):
@@ -2319,7 +2325,7 @@ def delete_patchset(request):
   return HttpResponseRedirect(reverse(show, args=[request.issue.key().id()]))
 
 
-@post_required
+@require_methods('POST')
 @issue_editor_required
 @xsrf_required
 def close(request):
@@ -2335,7 +2341,7 @@ def close(request):
   return HttpTextResponse('Closed')
 
 
-@post_required
+@require_methods('POST')
 @issue_required
 @upload_required
 def mailissue(request):
@@ -3112,7 +3118,7 @@ def _add_or_update_comment(user, issue, patch, lineno, left, text, message_id):
 
 @login_required
 @patchset_required
-@post_required
+@require_methods('POST')
 @json_response
 def api_draft_comments(request):
   """/api/<issue>/<patchset>/draft_comments - Store a number of draft
@@ -3153,7 +3159,7 @@ def api_draft_comments(request):
     return HttpTextResponse('An error occurred.', status=500)
 
 
-@post_required
+@require_methods('POST')
 def inline_draft(request):
   """/inline_draft - Ajax handler to submit an in-line draft comment.
 
@@ -3674,7 +3680,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   return msg
 
 
-@post_required
+@require_methods('POST')
 @login_required
 @xsrf_required
 @issue_required
@@ -3691,7 +3697,7 @@ def star(request):
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
-@post_required
+@require_methods('POST')
 @login_required
 @issue_required
 @xsrf_required
@@ -4031,7 +4037,7 @@ def branch_edit(request, branch_id):
   return HttpResponseRedirect(reverse(repos))
 
 
-@post_required
+@require_methods('POST')
 @login_required
 @xsrf_required
 def branch_delete(request, branch_id):
@@ -4103,7 +4109,7 @@ def settings(request):
   return HttpResponseRedirect(reverse(mine))
 
 
-@post_required
+@require_methods('POST')
 @login_required
 @xsrf_required
 def account_delete(_request):
@@ -4222,7 +4228,7 @@ def _user_popup(request):
   return popup_html
 
 
-@post_required
+@require_methods('POST')
 def incoming_chat(request):
   """/_ah/xmpp/message/chat/
 
@@ -4240,7 +4246,7 @@ def incoming_chat(request):
   return HttpTextResponse('')
 
 
-@post_required
+@require_methods('POST')
 def incoming_mail(request, recipients):
   """/_ah/mail/(.*)
 
