@@ -16,16 +16,13 @@
 
 import binascii
 import calendar
-import collections
 import datetime
 import email  # see incoming_mail()
 import email.utils
-import functools
 import itertools
 import json
 import logging
 import md5
-import mimetypes
 import os
 import random
 import re
@@ -76,7 +73,10 @@ from codereview import library
 from codereview import models
 from codereview import patching
 from codereview import utils
+from codereview.common import IS_DEV
 from codereview.exceptions import FetchError
+from codereview.responses import HttpTextResponse, HttpHtmlResponse, respond
+import codereview.decorators as deco
 
 
 # Add our own custom template tags library.
@@ -86,7 +86,6 @@ django.template.add_to_builtins('codereview.library')
 ### Constants ###
 
 
-IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
 OAUTH_DEFAULT_ERROR_MESSAGE = 'OAuth 2.0 error occurred.'
 _ACCESS_TOKEN_TEMPLATE_ROOT = 'http://localhost:%(port)d?'
 ACCESS_TOKEN_REDIRECT_TEMPLATE = (_ACCESS_TOKEN_TEMPLATE_ROOT +
@@ -103,9 +102,6 @@ MAX_MESSAGE = 10000
 MAX_FILENAME = 255
 MAX_DB_KEY_LENGTH = 1000
 
-# Singleton object to indicate the HTTP Status Code for a @json_response
-# decorator. See @json_response for usage.
-STATUS_CODE = object()
 
 ### Form classes ###
 
@@ -588,61 +584,6 @@ class InvalidIncomingEmailError(Exception):
 ### Helper functions ###
 
 
-# Counter displayed (by respond()) below) on every page showing how
-# many requests the current incarnation has handled, not counting
-# redirects.  Rendered by templates/base.html.
-counter = 0
-
-
-def respond(request, template, params=None):
-  """Helper to render a response, passing standard stuff to the response.
-
-  Args:
-    request: The request object.
-    template: The template name; '.html' is appended automatically.
-    params: A dict giving the template parameters; modified in-place.
-
-  Returns:
-    Whatever render_to_response(template, params) returns.
-
-  Raises:
-    Whatever render_to_response(template, params) raises.
-  """
-  global counter
-  counter += 1
-  if params is None:
-    params = {}
-  must_choose_nickname = False
-  uploadpy_hint = False
-  if request.user is not None:
-    account = models.Account.current_user_account
-    must_choose_nickname = not account.user_has_selected_nickname()
-    uploadpy_hint = account.uploadpy_hint
-  params['request'] = request
-  params['counter'] = counter
-  params['user'] = request.user
-  params['is_admin'] = request.user_is_admin
-  params['is_dev'] = IS_DEV
-  params['media_url'] = django_settings.MEDIA_URL
-  params['special_banner'] = getattr(django_settings, 'SPECIAL_BANNER', None)
-  full_path = request.get_full_path().encode('utf-8')
-  if request.user is None:
-    params['sign_in'] = users.create_login_url(full_path)
-  else:
-    params['sign_out'] = users.create_logout_url(full_path)
-    account = models.Account.current_user_account
-    if account is not None:
-      params['xsrf_token'] = account.get_xsrf_token()
-  params['must_choose_nickname'] = must_choose_nickname
-  params['uploadpy_hint'] = uploadpy_hint
-  params['rietveld_revision'] = django_settings.RIETVELD_REVISION
-  try:
-    return render_to_response(template, params,
-                              context_instance=RequestContext(request))
-  finally:
-    library.user_cache.clear() # don't want this sticking around
-
-
 def _random_bytes(n):
   """Helper returning a string of random bytes of given length."""
   return ''.join(map(chr, (random.randrange(256) for i in xrange(n))))
@@ -729,345 +670,6 @@ def _notify_issue(request, issue, message):
       logging.error('XMPP error %r sending for issue %d to %s',
                     sts, iid, jids_str)
       return False
-
-
-def format_header(head):
-  return ('http_' + head).replace('-', '_').upper()
-
-
-class HttpTextResponse(HttpResponse):
-  def __init__(self, *args, **kwargs):
-    kwargs['content_type'] = 'text/plain; charset=utf-8'
-    super(HttpTextResponse, self).__init__(*args, **kwargs)
-
-
-class HttpHtmlResponse(HttpResponse):
-  def __init__(self, *args, **kwargs):
-    kwargs['content_type'] = 'text/html; charset=utf-8'
-    super(HttpHtmlResponse, self).__init__(*args, **kwargs)
-
-
-### Decorators for request handlers ###
-
-
-def require_methods(*methods):
-  """Returns a decorator which produces an error unless request.method is one
-  of |methods|.
-  """
-  def decorator(func):
-    @functools.wraps(func)
-    def wrapped(request, *args, **kwds):
-      if request.method not in methods:
-        allowed = ', '.join(methods)
-        rsp = HttpTextResponse('This requires a specific method: %s' % allowed,
-                               status=405)
-        rsp['Allow'] = allowed
-      return func(request, *args, **kwds)
-    return wrapped
-  return decorator
-
-
-def login_required(func):
-  """Decorator that redirects to the login page if you're not logged in."""
-
-  def login_wrapper(request, *args, **kwds):
-    if request.user is None:
-      return HttpResponseRedirect(
-          users.create_login_url(request.get_full_path().encode('utf-8')))
-    return func(request, *args, **kwds)
-
-  return login_wrapper
-
-
-def xsrf_required(func):
-  """Decorator to check XSRF token.
-
-  This only checks if the method is POST; it lets other method go
-  through unchallenged.  Apply after @login_required and (if
-  applicable) @require_methods('POST').  This decorator is mutually exclusive
-  with @upload_required.
-  """
-
-  def xsrf_wrapper(request, *args, **kwds):
-    if request.method == 'POST':
-      post_token = request.POST.get('xsrf_token')
-      if not post_token:
-        return HttpTextResponse('Missing XSRF token.', status=403)
-      account = models.Account.current_user_account
-      if not account:
-        return HttpTextResponse('Must be logged in for XSRF check.', status=403)
-      xsrf_token = account.get_xsrf_token()
-      if post_token != xsrf_token:
-        # Try the previous hour's token
-        xsrf_token = account.get_xsrf_token(-1)
-        if post_token != xsrf_token:
-          msg = [u'Invalid XSRF token.']
-          if request.POST:
-            msg.extend([u'',
-                        u'However, this was the data posted to the server:',
-                        u''])
-            for key in request.POST:
-              msg.append(u'%s: %s' % (key, request.POST[key]))
-            msg.extend([u'', u'-'*10,
-                        u'Please reload the previous page and post again.'])
-          return HttpTextResponse(u'\n'.join(msg), status=403)
-    return func(request, *args, **kwds)
-
-  return xsrf_wrapper
-
-
-def upload_required(func):
-  """Decorator for POST requests from the upload.py script.
-
-  Right now this is for documentation only, but eventually we should
-  change this to insist on a special header that JavaScript cannot
-  add, to prevent XSRF attacks on these URLs.  This decorator is
-  mutually exclusive with @xsrf_required.
-  """
-  return func
-
-
-def admin_required(func):
-  """Decorator that insists that you're logged in as administratior."""
-
-  def admin_wrapper(request, *args, **kwds):
-    if request.user is None:
-      return HttpResponseRedirect(
-          users.create_login_url(request.get_full_path().encode('utf-8')))
-    if not request.user_is_admin:
-      return HttpTextResponse(
-          'You must be admin in for this function', status=403)
-    return func(request, *args, **kwds)
-
-  return admin_wrapper
-
-
-def task_queue_required(name):
-  """Returns a function decorator for a task queue named |name|."""
-
-  def decorate_task_queue(func):
-
-    @functools.wraps(func)
-    @require_methods('POST')
-    def task_queue_wrapper(request, *args, **kwargs):
-      actual = request.META.get(format_header('X-AppEngine-QueueName'))
-      if actual != name:
-        logging.error('Task queue name doesn\'t match; %s != %s', actual, name)
-        return HttpTextResponse('Can only be run as a task queue.', status=403)
-      return func(request, *args, **kwargs)
-
-    return task_queue_wrapper
-
-  return decorate_task_queue
-
-
-def issue_required(func):
-  """Decorator that processes the issue_id handler argument."""
-
-  def issue_wrapper(request, issue_id, *args, **kwds):
-    issue = models.Issue.get_by_id(int(issue_id))
-    if issue is None:
-      return HttpTextResponse(
-          'No issue exists with that id (%s)' % issue_id, status=404)
-    if issue.private:
-      if request.user is None:
-        return HttpResponseRedirect(
-            users.create_login_url(request.get_full_path().encode('utf-8')))
-      if not issue.view_allowed:
-        return HttpTextResponse(
-            'You do not have permission to view this issue', status=403)
-    request.issue = issue
-    return func(request, *args, **kwds)
-
-  return issue_wrapper
-
-
-def user_key_required(func):
-  """Decorator that processes the user handler argument."""
-
-  def user_key_wrapper(request, user_key, *args, **kwds):
-    user_key = urllib.unquote(user_key)
-    if '@' in user_key:
-      request.user_to_show = users.User(user_key)
-    else:
-      account = models.Account.get_account_for_nickname(user_key)
-      if not account:
-        logging.info("account not found for nickname %s" % user_key)
-        return HttpTextResponse(
-            'No user found with that key (%s)' % urllib.quote(user_key),
-            status=404)
-      request.user_to_show = account.user
-    return func(request, *args, **kwds)
-
-  return user_key_wrapper
-
-
-def editor_required(func):
-  """Decorator that insists you own the issue.
-
-  It must appear after issue_required or equivalent, like patchset_required.
-  """
-
-  @login_required
-  def editor_wrapper(request, *args, **kwds):
-    if not request.issue.edit_allowed:
-      return HttpTextResponse('You do not own this issue', status=403)
-    return func(request, *args, **kwds)
-
-  return editor_wrapper
-
-
-def issue_editor_required(func):
-  """Decorator that processes the issue_id argument and insists the user has
-  permission to edit it."""
-
-  @login_required
-  @issue_required
-  def issue_editor_wrapper(request, *args, **kwds):
-    if not request.issue.edit_allowed:
-      return HttpTextResponse(
-          'You do not have permission to edit this issue', status=403)
-    return func(request, *args, **kwds)
-
-  return issue_editor_wrapper
-
-
-def patchset_required(func):
-  """Decorator that processes the patchset_id argument."""
-
-  @issue_required
-  def patchset_wrapper(request, patchset_id, *args, **kwds):
-    patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
-    if patchset is None:
-      return HttpTextResponse(
-          'No patch set exists with that id (%s)' % patchset_id, status=404)
-    patchset.issue = request.issue
-    request.patchset = patchset
-    return func(request, *args, **kwds)
-
-  return patchset_wrapper
-
-
-def patchset_editor_required(func):
-  """Decorator that processes the patchset_id argument and insists you own the
-  issue."""
-
-  @patchset_required
-  @editor_required
-  def patchset_editor_wrapper(request, *args, **kwds):
-    return func(request, *args, **kwds)
-
-  return patchset_editor_wrapper
-
-
-def patch_required(func):
-  """Decorator that processes the patch_id argument."""
-
-  @patchset_required
-  def patch_wrapper(request, patch_id, *args, **kwds):
-    patch = models.Patch.get_by_id(int(patch_id), parent=request.patchset)
-    if patch is None:
-      return HttpTextResponse(
-          'No patch exists with that id (%s/%s)' %
-          (request.patchset.key().id(), patch_id),
-          status=404)
-    patch.patchset = request.patchset
-    request.patch = patch
-    return func(request, *args, **kwds)
-
-  return patch_wrapper
-
-
-def patch_filename_required(func):
-  """Decorator that processes the patch_id argument."""
-
-  @patchset_required
-  def patch_wrapper(request, patch_filename, *args, **kwds):
-    patch = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                             request.patchset, patch_filename).get()
-    if patch is None and patch_filename.isdigit():
-      # It could be an old URL which has a patch ID instead of a filename
-      patch = models.Patch.get_by_id(int(patch_filename),
-                                     parent=request.patchset)
-    if patch is None:
-      return respond(request, 'diff_missing.html',
-                     {'issue': request.issue,
-                      'patchset': request.patchset,
-                      'patch': None,
-                      'patchsets': request.issue.patchsets,
-                      'filename': patch_filename})
-    patch.patchset = request.patchset
-    request.patch = patch
-    return func(request, *args, **kwds)
-
-  return patch_wrapper
-
-
-def image_required(func):
-  """Decorator that processes the image argument.
-
-  Attributes set on the request:
-   content: a Content entity.
-  """
-
-  @patch_required
-  def image_wrapper(request, image_type, *args, **kwds):
-    content = None
-    if image_type == "0":
-      content = request.patch.content
-    elif image_type == "1":
-      content = request.patch.patched_content
-    # Other values are erroneous so request.content won't be set.
-    if not content or not content.data:
-      return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
-    request.mime_type = mimetypes.guess_type(request.patch.filename)[0]
-    if not request.mime_type or not request.mime_type.startswith('image/'):
-      return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
-    request.content = content
-    return func(request, *args, **kwds)
-
-  return image_wrapper
-
-
-def json_response(func):
-  """Decorator that converts into JSON any returned value that is not an
-  HttpResponse. It handles `pretty` URL parameter to tune JSON response for
-  either performance or readability.
-
-  If the returned value has an entry whose key is the object |STATUS_CODE|,
-  it will be popped out, and will become the status code for the HttpResponse.
-  """
-
-  @functools.wraps(func)
-  def json_wrapper(request, *args, **kwds):
-    data = func(request, *args, **kwds)
-    if isinstance(data, HttpResponse):
-      return data
-
-    status = 200
-    if isinstance(data, collections.MutableMapping):
-      status = data.pop(STATUS_CODE, status)
-
-    if request.REQUEST.get('pretty','0').lower() in ('1', 'true', 'on'):
-      data = json.dumps(data, indent=2, sort_keys=True)
-    else:
-      data = json.dumps(data, separators=(',',':'))
-    return HttpResponse(data, content_type='application/json; charset=utf-8',
-                        status=status)
-
-  return json_wrapper
-
-
-def access_control_allow_origin_star(func):
-  """Decorator that adds Access-Control-Allow-Origin: * to any HTTPResponse
-  allowing cross-site XHR access to the handler."""
-
-  def allow_origin_access_star_wrapper(request, *args, **kwds):
-    response = func(request, *args, **kwds)
-    response["Access-Control-Allow-Origin"] = "*"
-    return response
-
-  return allow_origin_access_star_wrapper
 
 
 ### Request handlers ###
@@ -1291,14 +893,14 @@ def _optimize_draft_counts(issues):
       issue._num_drafts[account] = 0
 
 
-@login_required
+@deco.login_required
 def mine(request):
   """/mine - Show a list of issues created by the current user."""
   request.user_to_show = request.user
   return _show_user(request)
 
 
-@login_required
+@deco.login_required
 def starred(request):
   """/starred - Show a list of issues starred by the current user."""
   stars = models.Account.current_user_account.stars
@@ -1321,7 +923,7 @@ def _load_users_for_issues(issues):
 
   library.get_links_for_users(user_dict.keys())
 
-@user_key_required
+@deco.user_key_required
 def show_user(request):
   """/user - Show the user's dashboard"""
   return _show_user(request)
@@ -1407,8 +1009,8 @@ def _show_user(request):
                   })
 
 
-@admin_required
-@user_key_required
+@deco.admin_required
+@deco.user_key_required
 def block_user(request):
   """/user/<user>/block - Blocks a specific user."""
   account = models.Account.get_account_for_user(request.user_to_show)
@@ -1451,8 +1053,8 @@ def block_user(request):
   return respond(request, 'block_user.html', templates)
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def new(request):
   """/new - Upload a new patch set.
 
@@ -1472,8 +1074,8 @@ def new(request):
     return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def use_uploadpy(request):
   """Show an intermediate page about upload.py."""
   if request.method == 'POST':
@@ -1488,8 +1090,8 @@ def use_uploadpy(request):
   return respond(request, 'use_uploadpy.html')
 
 
-@require_methods('POST')
-@upload_required
+@deco.require_methods('POST')
+@deco.upload_required
 def upload(request):
   """/upload - Like new() or add(), but from the upload.py script.
 
@@ -1599,9 +1201,9 @@ def upload(request):
   return HttpTextResponse(msg)
 
 
-@require_methods('POST')
-@patch_required
-@upload_required
+@deco.require_methods('POST')
+@deco.patch_required
+@deco.upload_required
 def upload_content(request):
   """/<issue>/upload_content/<patchset>/<patch> - Upload base file contents.
 
@@ -1652,9 +1254,9 @@ def upload_content(request):
   return HttpTextResponse('OK')
 
 
-@require_methods('POST')
-@patchset_required
-@upload_required
+@deco.require_methods('POST')
+@deco.patchset_required
+@deco.upload_required
 def upload_patch(request):
   """/<issue>/upload_patch/<patchset> - Upload patch to patchset.
 
@@ -1693,9 +1295,9 @@ def upload_patch(request):
   return HttpTextResponse(msg)
 
 
-@require_methods('POST')
-@issue_editor_required
-@upload_required
+@deco.require_methods('POST')
+@deco.issue_editor_required
+@deco.upload_required
 def upload_complete(request, patchset_id=None):
   """/<issue>/upload_complete/<patchset> - Patchset upload is complete.
      /<issue>/upload_complete/ - used when no base files are uploaded.
@@ -1872,9 +1474,9 @@ def _get_data_url(form):
   return data, url, separate_patches
 
 
-@require_methods('POST')
-@issue_editor_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.issue_editor_required
+@deco.xsrf_required
 def add(request):
   """/<issue>/add - Add a new PatchSet to an existing Issue."""
   issue = request.issue
@@ -2023,7 +1625,7 @@ def _get_patchset_info(request, patchset_id):
   return issue, patchsets, response
 
 
-@issue_required
+@deco.issue_required
 def show(request, form=None):
   """/<issue> - Show an issue."""
   issue, patchsets, response = _get_patchset_info(request, None)
@@ -2057,7 +1659,7 @@ def show(request, form=None):
   })
 
 
-@patchset_required
+@deco.patchset_required
 def patchset(request):
   """/patchset/<key> - Returns patchset information."""
   patchset = request.patchset
@@ -2075,7 +1677,7 @@ def patchset(request):
                   })
 
 
-@login_required
+@deco.login_required
 def account(request):
   """/account/?q=blah&limit=10&timestamp=blah - Used for autocomplete."""
   def searchAccounts(prop, domain, added, response):
@@ -2111,8 +1713,8 @@ def account(request):
   return HttpTextResponse(response)
 
 
-@issue_editor_required
-@xsrf_required
+@deco.issue_editor_required
+@deco.xsrf_required
 def edit(request):
   """/<issue>/edit - Edit an issue."""
   issue = request.issue
@@ -2206,9 +1808,9 @@ def _delete_cached_contents(patch_list):
     db.put(patches)
 
 
-@require_methods('POST')
-@issue_editor_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.issue_editor_required
+@deco.xsrf_required
 def delete(request):
   """/<issue>/delete - Delete an issue.  There is no way back."""
   issue = request.issue
@@ -2220,9 +1822,9 @@ def delete(request):
   return HttpResponseRedirect(reverse(mine))
 
 
-@require_methods('POST')
-@patchset_editor_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.patchset_editor_required
+@deco.xsrf_required
 def delete_patchset(request):
   """/<issue>/patch/<patchset>/delete - Delete a patchset.
 
@@ -2232,9 +1834,9 @@ def delete_patchset(request):
   return HttpResponseRedirect(reverse(show, args=[request.issue.key().id()]))
 
 
-@require_methods('POST')
-@issue_editor_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.issue_editor_required
+@deco.xsrf_required
 def close(request):
   """/<issue>/close - Close an issue."""
   issue = request.issue
@@ -2247,9 +1849,9 @@ def close(request):
   return HttpTextResponse('Closed')
 
 
-@require_methods('POST')
-@issue_required
-@upload_required
+@deco.require_methods('POST')
+@deco.issue_required
+@deco.upload_required
 def mailissue(request):
   """/<issue>/mail - Send mail for an issue.
 
@@ -2268,8 +1870,8 @@ def mailissue(request):
   return HttpTextResponse('OK')
 
 
-@access_control_allow_origin_star
-@patchset_required
+@deco.access_control_allow_origin_star
+@deco.patchset_required
 def download(request):
   """/download/<issue>_<patchset>.diff - Download a patch set."""
   if request.patchset.data is None:
@@ -2284,7 +1886,7 @@ def download(request):
   return HttpTextResponse(padding + request.patchset.data)
 
 
-@patchset_required
+@deco.patchset_required
 def tarball(request):
   """/tarball/<issue>/<patchset>/[lr] - Returns a .tar.bz2 file
   containing a/ and b/ trees of the complete files for the entire patchset."""
@@ -2341,8 +1943,8 @@ def tarball(request):
   return response
 
 
-@issue_required
-@upload_required
+@deco.issue_required
+@deco.upload_required
 def description(request):
   """/<issue>/description - Gets/Sets an issue's description.
 
@@ -2360,9 +1962,9 @@ def description(request):
   return HttpTextResponse('')
 
 
-@issue_required
-@upload_required
-@json_response
+@deco.issue_required
+@deco.upload_required
+@deco.json_response
 def fields(request):
   """/<issue>/fields - Gets/Sets fields on the issue.
 
@@ -2397,7 +1999,7 @@ def fields(request):
   return HttpTextResponse('')
 
 
-@patch_required
+@deco.patch_required
 def patch(request):
   """/<issue>/patch/<patchset>/<patch> - View a raw patch."""
   return patch_helper(request)
@@ -2435,8 +2037,8 @@ def patch_helper(request, nav_type='patch'):
                   })
 
 
-@access_control_allow_origin_star
-@image_required
+@deco.access_control_allow_origin_star
+@deco.image_required
 def image(request):
   """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
   response = HttpResponse(request.content.data, content_type=request.mime_type)
@@ -2447,8 +2049,8 @@ def image(request):
   return response
 
 
-@access_control_allow_origin_star
-@patch_required
+@deco.access_control_allow_origin_star
+@deco.patch_required
 def download_patch(request):
   """/download/issue<issue>_<patchset>_<patch>.diff - Download patch."""
   return HttpTextResponse(request.patch.text)
@@ -2530,9 +2132,9 @@ def _patchset_as_dict(patchset, comments, request=None):
   return values
 
 
-@access_control_allow_origin_star
-@issue_required
-@json_response
+@deco.access_control_allow_origin_star
+@deco.issue_required
+@deco.json_response
 def api_issue(request):
   """/api/<issue> - Gets issue's data as a JSON-encoded dictionary."""
   messages = request.GET.get('messages', 'false').lower() == 'true'
@@ -2540,9 +2142,9 @@ def api_issue(request):
   return values
 
 
-@access_control_allow_origin_star
-@patchset_required
-@json_response
+@deco.access_control_allow_origin_star
+@deco.patchset_required
+@deco.json_response
 def api_patchset(request):
   """/api/<issue>/<patchset> - Gets an issue's patchset data as a JSON-encoded
   dictionary.
@@ -2587,7 +2189,7 @@ def _get_column_width_for_user(request):
   return column_width
 
 
-@patch_filename_required
+@deco.patch_filename_required
 def diff(request):
   """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff"""
   if request.patch.no_base_file:
@@ -2658,8 +2260,8 @@ def _get_diff_table_rows(request, patch, context, column_width):
   return rows
 
 
-@patch_required
-@json_response
+@deco.patch_required
+@deco.json_response
 def diff_skipped_lines(request, id_before, id_after, where, column_width):
   """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines.
 
@@ -2800,7 +2402,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
               ps_left=ps_left, ps_right=ps_right, rows=rows)
 
 
-@issue_required
+@deco.issue_required
 def diff2(request, ps_left_id, ps_right_id, patch_filename):
   """/<issue>/diff2/... - View the delta between two different patch sets."""
   context = _get_context_for_user(request)
@@ -2846,8 +2448,8 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
                   })
 
 
-@issue_required
-@json_response
+@deco.issue_required
+@deco.json_response
 def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
                         id_before, id_after, where, column_width):
   """/<issue>/diff2/... - Returns a fragment of skipped lines"""
@@ -3012,10 +2614,10 @@ def _add_or_update_comment(user, issue, patch, lineno, left, text, message_id):
   return comment
 
 
-@login_required
-@patchset_required
-@require_methods('POST')
-@json_response
+@deco.login_required
+@deco.patchset_required
+@deco.require_methods('POST')
+@deco.json_response
 def api_draft_comments(request):
   """/api/<issue>/<patchset>/draft_comments - Store a number of draft
   comments for a particular issue and patchset.
@@ -3055,7 +2657,7 @@ def api_draft_comments(request):
     return HttpTextResponse('An error occurred.', status=500)
 
 
-@require_methods('POST')
+@deco.require_methods('POST')
 def inline_draft(request):
   """/inline_draft - Ajax handler to submit an in-line draft comment.
 
@@ -3187,9 +2789,9 @@ def _get_mail_template(request, issue, full_diff=False):
   return template, context
 
 
-@login_required
-@issue_required
-@xsrf_required
+@deco.login_required
+@deco.issue_required
+@deco.xsrf_required
 def publish(request):
   """ /<issue>/publish - Publish draft comments and send mail."""
   issue = request.issue
@@ -3297,9 +2899,9 @@ def publish(request):
   return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
 
 
-@login_required
-@issue_required
-@xsrf_required
+@deco.login_required
+@deco.issue_required
+@deco.xsrf_required
 def delete_drafts(request):
   """Deletes all drafts of the current user for an issue."""
   query = models.Comment.all().ancestor(request.issue).filter(
@@ -3575,10 +3177,10 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   return msg
 
 
-@require_methods('POST')
-@login_required
-@xsrf_required
-@issue_required
+@deco.require_methods('POST')
+@deco.login_required
+@deco.xsrf_required
+@deco.issue_required
 def star(request):
   """Add a star to an Issue."""
   account = models.Account.current_user_account
@@ -3592,10 +3194,10 @@ def star(request):
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
-@require_methods('POST')
-@login_required
-@issue_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.login_required
+@deco.issue_required
+@deco.xsrf_required
 def unstar(request):
   """Remove the star from an Issue."""
   account = models.Account.current_user_account
@@ -3609,8 +3211,8 @@ def unstar(request):
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
-@login_required
-@issue_required
+@deco.login_required
+@deco.issue_required
 def draft_message(request):
   """/<issue>/draft_message - Retrieve, modify and delete draft messages.
 
@@ -3646,7 +3248,7 @@ def _get_draft_message(draft):
   return HttpTextResponse(draft.text if draft else '')
 
 
-@issue_required
+@deco.issue_required
 def _post_draft_message(request, draft):
   """Handles POST requests to /<issue>/draft_message.
 
@@ -3677,7 +3279,7 @@ def _delete_draft_message(draft):
   return HttpTextResponse('OK')
 
 
-@json_response
+@deco.json_response
 def search(request):
   """/search - Search for issues or patchset.
 
@@ -3805,8 +3407,8 @@ def repos(request):
   return respond(request, 'repos.html', {'branches': branches})
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def repo_new(request):
   """/repo_new - Create a new Subversion repository record."""
   if request.method != 'POST':
@@ -3847,7 +3449,7 @@ BRANCHES = [
 
 
 # TODO: Make this a POST request to avoid XSRF attacks.
-@admin_required
+@deco.admin_required
 def repo_init(_request):
   """/repo_init - Initialze the list of known Subversion repositories."""
   python = models.Repository.gql("WHERE name = 'Python'").get()
@@ -3869,8 +3471,8 @@ def repo_init(_request):
   return HttpResponseRedirect(reverse(repos))
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def branch_new(request, repo_id):
   """/branch_new/<repo> - Add a new Branch to a Repository record."""
   repo = models.Repository.get_by_id(int(repo_id))
@@ -3898,8 +3500,8 @@ def branch_new(request, repo_id):
   return HttpResponseRedirect(reverse(repos))
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def branch_edit(request, branch_id):
   """/branch_edit/<branch> - Edit a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))
@@ -3929,9 +3531,9 @@ def branch_edit(request, branch_id):
   return HttpResponseRedirect(reverse(repos))
 
 
-@require_methods('POST')
-@login_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.login_required
+@deco.xsrf_required
 def branch_delete(request, branch_id):
   """/branch_delete/<branch> - Delete a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))
@@ -3950,8 +3552,8 @@ def branch_delete(request, branch_id):
 ### User Profiles ###
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def settings(request):
   account = models.Account.current_user_account
   if request.method != 'POST':
@@ -4001,17 +3603,17 @@ def settings(request):
   return HttpResponseRedirect(reverse(mine))
 
 
-@require_methods('POST')
-@login_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.login_required
+@deco.xsrf_required
 def account_delete(_request):
   account = models.Account.current_user_account
   account.delete()
   return HttpResponseRedirect(users.create_logout_url(reverse(index)))
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def migrate_entities(request):
   """Migrates entities from the specified user to the signed in user."""
   msg = None
@@ -4039,7 +3641,7 @@ def migrate_entities(request):
   return respond(request, 'migrate_entities.html', {'form': form, 'msg': msg})
 
 
-@task_queue_required('migrate-entities')
+@deco.task_queue_required('migrate-entities')
 def task_migrate_entities(request):
   """/restricted/tasks/migrate_entities - Migrates entities from one account to
   another.
@@ -4082,7 +3684,7 @@ def task_migrate_entities(request):
   return HttpResponse()
 
 
-@user_key_required
+@deco.user_key_required
 def user_popup(request):
   """/user_popup - Pop up to show the user info."""
   try:
@@ -4120,7 +3722,7 @@ def _user_popup(request):
   return popup_html
 
 
-@require_methods('POST')
+@deco.require_methods('POST')
 def incoming_chat(request):
   """/_ah/xmpp/message/chat/
 
@@ -4138,7 +3740,7 @@ def incoming_chat(request):
   return HttpTextResponse('')
 
 
-@require_methods('POST')
+@deco.require_methods('POST')
 def incoming_mail(request, recipients):
   """/_ah/mail/(.*)
 
@@ -4228,7 +3830,7 @@ def _process_incoming_mail(raw_message, recipients):
   msg.put()
 
 
-@login_required
+@deco.login_required
 def xsrf_token(request):
   """/xsrf_token - Return the user's XSRF token.
 
@@ -4276,7 +3878,7 @@ def customized_upload_py(request):
   return HttpResponse(source, content_type='text/x-python; charset=utf-8')
 
 
-@task_queue_required('deltacalculation')
+@deco.task_queue_required('deltacalculation')
 def task_calculate_delta(request):
   """/restricted/tasks/calculate_delta - Calculate deltas for a patchset.
 
@@ -4365,7 +3967,7 @@ def _validate_port(port_value):
   return port_value
 
 
-@login_required
+@deco.login_required
 def get_access_token(request):
   """/get-access-token - Facilitates OAuth 2.0 dance for client.
 
@@ -4412,7 +4014,7 @@ def get_access_token(request):
   return HttpResponseRedirect(client_uri)
 
 
-@login_required
+@deco.login_required
 def oauth2callback(request):
   """/oauth2callback - Callback handler for OAuth 2.0 redirect.
 
@@ -4434,7 +4036,7 @@ def oauth2callback(request):
     return HttpResponseRedirect(redirect_uri)
 
 
-@admin_required
+@deco.admin_required
 def set_client_id_and_secret(request):
   """/restricted/set-client-id-and-secret - Allows admin to set Client ID and
   Secret.
@@ -4848,7 +4450,7 @@ def yield_people_issue_to_update(day_to_process, issues, messages_looked_up):
       break
 
 
-@task_queue_required('update-stats')
+@deco.task_queue_required('update-stats')
 def task_update_stats(request):
   """Dispatches the relevant task to execute.
 
@@ -5219,7 +4821,7 @@ def update_monthly_stats(cursor, day_to_process):
   return HttpTextResponse(out, status=result), cursor
 
 
-@task_queue_required('refresh-all-stats-score')
+@deco.task_queue_required('refresh-all-stats-score')
 def task_refresh_all_stats_score(request):
   """Updates all the scores or destroy them all.
 
@@ -5354,7 +4956,7 @@ def show_user_impl(user, when):
   return stats
 
 
-@user_key_required
+@deco.user_key_required
 def show_user_stats(request, when):
   stats = show_user_impl(request.user_to_show.email(), when)
   if not stats:
@@ -5388,12 +4990,12 @@ def show_user_stats(request, when):
       })
 
 
-@json_response
-@user_key_required
+@deco.json_response
+@deco.user_key_required
 def show_user_stats_json(request, when):
   stats = show_user_impl(request.user_to_show.email(), when)
   if not stats:
-    return {STATUS_CODE: 404}
+    return {deco.STATUS_CODE: 404}
   return stats.to_dict()
 
 
@@ -5445,12 +5047,12 @@ def stats_to_dict(t):
   return o
 
 
-@json_response
+@deco.json_response
 def leaderboard_json(request, when):
   limit = _clean_int(request.GET.get('limit'), 300, 1, 1000)
   data = leaderboard_impl(when, limit)
   if data is None:
-    return {STATUS_CODE: 404}
+    return {deco.STATUS_CODE: 404}
   return [stats_to_dict(t) for t in data]
 
 
