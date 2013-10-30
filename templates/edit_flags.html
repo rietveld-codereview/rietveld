@@ -1,0 +1,21 @@
+{%extends "issue_base.html"%}
+{%block title1%}Edit Issue Ex -{%endblock%}
+{%block head%}{{form.media}}{%endblock%}
+{%block issue_body%}
+<form action="{%url codereview.views_chromium.edit_flags issue.key.id%}"
+      method="post" id="edit-form">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Update Issue"></td></tr>
+</table>
+</form>
+
+<p>
+<ul>
+<li>Owner: {{issue.owner|show_user}}
+<li>Created: {{issue.created|date:"Y/m/d H:i:s"}}
+<li>Last updated: {{issue.modified|date:"Y/m/d H:i:s"}}
+</ul>
+</p>
+{%endblock%}
