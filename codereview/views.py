@@ -2999,7 +2999,7 @@ def _get_comment_counts(account, patchset):
 def _add_next_prev(patchset, patch):
   """Helper to add .next and .prev attributes to a patch object."""
   patch.prev = patch.next = None
-  patches = list(patchset.fetch(1000))
+  patches = list(patchset.patches)
   patchset.patches_cache = patches  # Required to render the jump to select.
 
   comments_by_patch, drafts_by_patch = _get_comment_counts(
