@@ -17,17 +17,15 @@
 import cgi
 import datetime
 import logging
-import mimetypes
 import os
 import re
-import sha
 
-from google.appengine.api import memcache
 from google.appengine.api import taskqueue
 from google.appengine.ext import db
 from google.appengine.runtime import DeadlineExceededError
 
 from django import forms
+from django.core.urlresolvers import reverse
 from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
 from django.http import HttpResponseBadRequest, HttpResponseForbidden
 from django.http import HttpResponseServerError
@@ -35,14 +33,13 @@ from django.utils import simplejson as json
 
 from codereview import cpplint
 from codereview import cpplint_chromium
+from codereview import decorators as deco
+from codereview import decorators_chromium as deco_cr
 from codereview import exceptions
 from codereview import models
 from codereview import models_chromium
 from codereview import patching
-from codereview import views
-from codereview.views import admin_required, issue_editor_required
-from codereview.views import login_required, patch_required, patchset_required
-from codereview.views import require_methods, respond, reverse, xsrf_required
+from codereview import responses
 
 
 ### Forms ###
@@ -79,58 +76,6 @@ class TryserversForm(forms.Form):
 
 
 ### Utility functions ###
-
-
-def key_required(func):
-  """Decorator that insists that you are using a specific key."""
-
-  @require_methods('POST')
-  def key_wrapper(request, *args, **kwds):
-    key = request.POST.get('password')
-    if request.user or not key:
-      return HttpResponseForbidden('You must be admin in for this function')
-    value = memcache.get('key_required')
-    if not value:
-      obj = models_chromium.Key.all().get()
-      if not obj:
-        # Create a dummy value so it can be edited from the datastore admin.
-        obj = models_chromium.Key(hash='invalid hash')
-        obj.put()
-      value = obj.hash
-      memcache.add('key_required', value, 60)
-    if sha.new(key).hexdigest() != value:
-      return HttpResponseForbidden('You must be admin in for this function')
-    return func(request, *args, **kwds)
-  return key_wrapper
-
-
-def binary_required(func):
-  """Decorator that processes the content argument.
-
-  Attributes set on the request:
-   content: a Content entity.
-  """
-
-  @patch_required
-  def binary_wrapper(request, content_type, *args, **kwds):
-    if content_type == "0":
-      content = request.patch.content
-    elif content_type == "1":
-      content = request.patch.patched_content
-      if not content or not content.data:
-        # The file was not modified. It was likely moved without modification.
-        # Return the original file.
-        content = request.patch.content
-    else:
-      # Other values are erroneous so request.content won't be set.
-      return views.HttpTextResponse(
-          'Invalid content type: %s, expected 0 or 1' % content_type,
-          status=404)
-    request.mime_type = mimetypes.guess_type(request.patch.filename)[0]
-    request.content = content
-    return func(request, *args, **kwds)
-
-  return binary_wrapper
 
 
 def string_to_datetime(text):
@@ -421,8 +366,8 @@ def _is_job_valid(job):
 
 ### View handlers ###
 
-@issue_editor_required
-@xsrf_required
+@deco.issue_editor_required
+@deco.xsrf_required
 def edit_flags(request):
   """/<issue>/edit_flags - Edit issue's flags."""
   last_patchset = models.PatchSet.all().ancestor(
@@ -442,7 +387,7 @@ def edit_flags(request):
         'commit': request.issue.commit,
         'builders': initial_builders})
 
-    return views.respond(request,
+    return responses.respond(request,
                          'edit_flags.html',
                          {'issue': request.issue, 'form': form})
 
@@ -487,20 +432,20 @@ def edit_flags(request):
   return HttpResponse('OK', content_type='text/plain')
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def conversions(request):
   """/conversions - Show and edit the list of base=>source code URL maps."""
   rules = models_chromium.UrlMap.gql('ORDER BY base_url_template')
   if request.method != 'POST':
-    return respond(request, 'conversions.html', {
+    return responses.respond(request, 'conversions.html', {
             'rules': rules})
 
   if not models_chromium.UrlMap.user_can_edit(request.user):
     # TODO(vbendeb) this domain name should be a configuration item. Or maybe
     # only admins should be allowed to modify the conversions table.
     warning = 'You are not authorized to modify the conversions table.'
-    return respond(request, 'conversions.html', {
+    return responses.respond(request, 'conversions.html', {
         'warning': warning,
         'rules': rules,
         })
@@ -529,7 +474,7 @@ def conversions(request):
         warning = 'Attempt to add a duplicate Base Url'
     if warning:
       rules = models_chromium.UrlMap.gql('ORDER BY base_url_template')
-      return respond(request, 'conversions.html', {
+      return responses.respond(request, 'conversions.html', {
          'warning': warning,
          'rules': rules,
          'base_url': base_url,
@@ -543,7 +488,7 @@ def conversions(request):
   return HttpResponseRedirect(reverse(conversions))
 
 
-@patchset_required
+@deco.patchset_required
 def lint(request):
   """/lint/<issue>_<patchset> - Lint a patch set."""
   patches = list(request.patchset.patches)
@@ -558,7 +503,7 @@ def lint(request):
   return HttpResponse('Done', content_type='text/plain')
 
 
-@patch_required
+@deco.patch_required
 def lint_patch(request):
   """/<issue>/lint/<patchset>/<patch> - View lint results for a patch."""
   if not _lint_patch(request.patch):
@@ -590,7 +535,7 @@ def lint_patch(request):
   return HttpResponse(''.join(result))
 
 
-@key_required
+@deco_cr.key_required
 def status_listener(request):
   """Receives Buildbot events and keeps the try jobs results.
 
@@ -610,7 +555,7 @@ def status_listener(request):
   return HttpResponse('OK')
 
 
-@binary_required
+@deco_cr.binary_required
 def download_binary(request):
   """/<issue>/binary/<patchset>/<patch>/<content>
 
@@ -642,20 +587,20 @@ def update_default_builders(_request):
   return HttpResponse(content, content_type='text/plain')
 
 
-@admin_required
-@xsrf_required
+@deco.admin_required
+@deco.xsrf_required
 def update_tryservers(request):
   """/restricted/update_tryservers - Sets Tryserver information.
 
   Sets JSON URLs and Tryserver name to a specified base URL.
   """
   if request.method == 'GET':
-    return respond(request, 'update_tryservers.html',
+    return responses.respond(request, 'update_tryservers.html',
                    {'form': TryserversForm()})
 
   form = TryserversForm(request.POST)
   if not form.is_valid():
-    return views.HttpTextResponse('Invalid arguments', status=400)
+    return responses.HttpTextResponse('Invalid arguments', status=400)
 
   base_url = form.cleaned_data['base_url']
   json_urls_str = form.cleaned_data['json_urls']
@@ -751,10 +696,10 @@ def delete_old_pending_jobs_task(request):
   return HttpResponse(msg, content_type='text/plain')
 
 
-@require_methods('POST')
-@xsrf_required
-@patchset_required
-@views.json_response
+@deco.require_methods('POST')
+@deco.xsrf_required
+@deco.patchset_required
+@deco.json_response
 def try_patchset(request):
   """/<issue>/try/<patchset> - Add a try job for the given patchset."""
   # Only allow trying the last patchset of an issue.
@@ -818,7 +763,7 @@ def try_patchset(request):
     'jobs': job_saved,
   }
 
-@views.json_response
+@deco.json_response
 def get_pending_try_patchsets(request):
   limit = int(request.GET.get('limit', '10'))
   if limit > 1000:
