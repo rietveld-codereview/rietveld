@@ -16,6 +16,7 @@
 
 import binascii
 import calendar
+import collections
 import datetime
 import email  # see incoming_mail()
 import email.utils
@@ -102,6 +103,9 @@ MAX_MESSAGE = 10000
 MAX_FILENAME = 255
 MAX_DB_KEY_LENGTH = 1000
 
+# Singleton object to indicate the HTTP Status Code for a @json_response
+# decorator. See @json_response for usage.
+STATUS_CODE = object()
 
 ### Form classes ###
 
@@ -1028,17 +1032,28 @@ def image_required(func):
 def json_response(func):
   """Decorator that converts into JSON any returned value that is not an
   HttpResponse. It handles `pretty` URL parameter to tune JSON response for
-  either performance or readability."""
+  either performance or readability.
 
+  If the returned value has an entry whose key is the object |STATUS_CODE|,
+  it will be popped out, and will become the status code for the HttpResponse.
+  """
+
+  @functools.wraps(func)
   def json_wrapper(request, *args, **kwds):
     data = func(request, *args, **kwds)
     if isinstance(data, HttpResponse):
       return data
+
+    status = 200
+    if isinstance(data, collections.MutableMapping):
+      status = data.pop(STATUS_CODE, status)
+
     if request.REQUEST.get('pretty','0').lower() in ('1', 'true', 'on'):
       data = json.dumps(data, indent=2, sort_keys=True)
     else:
       data = json.dumps(data, separators=(',',':'))
-    return HttpResponse(data, content_type='application/json; charset=utf-8')
+    return HttpResponse(data, content_type='application/json; charset=utf-8',
+                        status=status)
 
   return json_wrapper
 
@@ -5378,7 +5393,7 @@ def show_user_stats(request, when):
 def show_user_stats_json(request, when):
   stats = show_user_impl(request.user_to_show.email(), when)
   if not stats:
-    return HttpResponseNotFound()
+    return {STATUS_CODE: 404}
   return stats.to_dict()
 
 
@@ -5435,7 +5450,7 @@ def leaderboard_json(request, when):
   limit = _clean_int(request.GET.get('limit'), 300, 1, 1000)
   data = leaderboard_impl(when, limit)
   if data is None:
-    return HttpResponseNotFound()
+    return {STATUS_CODE: 404}
   return [stats_to_dict(t) for t in data]
 
 
