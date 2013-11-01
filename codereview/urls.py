@@ -106,10 +106,18 @@ urlpatterns = patterns(
     (r'^restricted/tasks/calculate_delta$', 'task_calculate_delta'),
     (r'^restricted/tasks/migrate_entities$', 'task_migrate_entities'),
     (r'^restricted/user/([^/]+)/block$', 'block_user'),
-    (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
     (r'^_ah/mail/(.*)', 'incoming_mail'),
     )
 
+
+### XMPP notification support
+urlpatterns += patterns(
+  'codereview.notify_xmpp',
+  (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
+)
+
+
+### RSS Feed support
 feed_dict = {
   'reviews': feeds.ReviewsFeed,
   'closed': feeds.ClosedFeed,
