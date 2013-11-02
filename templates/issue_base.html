@@ -10,12 +10,7 @@
 {%block mainmenu2%}
   {%if user%}
     {%comment%}
-    {%if uploadpy_hint%}
-      <a href="{%url codereview.views.use_uploadpy%}">Create Issue</a>
-    {%else%}
-      <a href="{%url codereview.views.new%}">Create Issue</a>
-    {%endif%}
-    |
+    <a href="{%url codereview.views.use_uploadpy%}">Create Issue</a>
     {%endcomment%}
     &nbsp;&nbsp;&nbsp;
     <a href="{%url codereview.views.mine%}">My Issues</a>
