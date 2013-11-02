@@ -101,7 +101,8 @@ def notify_issue(request, issue, message):
                                   sender,
                                   issue.subject,
                                   request.build_absolute_uri(
-                                    reverse('show', args=[iid])))
+                                    reverse('codereview.views.show',
+                                            args=[iid])))
   try:
     sts = xmpp.send_message(jids, message)
   except Exception, err:
