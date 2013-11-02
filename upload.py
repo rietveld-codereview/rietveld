@@ -1612,7 +1612,7 @@ class GitVCS(VersionControlSystem):
     # append a diff (with rename detection), without deletes.
     cmd = [
         "git", "diff", "--no-color", "--no-ext-diff", "--full-index",
-        "--ignore-submodules",
+        "--ignore-submodules", "--src-prefix=a/", "--dst-prefix=b/",
     ]
     diff = RunShell(
         cmd + ["--no-renames", "--diff-filter=D"] + extra_args,
