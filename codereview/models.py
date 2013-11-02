@@ -1169,7 +1169,6 @@ class Account(db.Model):
   modified = db.DateTimeProperty(auto_now=True)
   stars = db.ListProperty(int)  # Issue ids of all starred issues
   fresh = db.BooleanProperty()
-  uploadpy_hint = db.BooleanProperty(default=True)
   notify_by_email = db.BooleanProperty(default=True)
   notify_by_chat = db.BooleanProperty(default=False)
   # Spammer; only blocks sending messages, not uploading issues.
