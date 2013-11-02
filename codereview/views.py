@@ -201,28 +201,6 @@ class IssueBaseForm(forms.Form):
     return base or None
 
 
-class NewForm(IssueBaseForm):
-
-  data = forms.FileField(required=False)
-  url = forms.URLField(required=False,
-                       max_length=MAX_URL,
-                       widget=forms.TextInput(attrs={'size': 60}))
-  send_mail = forms.BooleanField(required=False, initial=True)
-
-
-class AddForm(forms.Form):
-
-  message = forms.CharField(max_length=MAX_SUBJECT,
-                            widget=forms.TextInput(attrs={'size': 60}))
-  data = forms.FileField(required=False)
-  url = forms.URLField(required=False,
-                       max_length=MAX_URL,
-                       widget=forms.TextInput(attrs={'size': 60}))
-  reviewers = forms.CharField(max_length=MAX_REVIEWERS, required=False,
-                              widget=AccountInput(attrs={'size': 60}))
-  send_mail = forms.BooleanField(required=False, initial=True)
-
-
 class UploadForm(forms.Form):
 
   subject = forms.CharField(max_length=MAX_SUBJECT)
@@ -996,45 +974,18 @@ def block_user(request):
 
 @deco.login_required
 @deco.xsrf_required
-def new(request):
-  """/new - Upload a new patch set.
-
-  GET shows a blank form, POST processes it.
-  """
-  if request.method != 'POST':
-    form = NewForm()
-    form.set_branch_choices()
-    return respond(request, 'new.html', {'form': form})
-
-  form = NewForm(request.POST, request.FILES)
-  form.set_branch_choices()
-  issue, _ = _make_new(request, form)
-  if issue is None:
-    return respond(request, 'new.html', {'form': form})
-  else:
-    return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
-
-
-@deco.login_required
-@deco.xsrf_required
 def use_uploadpy(request):
   """Show an intermediate page about upload.py."""
   if request.method == 'POST':
-    if 'disable_msg' in request.POST:
-      models.Account.current_user_account.uploadpy_hint = False
-      models.Account.current_user_account.put()
-    if 'download' in request.POST:
-      url = reverse(customized_upload_py)
-    else:
-      url = reverse(new)
-    return HttpResponseRedirect(url)
+    return HttpResponseRedirect(reverse(customized_upload_py))
   return respond(request, 'use_uploadpy.html')
 
 
 @deco.require_methods('POST')
 @deco.upload_required
 def upload(request):
-  """/upload - Like new() or add(), but from the upload.py script.
+  """/upload - Used by upload.py to create a new Issue and add PatchSet's to
+  existing Issues.
 
   This generates a text/plain response.
   """
@@ -1368,7 +1319,7 @@ def _make_new(request, form):
 
 
 def _get_data_url(form):
-  """Helper for _make_new() above and add() below.
+  """Helper for _make_new().
 
   Args:
     form: Django form object.
@@ -1415,21 +1366,9 @@ def _get_data_url(form):
   return data, url, separate_patches
 
 
-@deco.require_methods('POST')
-@deco.issue_editor_required
-@deco.xsrf_required
-def add(request):
-  """/<issue>/add - Add a new PatchSet to an existing Issue."""
-  issue = request.issue
-  form = AddForm(request.POST, request.FILES)
-  if not _add_patchset_from_form(request, issue, form):
-    return show(request, issue.key().id(), form)
-  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
-
-
 def _add_patchset_from_form(request, issue, form, message_key='message',
                             emails_add_only=False):
-  """Helper for add() and upload()."""
+  """Helper for upload()."""
   if form.is_valid():
     data_url = _get_data_url(form)
   if not form.is_valid():
@@ -1567,13 +1506,11 @@ def _get_patchset_info(request, patchset_id):
 
 
 @deco.issue_required
-def show(request, form=None):
+def show(request):
   """/<issue> - Show an issue."""
   issue, patchsets, response = _get_patchset_info(request, None)
   if response:
     return response
-  if not form:
-    form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
   last_patchset = first_patch = None
   if patchsets:
     last_patchset = patchsets[-1]
@@ -1589,7 +1526,6 @@ def show(request, form=None):
   num_patchsets = len(patchsets)
   return respond(request, 'issue.html', {
     'first_patch': first_patch,
-    'form': form,
     'has_draft_message': has_draft_message,
     'is_editor': issue.edit_allowed,
     'issue': issue,

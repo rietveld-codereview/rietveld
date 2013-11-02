@@ -61,11 +61,9 @@ def respond(request, template, params=None):
   if params is None:
     params = {}
   must_choose_nickname = False
-  uploadpy_hint = False
   if request.user is not None:
     account = models.Account.current_user_account
     must_choose_nickname = not account.user_has_selected_nickname()
-    uploadpy_hint = account.uploadpy_hint
   params['request'] = request
   params['counter'] = COUNTER
   params['user'] = request.user
@@ -82,7 +80,6 @@ def respond(request, template, params=None):
     if account is not None:
       params['xsrf_token'] = account.get_xsrf_token()
   params['must_choose_nickname'] = must_choose_nickname
-  params['uploadpy_hint'] = uploadpy_hint
   params['rietveld_revision'] = django_settings.RIETVELD_REVISION
   try:
     return render_to_response(template, params,

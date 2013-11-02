@@ -24,10 +24,7 @@ uploading diffs from a version control system to the codereview app.</p>
 <form method="POST" action="{%url codereview.views.use_uploadpy%}">
   <p>
   <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
-  <input name="disable_msg" value="1" id="disable_msg" type="checkbox" />
-  <label for="disable_msg">Don't show this message again</label></p>
   <input type="submit" name="download" value="Download upload.py" />
-  <input type="submit" name="create" value="Go to the Create Issue Form" />
 </form>
 </div>
 {%endblock%}
