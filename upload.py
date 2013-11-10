@@ -677,8 +677,11 @@ group.add_option("--emulate_svn_auto_props", action="store_true",
 group = parser.add_option_group("Git-specific options")
 group.add_option("--git_similarity", action="store", dest="git_similarity",
                  metavar="SIM", type="int", default=50,
-                 help=("Set the minimum similarity index for detecting renames "
-                       "and copies. See `git diff -C`. (default 50)."))
+                 help=("Set the minimum similarity percentage for detecting "
+                       "renames and copies. See `git diff -C`. (default 50)."))
+group.add_option("--git_only_search_patch", action="store_false", default=True,
+                 dest='git_find_copies_harder',
+                 help="Removes --find-copies-harder when seaching for copies")
 group.add_option("--git_no_find_copies", action="store_false", default=True,
                  dest="git_find_copies",
                  help=("Prevents git from looking for copies (default off)."))
@@ -1617,11 +1620,13 @@ class GitVCS(VersionControlSystem):
     diff = RunShell(
         cmd + ["--no-renames", "--diff-filter=D"] + extra_args,
         env=env, silent_ok=True)
+    assert 0 <= git_similarity <= 100
     if self.options.git_find_copies:
-      similarity_options = ["--find-copies-harder", "-l100000",
-                            "-C%s" % self.options.git_similarity ]
+      similarity_options = ["-l100000", "-C%d%%" % self.options.git_similarity]
+      if self.options.git_find_copies_harder:
+        similarity_options.append("--find-copies-harder")
     else:
-      similarity_options = ["-M%s" % self.options.git_similarity ]
+      similarity_options = ["-M%d%%" % self.options.git_similarity ]
     diff += RunShell(
         cmd + ["--diff-filter=AMCRT"] + similarity_options + extra_args,
         env=env, silent_ok=True)
