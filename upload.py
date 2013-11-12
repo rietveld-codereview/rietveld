@@ -1620,7 +1620,7 @@ class GitVCS(VersionControlSystem):
     diff = RunShell(
         cmd + ["--no-renames", "--diff-filter=D"] + extra_args,
         env=env, silent_ok=True)
-    assert 0 <= git_similarity <= 100
+    assert 0 <= self.options.git_similarity <= 100
     if self.options.git_find_copies:
       similarity_options = ["-l100000", "-C%d%%" % self.options.git_similarity]
       if self.options.git_find_copies_harder:
