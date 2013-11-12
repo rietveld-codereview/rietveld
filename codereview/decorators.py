@@ -93,8 +93,8 @@ def image_required(func):
     if not content or not content.data:
       return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
     request.mime_type = mimetypes.guess_type(request.patch.filename)[0]
-    if not request.mime_type or not request.mime_type.startswith('image/'):
-      return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
+    #if not request.mime_type or not request.mime_type.startswith('image/'):
+    #  return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
     request.content = content
     return func(request, *args, **kwds)
 
