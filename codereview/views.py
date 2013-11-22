@@ -1255,8 +1255,8 @@ def upload_complete(request, patchset_id=None):
       errors.append('Base files missing.')
   # Create (and send) a message if needed.
   if request.POST.get('send_mail') == 'yes' or request.POST.get('message'):
-    msg = _make_message(request, request.issue, request.POST.get('message', ''),
-                        send_mail=(request.POST.get('send_mail', '') == 'yes'))
+    msg = make_message(request, request.issue, request.POST.get('message', ''),
+                       send_mail=(request.POST.get('send_mail', '') == 'yes'))
     request.issue.put()
     msg.put()
     notify_xmpp.notify_issue(request, request.issue, 'Mailed')
@@ -1345,7 +1345,7 @@ def _make_new(request, form):
     db.put(patches)
 
   if form.cleaned_data.get('send_mail'):
-    msg = _make_message(request, issue, '', '', True)
+    msg = make_message(request, issue, '', '', True)
     issue.put()
     msg.put()
     notify_xmpp.notify_issue(request, issue, 'Created')
@@ -1455,7 +1455,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   issue.put()
 
   if form.cleaned_data.get('send_mail'):
-    msg = _make_message(request, issue, message, '', True)
+    msg = make_message(request, issue, message, '', True)
     issue.put()
     msg.put()
     notify_xmpp.notify_issue(request, issue, 'Updated')
@@ -1848,7 +1848,7 @@ def mailissue(request):
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
   issue = request.issue
-  msg = _make_message(request, issue, '', '', True)
+  msg = make_message(request, issue, '', '', True)
   issue.put()
   msg.put()
   notify_xmpp.notify_issue(request, issue, 'Mailed')
@@ -2871,12 +2871,12 @@ def publish(request):
 
   if comments:
     logging.warn('Publishing %d comments', len(comments))
-  msg = _make_message(request, issue,
-                      form.cleaned_data['message'],
-                      comments,
-                      form.cleaned_data['send_mail'],
-                      draft=draft_message,
-                      in_reply_to=form.cleaned_data.get('in_reply_to'))
+  msg = make_message(request, issue,
+                     form.cleaned_data['message'],
+                     comments,
+                     form.cleaned_data['send_mail'],
+                     draft=draft_message,
+                     in_reply_to=form.cleaned_data.get('in_reply_to'))
   tbd.append(msg)
 
   for obj in tbd:
@@ -3032,7 +3032,7 @@ def _get_modified_counts(issue):
   return modified_added_count, modified_removed_count
 
 
-def _make_message(request, issue, message, comments=None, send_mail=False,
+def make_message(request, issue, message, comments=None, send_mail=False,
                   draft=None, in_reply_to=None):
   """Helper to create a Message instance and optionally send an email."""
   attach_patch = request.POST.get("attach_patch") == "yes"
