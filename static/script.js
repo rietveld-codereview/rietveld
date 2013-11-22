@@ -506,6 +506,19 @@ function M_sendEditFlagsRequest(issue, data, func_opt) {
 }
 
 /**
+ * Ask the user to enter a reason for doing a Revert.
+ */
+function M_getRevertReason() {
+  var revert_reason = prompt("Please enter the reason for reverting this CL");
+  if (revert_reason == null || revert_reason == "") {
+    alert('Must enter a revert reason. Please try again.');
+    return false;
+  }
+  document.getElementById("revert-form")["revert_reason"].value = revert_reason;
+  return true;
+}
+
+/**
  * Change the commit bit for the given issue by using edit_flags.
  * @param {String} issue The issue key
  */

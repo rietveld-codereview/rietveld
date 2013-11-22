@@ -115,6 +115,13 @@ urlpatterns += patterns(
 )
 
 
+### Revert patchset support
+urlpatterns += patterns(
+  'codereview.revert_patchset',
+  (r'^api/(\d+)/(\d+)/revert$', 'revert_patchset'),
+)
+
+
 ### RSS Feed support
 feed_dict = {
   'reviews': feeds.ReviewsFeed,

@@ -34,6 +34,8 @@ from google.appengine.ext import ndb
 from django.conf import settings
 
 from codereview import auth_utils
+from codereview import exceptions
+from codereview import invert_patches
 from codereview import patching
 from codereview import utils
 from codereview.exceptions import FetchError
@@ -784,7 +786,7 @@ class Patch(db.Model):
 
   patchset = db.ReferenceProperty(PatchSet)  # == parent
   filename = db.StringProperty()
-  status = db.StringProperty()  # 'A', 'A  +', 'M', 'D' etc
+  status = db.StringProperty()  # 'A', 'A +', 'M', 'D' etc
   text = db.TextProperty()
   content = db.ReferenceProperty(Content)
   patched_content = db.ReferenceProperty(Content, collection_name='patch2_set')
@@ -920,6 +922,51 @@ class Patch(db.Model):
   def count_startswith(self, prefix):
     """Returns the number of lines with the specified prefix."""
     return len([l for l in self.lines if l.startswith(prefix)])
+
+  def make_inverted(self, patchset):
+    """Calculates the inverse of this Patch.
+
+    Returns an inverted Patch object that has not been committed yet.
+    """
+    # Only git patches are supported.
+    diff_header = invert_patches.split_header(self.text)[0]
+    assert (invert_patches.is_git_diff_header(diff_header),
+            'Can only invert Git patches.')
+
+    # Find the content and the patched content to use for inverse diffing.
+    if self.is_binary:
+      original_content = self.content
+      original_patched_content = self.patched_content
+    else:
+      original_content = self.get_content()
+      original_patched_content = self.get_patched_content()
+
+    invert_git_patches = invert_patches.InvertGitPatches(
+        self.text, self.filename)
+
+    content_for_diff = (
+        original_patched_content.lines if original_patched_content else [])
+    if (original_content and not invert_git_patches.status ==
+          invert_patches.COPIED_AND_MODIFIED_STATUS):
+      patched_content_for_diff = original_content.lines
+    else:
+      # The patched content text for 'A +' statuses is always empty.
+      patched_content_for_diff = []
+
+    inverted_patch_text = invert_git_patches.get_inverted_patch_text(
+        content_for_diff, patched_content_for_diff)
+
+    patch_key = db.Key.from_path(
+        Patch.kind(),
+        db.allocate_ids(db.Key.from_path(Patch.kind(), 1,
+                                         parent=patchset.key()), 1)[0],
+        parent=patchset.key())
+    return Patch(key=patch_key,
+                 patchset=patchset,
+                 filename=self.filename,
+                 status=invert_git_patches.inverted_patch_status,
+                 text=inverted_patch_text,
+                 is_binary=self.is_binary)
 
   def get_content(self):
     """Get self.content, or fetch it if necessary.

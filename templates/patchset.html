@@ -156,5 +156,15 @@
         {%if not request.user or issue.closed%}disabled{%endif%}
         onchange="M_editFlags('{{issue.key.id}}')" />
     </form>
+
+    <br/>
+    <form action="{%url codereview.revert_patchset.revert_patchset issue.key.id,patchset.key.id%}"
+          method="post" enctype="multipart/form-data" id="revert-form"
+          onsubmit="return M_getRevertReason()" >
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+      <input type="hidden" name="revert_reason" value="">
+      <input type="submit" value="Revert Patchset" {%if issue.closed %}>{%else%}disabled> Issue must be closed to Revert{%endif%}
+    </form>
+
   {%endifequal%}
 </div>
