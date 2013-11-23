@@ -169,25 +169,6 @@ class IssueBaseForm(forms.Form):
                        widget=AccountInput(attrs={'size': 60}))
   private = forms.BooleanField(required=False, initial=False)
 
-  def set_branch_choices(self, base=None):
-    branches = models.Branch.all()
-    bound_field = self['branch']
-    choices = []
-    default = None
-    for b in branches:
-      if not b.repo_name:
-        b.repo_name = b.repo.name
-        b.put()
-      pair = (b.key(), '%s - %s - %s' % (b.repo_name, b.category, b.name))
-      choices.append(pair)
-      if default is None and (base is None or b.url == base):
-        default = b.key()
-    choices.sort(key=lambda pair: pair[1].lower())
-    choices.insert(0, ('', '[See Base]'))
-    bound_field.field.choices = choices
-    if default is not None:
-      self.initial['branch'] = default
-
   def get_base(self):
     base = self.cleaned_data.get('base')
     if not base:
@@ -253,11 +234,6 @@ class UploadPatchForm(forms.Form):
 
   def get_uploaded_patch(self):
     return self.files['data'].read()
-
-
-class EditForm(IssueBaseForm):
-
-  closed = forms.BooleanField(required=False)
 
 
 class EditLocalBaseForm(forms.Form):
@@ -1008,7 +984,7 @@ def upload(request):
       if issue is None:
         form.errors['issue'] = ['No issue exists with that id (%s)' %
                                 issue_id]
-      elif issue.local_base and not form.cleaned_data.get('content_upload'):
+      elif not form.cleaned_data.get('content_upload'):
         form.errors['issue'] = ['Base files upload required for that issue.']
         issue = None
       else:
@@ -1040,7 +1016,6 @@ def upload(request):
       msg +="\n%d" % patchset.key().id()
       if form.cleaned_data.get('content_upload'):
         # Extend the response: additional lines are the expected filenames.
-        issue.local_base = True
         issue.put()
 
         base_hashes = {}
@@ -1213,7 +1188,7 @@ def upload_complete(request, patchset_id=None):
     patchset = None
   # Check for completeness
   errors = []
-  if request.issue.local_base and patchset is not None:
+  if patchset is not None:
     # Use of patch_set here is OK because this is part of the v1 upload code.
     query = patchset.patch_set.filter('is_binary =', False)
     query = query.filter('status =', None)  # all uploaded file have a status
@@ -1597,18 +1572,13 @@ def edit(request):
   issue = request.issue
   base = issue.base
 
-  if issue.local_base:
-    form_cls = EditLocalBaseForm
-  else:
-    form_cls = EditForm
-
   if request.method != 'POST':
     reviewers = [models.Account.get_nickname_for_email(reviewer,
                                                        default=reviewer)
                  for reviewer in issue.reviewers]
     ccs = [models.Account.get_nickname_for_email(cc, default=cc)
            for cc in issue.cc]
-    form = form_cls(initial={'subject': issue.subject,
+    form = EditLocalBaseForm(initial={'subject': issue.subject,
                              'description': issue.description,
                              'base': base,
                              'reviewers': ', '.join(reviewers),
@@ -1616,22 +1586,15 @@ def edit(request):
                              'closed': issue.closed,
                              'private': issue.private,
                              })
-    if not issue.local_base:
-      form.set_branch_choices(base)
     return respond(request, 'edit.html', {'issue': issue, 'form': form})
 
-  form = form_cls(request.POST)
-  if not issue.local_base:
-    form.set_branch_choices()
+  form = EditLocalBaseForm(request.POST)
 
   if form.is_valid():
     reviewers = _get_emails(form, 'reviewers')
 
   if form.is_valid():
     cc = _get_emails(form, 'cc')
-
-  if form.is_valid() and not issue.local_base:
-    base = form.get_base()
 
   if not form.is_valid():
     return respond(request, 'edit.html', {'issue': issue, 'form': form})
