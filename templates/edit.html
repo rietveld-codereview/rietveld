@@ -7,12 +7,6 @@
 <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
 <table>
 {{form}}
-{%if issue.local_base%}
-<tr>
-  <th><label>Base files:</label></hd>
-  <td>Use <i>git cl</i> or <i>gcl</i> to upload base files.</td>
-</tr>
-{%endif%}
 <tr><td><input type="submit" value="Update Issue"></td></tr>
 </table>
 </form>
