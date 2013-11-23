@@ -147,7 +147,6 @@ def revert_patchset(request):
   issue = models.Issue(subject=subject,
                        description=description,
                        base=original_issue.base,
-                       local_base=original_issue.local_base,
                        repo_guid=original_issue.repo_guid,
                        reviewers=reviewers,
                        cc=original_issue.cc,
