@@ -152,7 +152,7 @@ def revert_patchset(request):
                        cc=original_issue.cc,
                        private=original_issue.private,
                        n_comments=0,
-                       commit=True,  # Automatically check the commit box.
+                       commit=False,  # Do not check the commit box yet.
                        key=issue_key)
   pending_commits.append(issue);
 
@@ -265,6 +265,10 @@ def revert_patchset(request):
   # Notify the revert issue recipients.
   views.make_message(request, issue, 'Created %s' % subject,
                      send_mail=True).put()
+
+  # Now that all patchsets and patches have been committed check the commit box.
+  issue.commit = True
+  issue.put()
 
   return HttpResponseRedirect(reverse('codereview.views.show',
                                       args=[issue.key().id()]))
