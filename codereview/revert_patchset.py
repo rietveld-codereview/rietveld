@@ -68,6 +68,13 @@ def check_patches_reversable(patches):
   """
   large_patches = 0
   for patch in patches:
+
+    # If the patch status is 'None' it could be due to an incompletely uploaded
+    # original patch.
+    if not patch.status:
+      raise exceptions.RevertError('Found a None patch status. The original '
+          'patchset may have been incompletely uploaded.')
+
     # Collect the number of large patches.
     if len(patch.text) > LARGE_PATCH_CHARS_THRESHOLD:
       large_patches += 1
