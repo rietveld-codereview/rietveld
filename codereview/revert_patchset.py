@@ -39,7 +39,7 @@ ERROR_MSG_POSTPEND = ' Please revert manually.\nSorry for the inconvenience.'
 
 
 def _get_revert_description(revert_reason, reviewers,
-                            original_issue_link):
+                            original_issue_link, original_issue_description):
   """Creates and returns a description for the revert CL."""
   # Contain link to original CL.
   revert_description = 'Revert of %s' % original_issue_link
@@ -53,6 +53,12 @@ def _get_revert_description(revert_reason, reviewers,
   revert_description += '\nNOTREECHECKS=true'
   # Do not run trybots on the revert CL.
   revert_description += '\nNOTRY=true'
+  # Check to see if the original description contains "BUG=" if it does then
+  # use it in the revert description.
+  match_bugline = re.search(r'^\s*(BUG=.*)$', original_issue_description or '',
+                            re.M | re.I)
+  if match_bugline:
+    revert_description += '\n%s' % match_bugline.groups(0)
   return revert_description
 
 
@@ -150,7 +156,8 @@ def revert_patchset(request):
   description = _get_revert_description(
       revert_reason=revert_reason,
       reviewers=reviewers,
-      original_issue_link=original_issue_link)
+      original_issue_link=original_issue_link,
+      original_issue_description=original_issue.description)
   issue = models.Issue(subject=subject,
                        description=description,
                        base=original_issue.base,
