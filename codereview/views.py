@@ -904,6 +904,24 @@ def _show_user(request):
                   })
 
 
+@deco.require_methods('POST')
+@deco.login_required
+@deco.patchset_required
+@deco.xsrf_required
+def edit_patchset_title(request):
+  """/<issue>/edit_patchset_title - Edit the specified patchset's title."""
+
+  if request.user.email().lower() != request.issue.owner.email():
+    return HttpResponseBadRequest(
+        'Only the issue owner can edit patchset titles')
+
+  patchset = request.patchset
+  patchset.message = request.POST.get('patchset_title')
+  patchset.put()
+
+  return HttpResponse('OK', content_type='text/plain') 
+
+
 @deco.admin_required
 @deco.user_key_required
 def block_user(request):
