@@ -114,6 +114,45 @@ function M_getPageOffsetTop(element) {
   return y;
 }
 
+function M_editPatchsetTitle(issue, patchset, xsrf_token,
+                             original_patchset_title, patch_count) {
+
+  var new_patchset_title = prompt(
+      'Please enter the new title of Patch Set ' + patch_count,
+      original_patchset_title);
+  if (new_patchset_title == null) { 
+    return false;
+  } else if (new_patchset_title == original_patchset_title) {
+    // Do not make an HTTP req if the new specified title is exactly the same.
+    return false;
+  }
+
+  //Build POST data for request.
+  var data = [];
+  data.push('xsrf_token=' + xsrf_token);
+  data.push('patchset_title=' + new_patchset_title);
+
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function() {
+    if (httpreq.readyState == 4) {
+      if (httpreq.status == 200) {
+        window.location.reload();
+      }
+    }
+  }
+  httpreq.open(
+      'POST',
+       base_url + issue + "/patchset/" + patchset + '/edit_patchset_title',
+       true);
+  httpreq.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  httpreq.send(data.join("&"));
+
+  return true;
+}
+
 /**
  * Return distance in pixels of the given element from the left of the document.
  * @param {Element} element The element whose offset we want to find
