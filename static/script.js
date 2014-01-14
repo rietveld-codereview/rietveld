@@ -545,16 +545,31 @@ function M_sendEditFlagsRequest(issue, data, func_opt) {
 }
 
 /**
- * Ask the user to enter a reason for doing a Revert.
+ * Toggle the visibility of the revert reason popup.
  */
-function M_getRevertReason() {
-  var revert_reason = prompt("Please enter the reason for reverting this CL");
-  if (revert_reason == null || revert_reason == "") {
+function M_toggleRevertReasonPopup(display) {
+  var popupElement = document.getElementById("revert-reason-popup-div");
+  // Remove all text from the textarea while toggling.
+  document.getElementById("revert_reason_textarea").value = ""
+  popupElement.style.display = display ? "" : "none";
+}
+
+/**
+ * Validates the revert reason and submits the revert form.
+ */
+function M_createRevertPatchset() {
+  revert_reason = document.getElementById("revert_reason_textarea").value;
+  // Validate that the revert reason is not null and does not contain only
+  // newlines and whitespace characters.
+  if (revert_reason == null ||
+      revert_reason.replace(/(\s+|\r\n|\n|\r)/gm, "") == "") {
     alert('Must enter a revert reason. Please try again.');
     return false;
   }
+
   document.getElementById("revert-form")["revert_reason"].value = revert_reason;
-  return true;
+  // Confirm that this patchset should really be reverted.
+  return confirm("Proceed with creating a revert of this patchset?");
 }
 
 /**

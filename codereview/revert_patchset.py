@@ -39,27 +39,39 @@ ERROR_MSG_POSTPEND = ' Please revert manually.\nSorry for the inconvenience.'
 
 
 def _get_revert_description(revert_reason, reviewers,
-                            original_issue_link, original_issue_description):
+                            original_issue_link, original_issue_subject,
+                            original_issue_description):
   """Creates and returns a description for the revert CL."""
+  revert_description = []
   # Contain link to original CL.
-  revert_description = 'Revert of %s' % original_issue_link
+  revert_description.append('Revert of %s (%s)' % (original_issue_subject,
+                                                   original_issue_link))
   # Display the reason for reverting.
-  revert_description += '\nReason for revert: %s' % revert_reason
-  revert_description += '\n'
+  revert_description.append('')  # Extra new line to separate sections.
+  revert_description.append('Reason for revert:')
+  revert_description.append('%s' % revert_reason)
+
+  # Add the original issue's decription.
+  revert_description.append('')  # Extra new line to separate sections.
+  revert_description.append('Original issue\'s description:')
+  for line in original_issue_description.split('\n'):
+    revert_description.append('> %s' % line)
+
   # TBR original author + reviewers.
-  revert_description += '\nTBR=%s' % ','.join(
-      [str(reviewer) for reviewer in reviewers])
+  revert_description.append('')  # Extra new line to separate sections.
+  revert_description.append('TBR=%s' % ','.join(
+      [str(reviewer) for reviewer in reviewers]))
   # Skip tree status checks.
-  revert_description += '\nNOTREECHECKS=true'
+  revert_description.append('NOTREECHECKS=true')
   # Do not run trybots on the revert CL.
-  revert_description += '\nNOTRY=true'
+  revert_description.append('NOTRY=true')
   # Check to see if the original description contains "BUG=" if it does then
   # use it in the revert description.
   match_bugline = re.search(r'^\s*(BUG=.*)$', original_issue_description or '',
                             re.M | re.I)
   if match_bugline:
-    revert_description += '\n%s' % match_bugline.groups(0)
-  return revert_description
+    revert_description.append('%s' % match_bugline.groups(0))
+  return '\n'.join(revert_description)
 
 
 def _get_revert_subject(original_subject):
@@ -157,6 +169,7 @@ def revert_patchset(request):
       revert_reason=revert_reason,
       reviewers=reviewers,
       original_issue_link=original_issue_link,
+      original_issue_subject=original_issue.subject,
       original_issue_description=original_issue.description)
   issue = models.Issue(subject=subject,
                        description=description,
