@@ -152,15 +152,6 @@ def handle_build_finished(base_url, timestamp, packet, payload):
       build.get('properties', []))
 
 
-def handle_step_finished(base_url, timestamp, packet, payload):
-  result = unpack_result(payload['step'].get('results', None))
-  if result in models.TryJobResult.OK:
-    # We don't want to mark the try job as success before it's completed!
-    result = -1
-  return inner_handle(
-      '', base_url, timestamp, packet, result, payload['properties'])
-
-
 def inner_handle(reason, base_url, timestamp, packet, result, properties):
   """Handles one event coming from HttpStatusPush and update the relevant
   TryJobResult object.
@@ -308,7 +299,6 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
 HANDLER_MAP = {
   'buildStarted': handle_build_started,
   'buildFinished': handle_build_finished,
-  'stepFinished': handle_step_finished,
 }
 
 
