@@ -17,7 +17,7 @@
 # NOTE: Must import *, since Django looks for things here, e.g. handler500.
 from django.conf.urls.defaults import *
 import django.views.defaults
-from django.views.generic.simple import redirect_to
+from django.views.generic.base import RedirectView
 
 from codereview import feeds
 
@@ -25,11 +25,11 @@ urlpatterns = patterns(
     'codereview.views',
     (r'^$', 'index'),
 
-    (r'^leaderboard/?$', redirect_to, {'url': '/leaderboard/30'}),
+    (r'^leaderboard/?$', RedirectView.as_view(url='/leaderboard/30')),
     (r'^leaderboard_json/(.+)$', 'leaderboard_json'),
     (r'^leaderboard/(.+)$', 'leaderboard'),
-    (r'^user/(?P<user>[^/]+)/stats/?$', redirect_to,
-        {'url': '/user/%(user)s/stats/30'}),
+    (r'^user/(?P<user>[^/]+)/stats/?$',
+     RedirectView.as_view(url='/user/%(user)s/stats/30')),
     (r'^user/([^/]+)/stats/([^/]+)$', 'show_user_stats'),
     (r'^user/([^/]+)/stats_json/([^/]+)$', 'show_user_stats_json'),
 
@@ -118,19 +118,14 @@ urlpatterns += patterns(
 
 
 ### RSS Feed support
-feed_dict = {
-  'reviews': feeds.ReviewsFeed,
-  'closed': feeds.ClosedFeed,
-  'mine' : feeds.MineFeed,
-  'all': feeds.AllFeed,
-  'issue' : feeds.OneIssueFeed,
-}
-
 urlpatterns += patterns(
     '',
-    (r'^rss/(?P<url>.*)$', 'django.contrib.syndication.views.feed',
-     {'feed_dict': feed_dict}),
-    )
+    url(r'^rss/all$', feeds.AllFeed(), name='rss_all'),
+    url(r'^rss/mine/(.*)$', feeds.MineFeed(), name='rss_mine'),
+    url(r'^rss/reviews/(.*)$', feeds.ReviewsFeed(), name='rss_reviews'),
+    url(r'^rss/closd/(.*)$', feeds.ClosedFeed(), name='rss_closed'),
+    url(r'^rss/issue/(.*)$', feeds.OneIssueFeed(), name='rss_issue'),
+)
 
 # Chromium urls
 urlpatterns += patterns(

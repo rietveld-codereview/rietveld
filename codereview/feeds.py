@@ -14,7 +14,7 @@
 
 import md5
 
-from django.contrib.syndication.feeds import Feed
+from django.contrib.syndication.views import Feed
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.utils.feedgenerator import Atom1Feed
@@ -77,7 +77,7 @@ class BaseFeed(Feed):
 
 class BaseUserFeed(BaseFeed):
 
-  def get_object(self, bits):
+  def get_object(self, request, *bits):
     """Returns the account for the requested user feed.
 
     bits is a list of URL path elements. The first element of this list
@@ -96,6 +96,8 @@ class BaseUserFeed(BaseFeed):
 
 class ReviewsFeed(BaseUserFeed):
   title = 'Code Review - All issues I have to review'
+  title_template = 'feeds/reviews_title.html'
+  description_template = 'feeds/reviews_description.html'
 
   def items(self, obj):
     return _rss_helper(obj.email, 'closed = FALSE AND reviewers = :1',
@@ -104,6 +106,8 @@ class ReviewsFeed(BaseUserFeed):
 
 class ClosedFeed(BaseUserFeed):
   title = "Code Review - Reviews closed by me"
+  title_template = 'feeds/closed_title.html'
+  description_template = 'feeds/closed_description.html'
 
   def items(self, obj):
     return _rss_helper(obj.email, 'closed = TRUE AND owner = :1')
@@ -111,6 +115,8 @@ class ClosedFeed(BaseUserFeed):
 
 class MineFeed(BaseUserFeed):
   title = 'Code Review - My issues'
+  title_template = 'feeds/mine_title.html'
+  description_template = 'feeds/mine_description.html'
 
   def items(self, obj):
     return _rss_helper(obj.email, 'closed = FALSE AND owner = :1')
@@ -118,6 +124,8 @@ class MineFeed(BaseUserFeed):
 
 class AllFeed(BaseFeed):
   title = 'Code Review - All issues'
+  title_template = 'feeds/all_title.html'
+  description_template = 'feeds/all_description.html'
 
   def items(self):
     query = models.Issue.gql('WHERE closed = FALSE AND private = FALSE '
@@ -126,10 +134,13 @@ class AllFeed(BaseFeed):
 
 
 class OneIssueFeed(BaseFeed):
+  title_template = 'feeds/issue_title.html'
+  description_template = 'feeds/issue_description.html'
+
   def link(self):
     return reverse('codereview.views.index')
 
-  def get_object(self, bits):
+  def get_object(self, request, *bits):
     if len(bits) != 1:
       raise ObjectDoesNotExist
     obj = models.Issue.get_by_id(int(bits[0]))

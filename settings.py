@@ -35,6 +35,12 @@ from google.appengine.api import app_identity
 
 APPEND_SLASH = False
 DEBUG = os.environ['SERVER_SOFTWARE'].startswith('Dev')
+
+# Rietveld stores the secret key in the datastore. To avoid random hangs upon
+# start the actual key is set by SetSecretKeyMiddleware upon first request.
+# This entry here in settings.py exists to make Django happy.
+SECRET_KEY = ''
+
 INSTALLED_APPS = (
     'codereview',
 )
@@ -42,6 +48,7 @@ HSTS_MAX_AGE = 60*60*24*365  # 1 year in seconds.
 MIDDLEWARE_CLASSES = (
     'django.middleware.common.CommonMiddleware',
     'django.middleware.http.ConditionalGetMiddleware',
+    'codereview.middleware.SetSecretKeyMiddleware',
     'codereview.middleware.RedirectToHTTPSMiddleware',
     'codereview.middleware.AddHSTSHeaderMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',
@@ -58,8 +65,9 @@ TEMPLATE_DIRS = (
     os.path.join(os.path.dirname(__file__), 'templates'),
     )
 TEMPLATE_LOADERS = (
-    'django.template.loaders.filesystem.load_template_source',
-    )
+    'django.template.loaders.filesystem.Loader',
+    'django.template.loaders.app_directories.Loader',
+)
 FILE_UPLOAD_HANDLERS = (
     'django.core.files.uploadhandler.MemoryFileUploadHandler',
 )
