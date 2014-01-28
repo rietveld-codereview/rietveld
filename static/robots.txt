@@ -12,6 +12,7 @@ Disallow: /*/diff/
 Disallow: /*/diff2/
 Disallow: /*/patch/
 Disallow: /*/publish
+Disallow: /all
 Disallow: /download/
 Disallow: /rss/
 Disallow: /search
