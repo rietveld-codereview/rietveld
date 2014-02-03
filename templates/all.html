@@ -1,0 +1,7 @@
+{%extends "issue_pagination.html"%}
+{%block subtitle%}
+ Recent 
+    {%if closed|lower == 'false' %} Open {%endif%}
+    {%if closed|lower == 'true' %} Closed {%endif%}
+ Issues
+{%endblock%}
