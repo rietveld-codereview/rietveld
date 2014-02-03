@@ -129,8 +129,7 @@ class Issue(db.Model):
   def user_can_edit(self, user):
     """Returns True if the given user has permission to edit this issue."""
     return user and (user == self.owner or self.is_collaborator(user) or
-                     auth_utils.is_current_user_admin() or
-                     is_privileged_user(user))
+                     auth_utils.is_current_user_admin())
 
   @property
   def edit_allowed(self):
@@ -146,7 +145,8 @@ class Issue(db.Model):
     email = user.email().lower()
     return (self.user_can_edit(user) or
             email in self.cc or
-            email in self.reviewers)
+            email in self.reviewers or
+            is_privileged_user(user))
 
   @property
   def view_allowed(self):
