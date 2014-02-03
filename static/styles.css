@@ -81,6 +81,12 @@ a:visited.noul, a:visited.noulv {
   color: #a32a91; /* #2a55a3; */
 }
 
+.editpatchset {
+  font-size: 80%;
+  cursor: pointer;
+  vertical-align: top;
+}
+
 .filegone, .filegone a, .filegone a:visited {
   color: gray;
 }

@@ -38,7 +38,7 @@
       <span class="anchor">#</span>
     </a>
     {%ifequal issue.owner user%}
-      <a onclick="M_editPatchsetTitle(
+      <a class="editpatchset" onclick="M_editPatchsetTitle(
           '{{issue.key.id}}', '{{patchset.key.id}}', '{{xsrf_token}}',
           {%if patchset.message%}'{{patchset.message}}'{% else %}''{% endif %},
           '{{forloop.counter}}')">(edit)</a>
