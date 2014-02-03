@@ -61,12 +61,14 @@ def respond(request, template, params=None):
   if params is None:
     params = {}
   must_choose_nickname = False
+  account = None
   if request.user is not None:
     account = models.Account.current_user_account
     must_choose_nickname = not account.user_has_selected_nickname()
   params['request'] = request
   params['counter'] = COUNTER
   params['user'] = request.user
+  params['account'] = account
   params['is_admin'] = request.user_is_admin
   params['is_dev'] = IS_DEV
   params['media_url'] = django_settings.MEDIA_URL
