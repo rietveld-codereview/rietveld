@@ -1042,7 +1042,7 @@ def upload(request):
         form.errors['issue'] = ['Base files upload required for that issue.']
         issue = None
       else:
-        if not issue.edit_allowed:
+        if not issue.upload_allowed:
           form.errors['user'] = ['You (%s) don\'t own this issue (%s)' %
                                  (request.user, issue_id)]
           issue = None
@@ -1137,7 +1137,7 @@ def upload_content(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if not request.issue.edit_allowed:
+  if not request.issue.upload_allowed:
     return HttpTextResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                             (request.user, request.issue.key().id()))
   patch = request.patch
@@ -1187,7 +1187,7 @@ def upload_patch(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if not request.issue.edit_allowed:
+  if not request.issue.upload_allowed:
     return HttpTextResponse(
         'ERROR: You (%s) don\'t own this issue (%s).' %
         (request.user, request.issue.key().id()))
@@ -1215,7 +1215,7 @@ def upload_patch(request):
 
 
 @deco.require_methods('POST')
-@deco.issue_editor_required
+@deco.issue_uploader_required
 @deco.upload_required
 def upload_complete(request, patchset_id=None):
   """/<issue>/upload_complete/<patchset> - Patchset upload is complete.
