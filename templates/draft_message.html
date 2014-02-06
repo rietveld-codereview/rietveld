@@ -1,0 +1,22 @@
+{%if issue and user%}
+<form>
+<div id="reviewmsgdlg" style="display:none;">
+  <div class="title">Edit Message</div>
+  <textarea id="reviewmsg"></textarea>
+  <input type="hidden" id="reviewmsgorig" />
+  <div class="button">
+    <input type="button" value="Save" name="save"
+	   onclick="return draftMessage.dialog_save();" />
+    <input type="button" value="Discard"
+	   onclick="return draftMessage.dialog_discard();" />
+    <input type="button" value="Close"
+	   onclick="return draftMessage.dialog_hide(true);" />
+    <span id="reviewmsgstatus"></span>
+  </div>
+</div>
+</form>
+<script language="JavaScript" type="text/javascript"><!--
+  draftMessage = new M_draftMessage({{issue.key.id}});
+// -->
+</script>
+{%endif%}

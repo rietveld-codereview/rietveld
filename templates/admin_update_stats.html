@@ -1,0 +1,52 @@
+{%extends "base.html"%}
+{%block mainmenu%}
+  <a href="{%url codereview.views.index%}">Issues</a>
+  <a href="{%url codereview.views.repos%}">Repositories</a>
+{%endblock%}
+
+{%block title1%}Statistics - Admin{%endblock%}
+{%block head%}{{form.media}}{%endblock%}
+{%block body%}
+<h2>Manually trigger statistics update</h2>
+
+<span style="color:red">{{msg}}</span>
+
+<form action="{%url codereview.views.update_stats%}" method="post">
+  <table>
+    {{form}}
+    <tr><td><input type="submit" value="Trigger"></td></tr>
+  </table>
+</form>
+  <ul>
+    <li>
+    To update a day, use 'YYYY-MM-DD'.
+    </li>
+    <li>
+      To update all days in a month, use 'YYYY-MM'.
+    </li>
+    <li>
+      To update monthly statistics, use 'monthly'.
+    </li>
+    <li>
+      To update rolling statistics, use '30'.
+    </li>
+    <li>
+      To refresh all scores, usually after modifying models.compute_score(), use
+      'refresh'. This task cannot be used with anything else.
+    </li>
+    <li>
+      To destroy all statistics, usually after modifying
+      views.search_relevant_first_email_for_user() or views.process_issue(), use
+      'destroy'. Reconstructing the data is costly, so only do this when
+      needed. <strong>There's no confirmation!</strong>
+    </li>
+    <li>
+      Example: update all of March 2013, then update both rolling and monthly:
+      '2013-03, 30, monthly'
+    </li>
+    <li>
+      Visit the <a href="{{dashboard}}">task queue dashboard</a> to know when the tasks are done.
+    </li>
+  </ul>
+{%endblock%}
+
