@@ -19,6 +19,8 @@ import os
 import re
 import sys
 
+import patching
+
 
 # Listing of supported patch statuses.
 ADDED_STATUS = 'A'
@@ -125,10 +127,22 @@ class InvertGitPatches(object):
     """Inverts the text of the patch."""
     inverted_header = self._get_inverted_header()
     (left_file, right_file) = self._get_left_and_right_for_inverted_patch()
-    inverted_chunk =  ''.join(difflib.unified_diff(lines,
-                                                   patched_lines,
-                                                   fromfile=left_file,
-                                                   tofile=right_file))
+
+    diff_lines = []
+    for diff_line in  difflib.unified_diff(lines,
+                                           patched_lines,
+                                           fromfile=left_file,
+                                           tofile=right_file):
+      if diff_line.endswith('\n'):
+        diff_lines.append(diff_line)
+      else:
+        # The original patch contains the NO_NEWLINE_MESSAGE when a file does
+        # not end in '\n'. This is stripped out at this point so add it back.
+        # Please see crbug.com/341028 for more details.
+        diff_lines.append(diff_line + '\n')
+        diff_lines.append(patching.NO_NEWLINE_MESSAGE + '\n')
+
+    inverted_chunk = ''.join(diff_lines)
     inverted_patch_text = inverted_header + inverted_chunk
     return inverted_patch_text
 

@@ -92,7 +92,7 @@ class TestInvertGitPatches(unittest.TestCase):
       '--- /dev/null\n'
       '+++ b/file100\n'
       '@@ -0,0 +1,3 @@\n'
-      '+test++')
+      '+test\n+\n+\n')
   DELETE_PATCH_TEXT = (
       'Index: file100\n'
       'diff --git a/file100 b/file100\n'
@@ -101,7 +101,7 @@ class TestInvertGitPatches(unittest.TestCase):
       '--- a/file100\n'
       '+++ /dev/null\n'
       '@@ -1,3 +0,0 @@\n'
-      '-test--')
+      '-test\n-\n-\n')
   MODIFY_PATCH_TEXT_ADD_CHANGES = (
       'Index: file100\n'
       'diff --git a/file100 b/file100\n'
@@ -109,7 +109,15 @@ class TestInvertGitPatches(unittest.TestCase):
       '--- a/file100\n'
       '+++ b/file100\n'
       '@@ -1,3 +1,4 @@\n'
-      '-+test')
+      '-\n+test\n')
+  MODIFY_PATCH_TEXT_ADD_CHANGES_NONEWLINE = (
+      'Index: file100\n'
+      'diff --git a/file100 b/file100\n'
+      'index 4..5 100644\n'
+      '--- a/file100\n'
+      '+++ b/file100\n'
+      '@@ -1,3 +1,4 @@\n'
+      '-\n+test\n\\ No newline at end of file\n')
   MODIFY_PATCH_TEXT_REMOVE_CHANGES = (
       'Index: file100\n'
       'diff --git a/file100 b/file100\n'
@@ -117,7 +125,16 @@ class TestInvertGitPatches(unittest.TestCase):
       '--- a/file100\n'
       '+++ b/file100\n'
       '@@ -1,4 +1,4 @@\n'
-      '-test   +')
+      '-test\n \n \n \n+\n')
+  MODIFY_PATCH_TEXT_MODIFY_CHANGES_NONEWLINE = (
+      'Index: file100\n'
+      'diff --git a/file100 b/file100\n'
+      'index 5..4 100644\n'
+      '--- a/file100\n'
+      '+++ b/file100\n'
+      '@@ -1 +1 @@\n'
+      '-test\n\\ No newline at end of file\n'
+      '+test1\n\\ No newline at end of file\n')
   CHMOD_PATCH_TEXT_ADD_CHANGES = (
       'Index: file100\n'
       'diff --git a/file100 b/file100\n'
@@ -140,7 +157,7 @@ class TestInvertGitPatches(unittest.TestCase):
       '--- a/file1\n'
       '+++ b/file100\n'
       '@@ -1,3 +1,3 @@\n'
-      '-+test')
+      '-\n+test\n')
   COPY_AND_MODIFY_PATCH_TEXT_WITH_EXISTING_MODE = (
       'Index: file100\n'
       'diff --git a/file100 b/file100\n'
@@ -151,7 +168,7 @@ class TestInvertGitPatches(unittest.TestCase):
       '--- a/file1\n'
       '+++ b/file100\n'
       '@@ -1,3 +1,3 @@\n'
-      '-+test')
+      '-\n+test\n')
   RENAME_AND_MODIFY_PATCH_TEXT_WITH_NEW_MODE = (
       'Index: file100\n'
       'diff --git a/file100 b/file100\n'
@@ -164,7 +181,7 @@ class TestInvertGitPatches(unittest.TestCase):
       '--- a/file1\n'
       '+++ b/file100\n'
       '@@ -1,3 +1,3 @@\n'
-      '-+test')
+      '-\n+test\n')
   RENAME_AND_MODIFY_PATCH_TEXT_WITH_EXISTING_MODE = (
       'Index: file100\n'
       'diff --git a/file100 b/file100\n'
@@ -175,17 +192,29 @@ class TestInvertGitPatches(unittest.TestCase):
       '--- a/file1\n'
       '+++ b/file100\n'
       '@@ -1,3 +1,3 @@\n'
-      '-+test')
+      '-\n+test\n')
   SVN_PATCH_TEXT = (
       'Index: file100\n'
       '==============\n'
       '--- file100 (revision 111)\n'
       '+++ file100 (working copy)\n'
       '@@ -1,3 +1,3 @@\n'
-      '-+test')
+      '-\n+test\n')
+
+  def test_get_inverted_patch_for_modify_with_nonewline(self):
+    lines = ['test']
+    patched_lines = ['test1']
+    invert_git_patches = invert_patches.InvertGitPatches(
+        patch_text=self.MODIFY_PATCH_TEXT_ADD_CHANGES_NONEWLINE,
+        filename='file100')
+
+    self.assertEquals(self.MODIFY_PATCH_TEXT_MODIFY_CHANGES_NONEWLINE,
+                      invert_git_patches.get_inverted_patch_text(
+                          lines, patched_lines))
+
 
   def test_get_inverted_patch_for_add(self):
-    lines = ['test', '', '']
+    lines = ['test\n', '\n', '\n']
     patched_lines = []
     invert_git_patches = invert_patches.InvertGitPatches(
         patch_text=self.ADD_PATCH_TEXT,
@@ -197,7 +226,7 @@ class TestInvertGitPatches(unittest.TestCase):
 
   def test_get_inverted_patch_for_delete(self):
     lines = []
-    patched_lines = ['test', '', '']
+    patched_lines = ['test\n', '\n', '\n']
     invert_git_patches = invert_patches.InvertGitPatches(
         patch_text=self.DELETE_PATCH_TEXT,
         filename='file100')
@@ -207,8 +236,8 @@ class TestInvertGitPatches(unittest.TestCase):
                           lines, patched_lines))
 
   def test_get_inverted_patch_for_modify(self):
-    lines = ['test', '', '', '']
-    patched_lines = ['', '', '', '']
+    lines = ['test\n', '\n', '\n', '\n']
+    patched_lines = ['\n', '\n', '\n', '\n']
     invert_git_patches = invert_patches.InvertGitPatches(
         patch_text=self.MODIFY_PATCH_TEXT_ADD_CHANGES,
         filename='file100')
@@ -218,8 +247,8 @@ class TestInvertGitPatches(unittest.TestCase):
                           lines, patched_lines))
 
   def test_get_inverted_patch_for_chmod(self):
-    lines = ['test', '', '', '']
-    patched_lines = ['test', '', '', '']
+    lines = ['test\n', '\n', '\n', '\n']
+    patched_lines = ['test\n', '\n', '\n', '\n']
     invert_git_patches = invert_patches.InvertGitPatches(
         patch_text=self.CHMOD_PATCH_TEXT_ADD_CHANGES,
         filename='file100')
@@ -229,7 +258,7 @@ class TestInvertGitPatches(unittest.TestCase):
                           lines, patched_lines))
 
   def test_get_inverted_patch_for_copy_and_modify_with_new_mode(self):
-    lines = ['test', '', '']
+    lines = ['test\n', '\n', '\n']
     patched_lines = []
     invert_git_patches = invert_patches.InvertGitPatches(
         patch_text=self.COPY_AND_MODIFY_PATCH_TEXT_WITH_NEW_MODE,
@@ -240,7 +269,7 @@ class TestInvertGitPatches(unittest.TestCase):
                           lines, patched_lines))
 
   def test_get_inverted_patch_for_copy_and_modify_with_existing_mode(self):
-    lines = ['test', '', '']
+    lines = ['test\n', '\n', '\n']
     patched_lines = []
     invert_git_patches = invert_patches.InvertGitPatches(
         patch_text=self.COPY_AND_MODIFY_PATCH_TEXT_WITH_EXISTING_MODE,
@@ -251,7 +280,7 @@ class TestInvertGitPatches(unittest.TestCase):
                           lines, patched_lines))
 
   def test_get_inverted_patch_for_rename_and_modify_with_new_mode(self):
-    lines = ['test', '', '']
+    lines = ['test\n', '\n', '\n']
     patched_lines = []
     invert_git_patches = invert_patches.InvertGitPatches(
         patch_text=self.RENAME_AND_MODIFY_PATCH_TEXT_WITH_NEW_MODE,
@@ -262,7 +291,7 @@ class TestInvertGitPatches(unittest.TestCase):
                           lines, patched_lines))
 
   def test_get_inverted_patch_for_rename_and_modify_with_existing_mode(self):
-    lines = ['test', '', '']
+    lines = ['test\n', '\n', '\n']
     patched_lines = []
     invert_git_patches = invert_patches.InvertGitPatches(
         patch_text=self.RENAME_AND_MODIFY_PATCH_TEXT_WITH_EXISTING_MODE,
