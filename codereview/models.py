@@ -129,12 +129,26 @@ class Issue(db.Model):
   def user_can_edit(self, user):
     """Returns True if the given user has permission to edit this issue."""
     return user and (user == self.owner or self.is_collaborator(user) or
-                     auth_utils.is_current_user_admin())
+                     auth_utils.is_current_user_admin() or
+                     is_privileged_user(user))
 
   @property
   def edit_allowed(self):
     """Whether the current user can edit this issue."""
     return self.user_can_edit(auth_utils.get_current_user())
+
+  def user_can_upload(self, user):
+    """Returns True if the user may upload a patchset to this issue.
+
+    This is stricter than user_can_edit because users cannot qualify just based
+    on their email address domain."""
+    return user and (user == self.owner or self.is_collaborator(user) or
+                     auth_utils.is_current_user_admin())
+
+  @property
+  def upload_allowed(self):
+    """Whether the current user can upload a patchset to this issue."""
+    return self.user_can_upload(auth_utils.get_current_user())
 
   def user_can_view(self, user):
     """Returns True if the given user has permission to view this issue."""
@@ -145,8 +159,7 @@ class Issue(db.Model):
     email = user.email().lower()
     return (self.user_can_edit(user) or
             email in self.cc or
-            email in self.reviewers or
-            is_privileged_user(user))
+            email in self.reviewers)
 
   @property
   def view_allowed(self):
@@ -231,31 +244,13 @@ class Issue(db.Model):
       self._num_drafts[comment.author.email()] = cur + 1
     self.draft_count_by_user = json.dumps(self._num_drafts)
 
-  @staticmethod
-  def _collaborator_emails_from_description(description):
-    """Parses a description, returning collaborator email addresses.
-
-    Broken out for unit testing.
-    """
-    collaborators = []
-    for line in description.splitlines():
-      m = re.match(
-        r'\s*COLLABORATOR\s*='
-        r'\s*([a-zA-Z0-9._]+@[a-zA-Z0-9_]+\.[a-zA-Z0-9._]+)\s*',
-        line)
-      if m:
-        collaborators.append(m.group(1))
-    return collaborators
-
   def collaborator_emails(self):
     """Returns a possibly empty list of emails specified in
     COLLABORATOR= lines.
 
     Note that one COLLABORATOR= lines is required per address.
     """
-    if not self.description:
-      return []
-    return Issue._collaborator_emails_from_description(self.description)
+    return []  # TODO(jrobbins): add a distinct collaborators field.
 
   def is_collaborator(self, user):
     """Returns true if the given user is a collaborator on this issue.
