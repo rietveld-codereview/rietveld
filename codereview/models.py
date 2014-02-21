@@ -532,6 +532,7 @@ class TryJobResult(db.Model):
   # Parent is PatchSet
   url = db.StringProperty()
   result = db.IntegerProperty()
+  master = db.StringProperty()
   builder = db.StringProperty()
   parent_name = db.StringProperty()
   slave = db.StringProperty()

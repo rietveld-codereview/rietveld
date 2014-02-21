@@ -56,6 +56,7 @@ class TryPatchSetForm(forms.Form):
   reason = forms.CharField(max_length=255)
   revision = forms.CharField(max_length=40, required=False)
   clobber = forms.BooleanField(required=False)
+  master = forms.CharField(max_length=255, required=False)
   builders = forms.CharField(max_length=16*1024)
 
 
@@ -716,6 +717,7 @@ def try_patchset(request):
   reason = form.cleaned_data['reason']
   revision = form.cleaned_data['revision']
   clobber = form.cleaned_data['clobber']
+  master = form.cleaned_data['master']
 
   try:
     builders = json.loads(form.cleaned_data['builders'])
@@ -730,8 +732,8 @@ def try_patchset(request):
     return HttpResponseBadRequest(content, content_type='text/plain')
 
   logging.debug(
-      'clobber=%s\nrevision=%s\nreason=%s\nbuilders=%s',
-      clobber, revision, reason, builders)
+      'clobber=%s\nrevision=%s\nreason=%s\nmaster=%s\nbuilders=%s',
+      clobber, revision, reason, master, builders)
 
   def txn():
     # Get list of existing pending try jobs for this patchset.  Don't create
@@ -742,6 +744,7 @@ def try_patchset(request):
     for builder, tests in builders.iteritems():
       try_job = models.TryJobResult(parent=patchset,
                                     result=models.TryJobResult.TRYPENDING,
+                                    master=master,
                                     builder=builder,
                                     revision=revision,
                                     clobber=clobber,
@@ -766,6 +769,7 @@ def get_pending_try_patchsets(request):
   if limit > 1000:
     limit = 1000
 
+  master = request.GET.get('master', None)
   cursor = request.GET.get('cursor', None)
 
   def MakeJobDescription(job):
@@ -791,8 +795,11 @@ def get_pending_try_patchsets(request):
     description['baseurl'] = issue.base
     return description
 
-  q = models.TryJobResult.all().filter(
-      'result =', models.TryJobResult.TRYPENDING).order('timestamp')
+  q = models.TryJobResult.all()
+  q.filter('result =', models.TryJobResult.TRYPENDING)
+  if master:
+    q.filter('master =', master)
+  q.order('timestamp')
   if cursor:
     q.with_cursor(cursor)
 
