@@ -250,10 +250,10 @@ indexes:
 - kind: TryJobResult
   properties:
   - name: result
+  - name: master
   - name: timestamp
 
 - kind: TryJobResult
   properties:
   - name: result
-  - name: master
   - name: timestamp
