@@ -1147,35 +1147,6 @@ class Bucket(db.Model):
   quoted = db.BooleanProperty()
 
 
-### Repositories and Branches ###
-
-
-class Repository(db.Model):
-  """A specific Subversion repository."""
-
-  name = db.StringProperty(required=True)
-  url = db.LinkProperty(required=True)
-  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
-  guid = db.StringProperty()  # global unique repository id
-
-  def __str__(self):
-    return self.name
-
-
-class Branch(db.Model):
-  """A trunk, branch, or a tag in a specific Subversion repository."""
-
-  repo = db.ReferenceProperty(Repository, required=True)
-  # Cache repo.name as repo_name, to speed up set_branch_choices()
-  # in views.IssueBaseForm.
-  repo_name = db.StringProperty()
-  category = db.StringProperty(required=True,
-                               choices=('*trunk*', 'branch', 'tag'))
-  name = db.StringProperty(required=True)
-  url = db.LinkProperty(required=True)
-  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
-
-
 ### Accounts ###
 
 
