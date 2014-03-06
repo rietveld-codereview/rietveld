@@ -100,7 +100,14 @@ class Issue(db.Model):
   closed = db.BooleanProperty(default=False)
   private = db.BooleanProperty(default=False)
   n_comments = db.IntegerProperty()
+  # Signifies the state of the 'Commit now:' checkbox for this Issue. True means
+  # the checkbox has been checked and the CQ will try to apply the Issue's
+  # patch.
   commit = db.BooleanProperty(default=False)
+  # Signifies the state of the 'Commit after a reviewer gives LGTM: '
+  # checkbox. True means that the checkbox has been checked and will turn on the
+  # above commit bit after an LGTM.
+  lgtm_auto_commit = db.BooleanProperty(default=False)
 
   # NOTE: Use num_messages instead of using n_messages_sent directly.
   n_messages_sent = db.IntegerProperty()
@@ -291,7 +298,8 @@ class Issue(db.Model):
 
   def calculate_updates_for(self, *msgs):
     """Recalculates updates_for, reviewer_approval, and draft_count_by_user,
-    factoring in msgs which haven't been sent.
+    factoring in msgs which haven't been sent. Also turns on the commit bit if
+    lgtm_auto_commit is True and a reviewer has approved it.
 
     This only updates this Issue object. You'll still need to put() it to
     the data store for it to take effect.
@@ -309,8 +317,12 @@ class Issue(db.Model):
         updates_for_set.add(self.owner.email())
         if msg.approval:
           approval_dict[msg.sender] = True
+          if self.lgtm_auto_commit:
+            self.commit = True
         elif msg.disapproval:
           approval_dict[msg.sender] = False
+          if self.lgtm_auto_commit:
+            self.commit = False
       updates_for_set.discard(msg.sender)
       self.modified = msg.date
     self.updates_for = [db.Email(x) for x in updates_for_set]
