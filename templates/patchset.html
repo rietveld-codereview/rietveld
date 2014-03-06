@@ -148,13 +148,24 @@
   </div>
 
   {%ifequal last_patchset.key.id patchset.key.id%}
+    <form id="lgtmcommitform" name="lgtmcommitform" method="post">
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+      <input type="hidden" name="last_patchset" value="{{last_patchset.key.id}}">
+      Commit after a reviewer gives LGTM:
+      <input type="checkbox" id="lgtm_auto_commit" name="lgtm_auto_commit"
+        {%if issue.lgtm_auto_commit%}checked{%endif%}
+        {%if not request.user or issue.closed%}disabled{%endif%}
+        onchange="M_editFlags('{{issue.key.id}}', 'lgtmcommitform')" />
+    </form>
+
+    <br/>
     <form id="commitform" name="commitform" method="post">
       <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
       <input type="hidden" name="last_patchset" value="{{last_patchset.key.id}}">
-      Commit: <input type="checkbox" id="commit" name="commit"
+      Commit now: <input type="checkbox" id="commit" name="commit"
         {%if issue.commit%}checked{%endif%}
         {%if not request.user or issue.closed%}disabled{%endif%}
-        onchange="M_editFlags('{{issue.key.id}}')" />
+        onchange="M_editFlags('{{issue.key.id}}', 'commitform'); if(! document.getElementById('commit').checked) document.getElementById('lgtm_auto_commit').checked=false;" />
     </form>
 
     <br/>

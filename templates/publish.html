@@ -37,6 +37,12 @@
     <td></td>
     <td><i>The message will be included in the email sent (if any).</i></td>
   </tr>
+  {% if not issue.closed and issue.lgtm_auto_commit and not issue.commit %}
+  <tr>
+    <td></td>
+    <td><i><b>Note:</b> The 'Commit after a reviewer gives LGTM' bit is turned on for this CL.<br/>Saying 'LGTM with nits' will send it to the CQ.</i></td>
+  </tr>
+  {% endif %}
   <tr>
     <td></td>
     <td>
