@@ -17,6 +17,7 @@ endef
 # /Helper
 
 APPID?= `cat app.yaml | sed -n 's/^application: *//p'`
+STAGEID= $(APPID)-staging
 
 SDK_PATH ?= $(shell python -c '$(DETECT_SDK)')
 
@@ -101,12 +102,12 @@ mapreduce:
 # separate app-id.  E.g., for testing inbound email, load testing, or something
 # that might clutter the real datastore.
 stage: update_revision mapreduce stage_backend
-       @echo "---[Staging $(STAGEID)]---"
-       $(APPCFG) $(APPCFG_FLAGS) update . --oauth2 --application $(STAGEID) --version $(VERSION)
+	@echo "---[Staging $(STAGEID)]---"
+	$(APPCFG) $(APPCFG_FLAGS) update . --oauth2 --application $(STAGEID) --version $(VERSION)
 
 stage_backend: update_revision mapreduce
-       @echo "---[Staging backend $(STAGEID)]---"
-       $(APPCFG) $(APPCFG_FLAGS) backends update . --oauth2 --application $(STAGEID) --version $(VERSION)
+	@echo "---[Staging backend $(STAGEID)]---"
+	$(APPCFG) $(APPCFG_FLAGS) backends update . --oauth2 --application $(STAGEID) --version $(VERSION)
 
 stage_indexes:
-       $(APPCFG) $(APPCFG_FLAGS) update_indexes . --oauth2 --application $(STAGEID)
+	$(APPCFG) $(APPCFG_FLAGS) update_indexes . --oauth2 --application $(STAGEID)
