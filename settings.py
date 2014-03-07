@@ -70,6 +70,7 @@ MEDIA_URL = '/static/'
 appid = app_identity.get_application_id()
 RIETVELD_INCOMING_MAIL_ADDRESS = ('reply@%s.appspotmail.com' % appid)
 RIETVELD_INCOMING_MAIL_MAX_SIZE = 500 * 1024  # 500K
+RIETVELD_INCOMING_MAIL_RECOGNIZE_LGTM = False
 RIETVELD_REVISION = '<unknown>'
 try:
     RIETVELD_REVISION = open(

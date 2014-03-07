@@ -714,6 +714,8 @@ class Message(db.Model):
   draft = db.BooleanProperty(default=False)
   in_reply_to = db.SelfReferenceProperty()
   issue_was_closed = db.BooleanProperty(default=False)
+  # If message came in through email, we might not count "lgtm"
+  was_inbound_email = db.BooleanProperty(default=False)
 
   _approval = None
   _disapproval = None
@@ -736,6 +738,9 @@ class Message(db.Model):
   @property
   def approval(self):
     """Is True when the message represents an approval of the review."""
+    if (self.was_inbound_email and
+        not settings.RIETVELD_INCOMING_MAIL_RECOGNIZE_LGTM):
+      return False
     if self._approval is None:
       self._approval = self.find('lgtm') and not self.disapproval
     return self._approval

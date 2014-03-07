@@ -1033,6 +1033,7 @@ def upload(request):
         content_entities = []
         new_content_entities = []
         patches = list(patchset.patches)
+        
         existing_patches = {}
         patchsets = list(issue.patchsets)
         if len(patchsets) > 1:
@@ -3481,17 +3482,17 @@ def incoming_mail(request, recipients):
   The issue is not modified. No reviewers or CC's will be added or removed.
   """
   try:
-    _process_incoming_mail(request.raw_post_data, recipients)
+    _process_incoming_mail(request, recipients)
   except InvalidIncomingEmailError, err:
     logging.debug(str(err))
   return HttpTextResponse('')
 
 
-def _process_incoming_mail(raw_message, recipients):
+def _process_incoming_mail(request, recipients):
   """Process an incoming email message."""
   recipients = [x[1] for x in email.utils.getaddresses([recipients])]
 
-  incoming_msg = mail.InboundEmailMessage(raw_message)
+  incoming_msg = mail.InboundEmailMessage(request.raw_post_data)
 
   if 'X-Google-Appengine-App-Id' in incoming_msg.original:
     raise InvalidIncomingEmailError('Mail sent by App Engine')
@@ -3542,6 +3543,11 @@ def _process_incoming_mail(raw_message, recipients):
                        date=datetime.datetime.now(),
                        text=db.Text(body),
                        draft=False)
+  if msg.approval:
+    publish_url = request.build_absolute_uri(reverse(
+        publish, args=[issue.key().id()]))
+    _send_lgtm_reminder(sender, subject, publish_url)
+  msg.was_inbound_email = True
 
   # Add sender to reviewers if needed.
   all_emails = [str(x).lower()
@@ -3561,6 +3567,20 @@ def _process_incoming_mail(raw_message, recipients):
   issue.put()
   msg.put()
 
+
+LGTM_REMINDER_BODY = """
+REMINDER: If this change looks good, please use the LGTM button at
+%s
+"""
+
+def _send_lgtm_reminder(addr, subject, publish_url):
+  """Remind a user to LGTM through the web UI, not email."""
+  logging.info('reminding %r to use web %r for %r', addr, publish_url, subject)
+  mail.send_mail(
+    sender=django_settings.RIETVELD_INCOMING_MAIL_ADDRESS,
+    to=addr,
+    subject=_encode_safely(subject),
+    body=LGTM_REMINDER_BODY % publish_url)
 
 @deco.login_required
 def xsrf_token(request):
