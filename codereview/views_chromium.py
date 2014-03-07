@@ -49,7 +49,6 @@ from codereview import views
 class EditFlagsForm(forms.Form):
   last_patchset = forms.IntegerField(widget=forms.HiddenInput())
   commit = forms.BooleanField(required=False)
-  lgtm_auto_commit = forms.BooleanField(required=False)
   builders = forms.CharField(max_length=255, required=False)
 
 
@@ -378,7 +377,6 @@ def edit_flags(request):
     form = EditFlagsForm(initial={
         'last_patchset': last_patchset.key().id(),
         'commit': request.issue.commit,
-        'lgtm_auto_commit': request.issue.lgtm_auto_commit,
         'builders': initial_builders})
 
     return responses.respond(request,
@@ -393,24 +391,6 @@ def edit_flags(request):
     return HttpResponseForbidden('Can only modify flags on last patchset',
         content_type='text/plain')
 
-  if 'lgtm_auto_commit' in request.POST:
-    request.issue.lgtm_auto_commit = form.cleaned_data['lgtm_auto_commit']
-    user_email = request.user.email().lower()
-    if (request.issue.lgtm_auto_commit and
-        user_email != request.issue.owner.email() and
-        user_email not in request.issue.reviewers and
-        user_email not in request.issue.collaborator_emails()):
-      # Add as reviewer if setting, not clearing.
-      request.issue.reviewers.append(db.Email(request.user.email()))
-    # Update the issue with the checking/unchecking of the lgtm auto CQ box but
-    # reduce spam by not emailing users.
-    action = 'checked' if request.issue.lgtm_auto_commit else 'unchecked'
-    commit_checked_msg = 'The auto l-g-t-m CQ bit was %s by %s' % (
-        action, user_email)
-    views.make_message(request, request.issue, commit_checked_msg,
-                       send_mail=False).put()
-    request.issue.put()
-
   if 'commit' in request.POST:
     request.issue.commit = form.cleaned_data['commit']
     user_email = request.user.email().lower()
@@ -419,9 +399,6 @@ def edit_flags(request):
         user_email not in request.issue.reviewers and
         user_email not in request.issue.collaborator_emails()):
       request.issue.reviewers.append(db.Email(request.user.email()))
-    # Uncheck lgtm_auto_commit if the CQ box has been unchecked.
-    if not request.issue.commit:
-      request.issue.lgtm_auto_commit = False
     # Update the issue with the checking/unchecking of the CQ box but reduce
     # spam by not emailing users.
     action = 'checked' if request.issue.commit else 'unchecked'

@@ -576,12 +576,11 @@ function M_createRevertPatchset() {
  * Change the commit bit for the given issue by using edit_flags.
  * @param {String} issue The issue key
  */
-function M_editFlags(issue, form_name) {
+function M_editFlags(issue) {
   var req = [];
-  var form = document.getElementById(form_name);
-  var len = form.elements.length;
+  var len = document.commitform.elements.length;
   for (var i = 0; i < len; i++) {
-    var element = form.elements[i];
+    var element = document.commitform.elements[i];
     var value = undefined;
     if (element.type == 'hidden') {
       value = element.value;
