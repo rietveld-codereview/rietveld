@@ -94,3 +94,19 @@ coverage:
 mapreduce:
 	svn co -r 491 http://appengine-mapreduce.googlecode.com/svn/trunk/python/src/mapreduce
 	cd mapreduce/ && patch < ../mapreduce.patch
+
+
+# AppEngine apps can be tested locally and in non-default versions upload to
+# the main app-id, but it is still sometimes useful to have a completely
+# separate app-id.  E.g., for testing inbound email, load testing, or something
+# that might clutter the real datastore.
+stage: update_revision mapreduce stage_backend
+       @echo "---[Staging $(STAGEID)]---"
+       $(APPCFG) $(APPCFG_FLAGS) update . --oauth2 --application $(STAGEID) --version $(VERSION)
+
+stage_backend: update_revision mapreduce
+       @echo "---[Staging backend $(STAGEID)]---"
+       $(APPCFG) $(APPCFG_FLAGS) backends update . --oauth2 --application $(STAGEID) --version $(VERSION)
+
+stage_indexes:
+       $(APPCFG) $(APPCFG_FLAGS) update_indexes . --oauth2 --application $(STAGEID)
