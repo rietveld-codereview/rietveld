@@ -245,6 +245,11 @@ indexes:
   ancestor: yes
   properties:
   - name: created
+
+- kind: PatchSet
+  ancestor: yes
+  properties:
+  - name: created
     direction: desc
 
 - kind: TryJobResult
