@@ -1043,9 +1043,12 @@ def upload(request):
           checksum, filename = file_info.split(":", 1)
           base_hashes[filename] = checksum
 
+        logging.info('base_hashes is %r', base_hashes)
         content_entities = []
         new_content_entities = []
         patches = list(patchset.patches)
+        logging.info('len(patches) = %r', len(patches))
+
         existing_patches = {}
         patchsets = list(issue.patchsets)
         if len(patchsets) > 1:
@@ -1082,6 +1085,8 @@ def upload(request):
             # be uploaded.  We mark this by prepending 'nobase' to the id.
             id_string = "nobase_" + str(id_string)
           msg += "\n%s %s" % (id_string, patch.filename)
+
+        logging.info('upload response is:\n %s\n', msg)
         db.put(patches)
   return HttpTextResponse(msg)
 
@@ -1207,8 +1212,7 @@ def upload_complete(request, patchset_id=None):
   # Check for completeness
   errors = []
   if patchset is not None:
-    # Use of patch_set here is OK because this is part of the v1 upload code.
-    query = patchset.patch_set.filter('is_binary =', False)
+    query = models.Patch.all().ancestor(patchset).filter('is_binary =', False)
     query = query.filter('status =', None)  # all uploaded file have a status
     if query.count() > 0:
       errors.append('Base files missing.')

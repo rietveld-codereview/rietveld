@@ -156,11 +156,11 @@ class Issue(db.Model):
 
   @property
   def patchsets(self):
-    return self.patchset_set.order('created')
+    return PatchSet.all().ancestor(self).order('created')
 
   @property
   def messages(self):
-    return self.message_set.order('date')
+    return Message.all().ancestor(self).order('date')
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n.
@@ -293,7 +293,7 @@ class Issue(db.Model):
     updates_for_set = set(self.updates_for)
     approval_dict = {r: None for r in self.reviewers}
     self.num_messages = 0
-    old_messages = self.message_set.filter('draft =', False).run()
+    old_messages = Message.all().ancestor(self).filter('draft =', False).run()
     for msg in itertools.chain(old_messages, msgs):
       self.num_messages += 1
       if msg.sender == self.owner.email():
@@ -518,7 +518,8 @@ class PatchSet(db.Model):
 
   @property
   def patches(self):
-    return self.patch_set.order('filename')
+    ret = list(Patch.all().ancestor(self).order('filename'))
+    return ret
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n."""
@@ -537,7 +538,7 @@ class PatchSet(db.Model):
   def calculate_deltas(self):
     patchset_id = self.key().id()
     patchsets = None
-    for patch in self.patch_set.filter('delta_calculated =', False):
+    for patch in Patch.all().ancestor(self).filter('delta_calculated =', False):
       if patchsets is None:
         # patchsets is retrieved on first iteration because patchsets
         # isn't needed outside the loop at all.
