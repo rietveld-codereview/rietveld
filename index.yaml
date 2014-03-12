@@ -216,7 +216,23 @@ indexes:
   - name: patchset
   - name: filename
 
+- kind: Patch
+  ancestor: yes
+  properties:
+  - name: filename
+
 - kind: PatchSet
   properties:
   - name: issue
   - name: created
+
+- kind: PatchSet
+  ancestor: yes
+  properties:
+  - name: created
+
+- kind: PatchSet
+  ancestor: yes
+  properties:
+  - name: created
+    direction: desc
