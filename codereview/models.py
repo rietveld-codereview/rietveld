@@ -589,7 +589,9 @@ class PatchSet(db.Model):
   @property
   def patches(self):
     ret = list(Patch.all().ancestor(self))
-
+    # Patches are sorted based on file pathname.
+    ret = sorted(ret, key=lambda patch: patch.filename)
+    # But then, put .h in front of the associated .c files.
     splits = [os.path.splitext(patch.filename) for patch in ret]
     for i in range(len(splits) - 1):
       if (splits[i][0] == splits[i+1][0] and
