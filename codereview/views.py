@@ -102,6 +102,9 @@ MAX_MESSAGE = 10000
 MAX_FILENAME = 255
 MAX_DB_KEY_LENGTH = 1000
 
+DB_WRITE_TRIES = 3
+DB_WRITE_PAUSE = 4
+
 
 ### Form classes ###
 
@@ -1099,6 +1102,7 @@ def upload_content(request):
 
   Used by upload.py to upload base files.
   """
+  entities_to_put = set()
   form = UploadContentForm(request.POST, request.FILES)
   if not form.is_valid():
     return HttpTextResponse(
@@ -1114,15 +1118,15 @@ def upload_content(request):
   patch = request.patch
   patch.status = form.cleaned_data['status']
   patch.is_binary = form.cleaned_data['is_binary']
-  patch.put()
+  entities_to_put.add(patch)
 
   if form.cleaned_data['is_current']:
     if patch.patched_content:
       return HttpTextResponse('ERROR: Already have current content.')
     content = models.Content(is_uploaded=True, parent=patch)
-    content.put()
+    entities_to_put.add(content)
     patch.patched_content = content
-    patch.put()
+    entities_to_put.add(patch)
   else:
     content = patch.content
 
@@ -1132,16 +1136,24 @@ def upload_content(request):
     data = form.get_uploaded_content()
     checksum = md5.new(data).hexdigest()
     if checksum != request.POST.get('checksum'):
-      content.is_bad = True
-      content.put()
       return HttpTextResponse('ERROR: Checksum mismatch.')
     if patch.is_binary:
       content.data = data
     else:
       content.text = utils.to_dbtext(utils.unify_linebreaks(data))
     content.checksum = checksum
-  content.put()
-  return HttpTextResponse('OK')
+  entities_to_put.add(content)
+
+  for try_number in xrange(DB_WRITE_TRIES):
+    try:
+      db.put(entities_to_put)
+      return HttpTextResponse('OK')
+    except db.TransactionFailedError as err:
+      logging.exception(err)
+      # AppEngine datastore cannot write to the same entity group rapidly.
+      time.sleep(DB_WRITE_PAUSE + try_number * random.random())
+
+  return HttpTextResponse('Error: could not store data', status=500)
 
 
 @deco.require_methods('POST')
