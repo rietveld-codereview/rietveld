@@ -2013,7 +2013,7 @@ def _issue_as_dict(issue, messages, request=None):
   return values
 
 
-def _patchset_as_dict(patchset, comments, request=None):
+def _patchset_as_dict(patchset, comments, request):
   """Converts a patchset into a dict."""
   values = {
     'patchset': patchset.key().id(),
@@ -2043,18 +2043,22 @@ def _patchset_as_dict(patchset, comments, request=None):
         'property_changes': '\n'.join(patch.property_changes),
     }
     if comments:
-      values['files'][patch.filename]['messages'] = [
-        {
-          'author': library.get_nickname(c.author, True, request),
-          'author_email': c.author.email(),
-          'date': str(c.date),
-          'lineno': c.lineno,
-          'text': c.text,
-          'left': c.left,
-          'draft': c.draft,
-        }
-        for c in models.Comment.gql('WHERE patch = :patch and draft = FALSE '
-                                    'ORDER BY date', patch=patch)]
+      visible_comments = []
+      requester_email = request.user.email() if request.user else 'no email'
+      for c in models.Comment.gql('WHERE patch = :patch ORDER BY date', patch=patch):
+        if not c.draft or requester_email == c.author.email():
+          visible_comments.append({
+              'author': library.get_nickname(c.author, True, request),
+              'author_email': c.author.email(),
+              'date': str(c.date),
+              'lineno': c.lineno,
+              'text': c.text,
+              'left': c.left,
+              'draft': c.draft,
+              })
+
+      values['files'][patch.filename]['messages'] = visible_comments
+
   return values
 
 
