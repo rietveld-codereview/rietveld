@@ -715,7 +715,7 @@ def _paginate_issues_with_cursor(page_url,
   params = {
     'limit': limit,
     'cursor': nav_parameters['cursor'],
-    'nexttext': 'Newer',
+    'nexttext': 'Next',
   }
   # Fetch one more to see if there should be a 'next' link. Do it in a separate
   # request so we have a valid cursor.
