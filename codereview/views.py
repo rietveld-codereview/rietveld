@@ -1111,7 +1111,7 @@ def upload_content(request):
     if patch.patched_content:
       return HttpTextResponse('ERROR: Already have current content.')
     content = models.Content(is_uploaded=True, parent=patch)
-    entities_to_put.add(content)
+    content.put()
     patch.patched_content = content
     entities_to_put.add(patch)
   else:
