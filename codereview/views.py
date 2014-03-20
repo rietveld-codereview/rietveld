@@ -1573,9 +1573,10 @@ def account(request):
     accounts = models.Account.all()
     accounts.filter("lower_%s >= " % prop, query)
     accounts.filter("lower_%s < " % prop, query + u"\ufffd")
-    accounts.filter("blocked =", False)
     accounts.order("lower_%s" % prop)
     for account in accounts:
+      if account.blocked:
+        continue
       if account.key() in added:
         continue
       if domain and not account.email.endswith(domain):
