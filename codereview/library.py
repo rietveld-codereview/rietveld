@@ -248,7 +248,7 @@ class CategoriesNode(django.template.Node):
     {% output_categories_and_builders default_builders.items %}
   """
 
-  def __init__(self, categories_to_builders):
+  def __init__(self, tryserver, categories_to_builders):
     """Constructor.
 
     'categories_to_builders' is the name of the template variable that holds a
@@ -258,11 +258,13 @@ class CategoriesNode(django.template.Node):
     subcategory.
     """
     super(CategoriesNode, self).__init__()
+    self.tryserver = django.template.Variable(tryserver)
     self.categories_to_builders = django.template.Variable(
         categories_to_builders)
 
   def render(self, context):
     try:
+      tryserver = self.tryserver.resolve(context)
       categories_to_builders = self.categories_to_builders.resolve(context)
     except django.template.VariableDoesNotExist:
       return ''
@@ -340,8 +342,8 @@ class CategoriesNode(django.template.Node):
             parent=builder_div_elem,
             tag='input',
             type='checkbox',
-            name=builder,
-            id='cb_%s' % builder,
+            name='%s:%s' % (tryserver, builder),
+            id='cb_%s_%s' % (tryserver, builder),
             checked='checked')
         builder_checkbox_elem.text = builder
 
@@ -413,8 +415,8 @@ def nicknames(parser, token):
 @register.tag
 def output_categories_and_builders(_parser, token):
   """Returns the complete category and builders structure."""
-  _, categories_to_builders = token.split_contents()
-  return CategoriesNode(categories_to_builders)
+  _, tryserver, categories_to_builders = token.split_contents()
+  return CategoriesNode(tryserver, categories_to_builders)
 
 
 @register.filter
@@ -455,3 +457,7 @@ def format_duration(seconds):
     # Skip seconds unless there's only seconds.
     out.append('%02ds' % seconds)
   return prefix + ''.join(out).lstrip('0')
+
+@register.filter
+def sort(value):
+  return sorted(value)

@@ -530,21 +530,25 @@ table#queues div.subject a:visited {
   border-radius: 4px;
   -webkit-border-radius: 4px;
   -moz-border-radius: 4px;
-}
-
-#trybot-popup-checkboxes {
-  columns: 4;
-  -webkit-columns: 4;
-  width: 100ex;
-}
-
-#trybot-popup-checkboxes-with-categories {
-  columns: 1;
-  -webkit-columns: 1;
   overflow-x: hidden;
   overflow-y: scroll;
-  max-height: 300px;
-  width: 550px;
+  max-height: 550px;
+}
+
+.trybot-popup-builders {
+  columns: 4;
+  -webkit-columns: 4;
+  width: 150ex;
+  padding: 3px;
+  margin: 3px;
+}
+
+.trybot-popup-checkboxes-with-categories {
+  columns: 1;
+  -webkit-columns: 1;
+  width: 150ex;
+  padding: 3px;
+  margin: 3px;
 }
 
 div.trybot-popup-input {
