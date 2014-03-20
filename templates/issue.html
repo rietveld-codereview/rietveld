@@ -208,25 +208,33 @@
   <div id="trybot-popup" style="display:none;">
     <form method="POST" action="" id="trybotform">
       <input type="hidden" name="xsrf_token" value="{{xsrf_token}}"/>
-        {% if default_builders.items|length == 1 %}
-          <div id="trybot-popup-checkboxes">
-          {% for builder in default_builders.values.0 %}
-              <input type="checkbox" name="{{builder}}" id="cb_{{builder}}"><label for="cb_{{builder}}">{{builder}}</label><br>
-          {%endfor%}
-        {% else %}
-          <div id="trybot-popup-checkboxes-with-categories">
-          {% output_categories_and_builders default_builders.items %}
-        {% endif %}
+        <div id="trybot-popup-checkboxes">
+        {% for tryserver, categories in default_builders.items|sort %}
+          {% if categories.items|length == 1 %}
+            <div class="trybot-popup-builders">
+            <b>{{ tryserver }}</b><br>
+            {% for builder in categories.values.0|sort %}
+                <input type="checkbox" name="{{tryserver}}:{{builder}}" id="cb_{{tryserver}}_{{builder}}">
+                <label for="cb_{{tryserver}}_{{builder}}">{{builder}}</label><br>
+            {%endfor%}
+            </div>
+          {% else %}
+            <div class="trybot-popup-checkboxes-with-categories">
+            <b>{{ tryserver }}</b><br>
+            {% output_categories_and_builders tryserver categories.items %}
+            </div>
+          {% endif %}
+          <div class="trybot-button-div">
+            <input type="button" value="Update"
+                   onclick="M_updatePendingTrybots('{{issue.key.id}}', '{{last_patchset.key.id}}', '{{xsrf_token}}')"/>
+            <input type="button" value="Close"
+                   onclick="M_closePendingTrybots()"/>
+            {% if trybot_documentation_link %}
+              <br/><a href='{{ trybot_documentation_link }}'>Trybot Documentation</a>
+            {% endif %}
           </div>
-      <div class="trybot-button-div">
-        <input type="button" value="Update"
-               onclick="M_updatePendingTrybots('{{issue.key.id}}', '{{last_patchset.key.id}}', '{{xsrf_token}}')"/>
-        <input type="button" value="Close"
-               onclick="M_closePendingTrybots()"/>
-        {% if trybot_documentation_link %}
-          <br/><a href='{{ trybot_documentation_link }}'>Trybot Documentation</a>
-        {% endif %}
-      </div>
+        {% endfor %}
+        </div>
     </form>
   </div>
 {%endif%}

@@ -67,6 +67,78 @@ def to_dict(self):
 db.Model.to_dict = to_dict
 
 
+class TryserverBuilders(db.Model):
+  JSON_SOURCES = {
+    'tryserver.blink': [
+      'http://build.chromium.org/p/tryserver.blink/json/builders'
+    ],
+    'tryserver.chromium': [
+      'http://build.chromium.org/p/tryserver.chromium/json/builders'
+    ],
+    'tryserver.chromium.gpu': [
+      'http://build.chromium.org/p/tryserver.chromium.gpu/json/builders'
+    ],
+    'tryserver.skia': [
+      # These servers are owned by skiabot@google.com .
+      # TODO(rmistry): Update them to use DNS names instead of IPs.
+      'http://108.170.217.252:10117/json/trybots',
+      'http://108.170.219.162:10117/json/trybots',
+      'http://108.170.219.160:10117/json/trybots',
+      'http://108.170.219.164:10117/json/trybots',
+    ], 
+    'tryserver.v8': [
+      'http://build.chromium.org/p/tryserver.v8/json/builders'
+    ],
+  }
+
+  MEMCACHE_KEY = 'default_builders'
+  MEMCACHE_TIME = 3600 * 24
+
+  # Dictionary mapping tryserver names like tryserver.chromium to a list
+  # of builders.
+  json_contents = db.TextProperty(default='{}')
+
+  @classmethod
+  def get_instance(cls):
+    return cls.get_or_insert('one instance')
+
+  @classmethod
+  def get_builders(cls):
+    data = memcache.get(cls.MEMCACHE_KEY)
+    if data is not None:
+      return data
+
+    data = json.loads(cls.get_instance().json_contents)
+    memcache.add(cls.MEMCACHE_KEY, data, cls.MEMCACHE_TIME)
+    return data
+
+  @classmethod
+  def refresh(cls):
+    new_json_contents = {}
+
+    for tryserver, json_urls in cls.JSON_SOURCES.iteritems():
+      for json_url in json_urls:
+        result = urlfetch.fetch(json_url, deadline=60)
+        parsed_json = json.loads(result.content)
+        for builder in parsed_json:
+          # Exclude triggered bots: they are not to be triggered directly but
+          # by another bot.
+          if 'triggered' in builder:
+            continue
+
+          # Skip bisect bots to declutter the UI.
+          if 'bisect' in builder:
+            continue
+
+          category = parsed_json[builder].get('category', 'None')
+          new_json_contents.setdefault(tryserver, {}).setdefault(
+              category, []).append(builder)
+      
+    instance = cls.get_instance()
+    instance.json_contents = json.dumps(new_json_contents)
+    instance.put()
+
+
 class DefaultBuilderList(db.Model):
   """An instance to hold the list of default builder names for trying patchsets.
 

@@ -1589,7 +1589,7 @@ def show(request):
 
   return respond(request, 'issue.html', {
     'default_builders':
-      models_chromium.DefaultBuilderList.get_builders(issue.base),
+      models_chromium.TryserverBuilders.get_builders(),
     'first_patch': first_patch,
     'has_draft_message': has_draft_message,
     'is_editor': issue.edit_allowed,

@@ -415,10 +415,12 @@ def edit_flags(request):
 
       # Add any new builders.
       for builder in new_builders:
+        mastername, buildername = builder.split(':', 1)
         try_job = models.TryJobResult(parent=last_patchset,
                                       reason='',
                                       result=models.TryJobResult.TRYPENDING,
-                                      builder=builder,
+                                      master=mastername,
+                                      builder=buildername,
                                       revision='',
                                       clobber=False)
         jobs_to_save.append(try_job)
@@ -570,19 +572,8 @@ def download_binary(request):
 
 def update_default_builders(_request):
   """/restricted/update_default_builders - Updates list of default builders."""
-  try:
-    (successful, failed) = models_chromium.DefaultBuilderList.update()
-    if failed:
-      logging.error('Failed to update default builders for: %s' %
-                    ','.join(failed))
-
-    content = 'Updated successfully: %s\nFailed to update: %s' % (
-        successful, ','.join(failed))
-  except DeadlineExceededError:
-    content = 'Deadline exceeded'
-
-  logging.info(content)
-  return HttpResponse(content, content_type='text/plain')
+  models_chromium.TryserverBuilders.refresh()
+  return HttpResponse('success', content_type='text/plain')
 
 
 @deco.admin_required
