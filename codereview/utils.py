@@ -14,7 +14,6 @@
 
 """Collection of helper functions."""
 
-import random
 import urlparse
 
 from google.appengine.ext import db
@@ -96,17 +95,3 @@ def unify_linebreaks(text):
   return text.replace('\r\n', '\n').replace('\r', '\n')
 
 
-class SecretKey(db.Model):
-  secret = db.StringProperty(required=True)
-
-
-def get_secret_key():
-  """Gets or generates a secret key used in settings.py."""
-  entity = SecretKey.get_by_key_name('django_secret_key')
-  if entity is None:
-    # This is the same set of chars that Django uses to generate SECRET_KEY
-    # in their startproject command.
-    chars = 'abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*(-_=+)'
-    secret = ''.join(random.choice(chars) for x in range(50))
-    entity = SecretKey.get_or_insert('django_secret_key', secret=secret)
-  return entity.secret
