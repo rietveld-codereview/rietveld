@@ -25,7 +25,6 @@ from django.template import Context, loader
 
 from codereview import auth_utils
 from codereview import models
-from codereview.utils import get_secret_key
 
 
 class AddHSTSHeaderMiddleware(object):
@@ -118,11 +117,3 @@ class RedirectToHTTPSMiddleware(object):
       host = request.get_host().split(':')[0]
       return HttpResponsePermanentRedirect(
           'https://%s%s' % (host, request.get_full_path()))
-
-
-class SetSecretKeyMiddleware(object):
-  """Sets SECRET_KEY."""
-
-  def process_request(self, request):
-    if not settings.SECRET_KEY:
-      settings.SECRET_KEY = get_secret_key()
