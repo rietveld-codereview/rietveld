@@ -80,11 +80,14 @@ class TryserverBuilders(db.Model):
     ],
     'tryserver.skia': [
       # These servers are owned by skiabot@google.com .
-      # TODO(rmistry): Update them to use DNS names instead of IPs.
-      'http://108.170.217.252:10117/json/trybots',
-      'http://108.170.219.162:10117/json/trybots',
-      'http://108.170.219.160:10117/json/trybots',
-      'http://108.170.219.164:10117/json/trybots',
+      'http://skia-tree-status-staging.appspot.com/redirect/' +
+          'buildbots/json/trybots',
+      'http://skia-tree-status-staging.appspot.com/redirect/' +
+          'android-buildbots/json/trybots',
+      'http://skia-tree-status-staging.appspot.com/redirect/' +
+          'compile-buildbots/json/trybots',
+      'http://skia-tree-status-staging.appspot.com/redirect/' + 
+          'fyi-buildbots/json/trybots',
     ], 
     'tryserver.v8': [
       'http://build.chromium.org/p/tryserver.v8/json/builders'
