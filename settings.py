@@ -14,6 +14,7 @@
 
 """Minimal Django settings."""
 
+import logging
 import os
 
 from google.appengine.api import app_identity
@@ -31,10 +32,18 @@ from google.appengine.api import app_identity
 APPEND_SLASH = False
 DEBUG = os.environ['SERVER_SOFTWARE'].startswith('Dev')
 
-# Rietveld stores the secret key in the datastore. To avoid random hangs upon
-# start the actual key is set by SetSecretKeyMiddleware upon first request.
-# This entry here in settings.py exists to make Django happy.
-SECRET_KEY = ''
+# Django requires that settings.SECRET_KEY be defined.  According to the docs,
+# It is used by django.core.signing, which we do not use in our app.
+# We could just set it to 'foo' and ignore it, but that would not be secure.
+# So, we make sure that it is never used for anything.
+class MakeSureNothingReadsThisString(object):
+  """If Django reads this string for any reason, fail loudly."""
+  def __str__(self):
+    logging.error('SECRET_KEY was never meant to be used')
+    raise NotImplementedError()
+
+SECRET_KEY = MakeSureNothingReadsThisString()
+
 
 INSTALLED_APPS = (
     'codereview',
@@ -43,7 +52,6 @@ HSTS_MAX_AGE = 60*60*24*365  # 1 year in seconds.
 MIDDLEWARE_CLASSES = (
     'django.middleware.common.CommonMiddleware',
     'django.middleware.http.ConditionalGetMiddleware',
-    'codereview.middleware.SetSecretKeyMiddleware',
     'codereview.middleware.RedirectToHTTPSMiddleware',
     'codereview.middleware.AddHSTSHeaderMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',
