@@ -2004,6 +2004,7 @@ def _patchset_as_dict(patchset, comments, request):
               'text': c.text,
               'left': c.left,
               'draft': c.draft,
+              'message_id': c.message_id,
               })
 
       values['files'][patch.filename]['messages'] = visible_comments
