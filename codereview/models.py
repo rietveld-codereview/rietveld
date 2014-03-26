@@ -518,8 +518,13 @@ class PatchSet(db.Model):
 
   @property
   def patches(self):
-    ret = list(Patch.all().ancestor(self).order('filename'))
-    return ret
+    def reading_order(patch):
+      """Sort patches by filename, except .h files before .c files."""
+      base, ext = os.path.splitext(patch.filename)
+      return (base, ext not in ('.h', '.hxx', '.hpp'), ext)
+    
+    patch_list = Patch.all().ancestor(self).run()
+    return sorted(patch_list, key=reading_order)    
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n."""
