@@ -588,18 +588,13 @@ class PatchSet(db.Model):
 
   @property
   def patches(self):
-    ret = list(Patch.all().ancestor(self))
-    # Patches are sorted based on file pathname.
-    ret = sorted(ret, key=lambda patch: patch.filename)
-    # But then, put .h in front of the associated .c files.
-    splits = [os.path.splitext(patch.filename) for patch in ret]
-    for i in range(len(splits) - 1):
-      if (splits[i][0] == splits[i+1][0] and
-          splits[i][1] in ['.c', '.cc', '.cpp'] and
-          splits[i+1][1] in ['.h', '.hxx', '.hpp']):
-        ret[i:i+2] = [ret[i+1], ret[i]]
-
-    return ret
+    def reading_order(patch):
+      """Sort patches by filename, except .h files before .c files."""
+      base, ext = os.path.splitext(patch.filename)
+      return (base, ext not in ('.h', '.hxx', '.hpp'), ext)
+    
+    patch_list = Patch.all().ancestor(self).run()
+    return sorted(patch_list, key=reading_order)    
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n."""
