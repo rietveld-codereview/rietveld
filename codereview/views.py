@@ -1049,7 +1049,6 @@ def upload(request):
             if opatch.content:
               existing_patches[opatch.filename] = opatch
         for patch in patches:
-          content = None
           # Check if the base file is already uploaded in another patchset.
           if (patch.filename in base_hashes and
               patch.filename in existing_patches and
@@ -1058,18 +1057,13 @@ def upload(request):
             content = existing_patches[patch.filename].content
             patch.status = existing_patches[patch.filename].status
             patch.is_binary = existing_patches[patch.filename].is_binary
-          if not content:
-            content = models.Content(is_uploaded=True, parent=patch)
-            new_content_entities.append(content)
-          content_entities.append(content)
-        existing_patches = None  # Reduce memory usage.
-        if new_content_entities:
-          db.put(new_content_entities)
+            patch.content = content
 
-        for patch, content_entity in zip(patches, content_entities):
-          patch.content = content_entity
+        existing_patches = None  # Reduce memory usage.
+
+        for patch in patches:
           id_string = patch.key().id()
-          if content_entity not in new_content_entities:
+          if patch.content is not None:
             # Base file not needed since we reused a previous upload.  Send its
             # patch id in case it's a binary file and the new content needs to
             # be uploaded.  We mark this by prepending 'nobase' to the id.
@@ -1089,7 +1083,6 @@ def upload_content(request):
 
   Used by upload.py to upload base files.
   """
-  entities_to_put = set()
   form = UploadContentForm(request.POST, request.FILES)
   if not form.is_valid():
     return HttpTextResponse(
@@ -1105,17 +1098,15 @@ def upload_content(request):
   patch = request.patch
   patch.status = form.cleaned_data['status']
   patch.is_binary = form.cleaned_data['is_binary']
-  entities_to_put.add(patch)
 
   if form.cleaned_data['is_current']:
     if patch.patched_content:
       return HttpTextResponse('ERROR: Already have current content.')
-    content = models.Content(is_uploaded=True, parent=patch)
-    content.put()
-    patch.patched_content = content
-    entities_to_put.add(patch)
   else:
-    content = patch.content
+    if patch.content:
+      return HttpTextResponse('ERROR: Already have base content.')
+
+  content = models.Content(is_uploaded=True, parent=patch)
 
   if form.cleaned_data['file_too_large']:
     content.file_too_large = True
@@ -1129,11 +1120,15 @@ def upload_content(request):
     else:
       content.text = utils.to_dbtext(utils.unify_linebreaks(data))
     content.checksum = checksum
-  entities_to_put.add(content)
 
   for try_number in xrange(DB_WRITE_TRIES):
     try:
-      db.put(entities_to_put)
+      content.put()
+      if form.cleaned_data['is_current']:
+        patch.patched_content = content
+      else:
+        patch.content = content
+      patch.put()        
       return HttpTextResponse('OK')
     except db.TransactionFailedError as err:
       logging.exception(err)
@@ -1174,11 +1169,6 @@ def upload_patch(request):
                        text=text,
                        filename=form.cleaned_data['filename'], parent=patchset)
   patch.put()
-  if form.cleaned_data.get('content_upload'):
-    content = models.Content(is_uploaded=True, parent=patch)
-    content.put()
-    patch.content = content
-    patch.put()
 
   msg = 'OK\n' + str(patch.key().id())
   return HttpTextResponse(msg)
