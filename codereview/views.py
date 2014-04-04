@@ -34,6 +34,7 @@ import urllib
 from cStringIO import StringIO
 from xml.etree import ElementTree
 
+from google.appengine.api import app_identity
 from google.appengine.api import mail
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
@@ -3555,8 +3556,7 @@ def _process_incoming_mail(request, recipients):
                        text=db.Text(body),
                        draft=False)
   if msg.approval:
-    publish_url = request.build_absolute_uri(reverse(
-        publish, args=[issue.key().id()]))
+    publish_url = _absolute_url_in_preferred_domain(publish, args=[issue.key().id()])
     _send_lgtm_reminder(sender, subject, publish_url)
   msg.was_inbound_email = True
 
@@ -3579,6 +3579,15 @@ def _process_incoming_mail(request, recipients):
   msg.put()
 
 
+def _absolute_url_in_preferred_domain(handler, args=None):
+  """Return a URL for the given handler via our preferred domain name, if possible."""
+  handler_url_path = reverse(handler, args=args)
+  app_id = app_identity.get_application_id()
+  canonical_host = '%s.appspot.com' % app_id
+  host = django_settings.PREFERRED_DOMAIN_NAMES.get(app_id, canonical_host)
+  return 'https://%s%s' % (host, handler_url_path)
+
+  
 LGTM_REMINDER_BODY = """
 REMINDER: If this change looks good, please use the LGTM button at
 %s
