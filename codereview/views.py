@@ -2086,6 +2086,14 @@ def api_patchset(request):
   """
   comments = request.GET.get('comments', 'false').lower() == 'true'
   values = _patchset_as_dict(request.patchset, comments, request)
+
+  # Add the current datetime as seen by AppEngine (it should always be UTC).
+  # This makes it possible to reliably compare try job timestamps (also based
+  # on AppEngine time) and the current time, e.g. to determine how old the job
+  # is.
+  assert 'current_datetime' not in values
+  values['current_datetime'] = str(datetime.datetime.now())
+
   return values
 
 

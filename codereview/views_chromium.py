@@ -282,8 +282,11 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
             'Project for %s didn\'t match: was %s, setting %s' % (keyname,
               try_obj.project, project))
       try_obj.project = project
+      # Use timestamp from AppEngine, which always uses UTC.
+      # This makes it possible to reliably compare timestamps (including case
+      # of calculating how old is the result stored in the datastore).
+      try_obj.timestamp = datetime.datetime.now()
       # Update the rest unconditionally.
-      try_obj.timestamp = timestamp
       try_obj.url = url
       try_obj.revision = revision
       try_obj.slave = slavename
