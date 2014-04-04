@@ -78,6 +78,7 @@ except ImportError:
 #  2: Info logs.
 #  3: Debug logs.
 verbosity = 1
+LOGGER = logging.getLogger('upload')
 
 # The account type used for authentication.
 # This line could be changed by the review server (see handler for
@@ -270,9 +271,9 @@ class AbstractRpcServer(object):
     self.account_type = account_type
     self.opener = self._GetOpener()
     if self.host_override:
-      logging.info("Server: %s; Host: %s", self.host, self.host_override)
+      LOGGER.info("Server: %s; Host: %s", self.host, self.host_override)
     else:
-      logging.info("Server: %s", self.host)
+      LOGGER.info("Server: %s", self.host)
 
   def _GetOpener(self):
     """Returns an OpenerDirector for making HTTP requests.
@@ -284,7 +285,7 @@ class AbstractRpcServer(object):
 
   def _CreateRequest(self, url, data=None):
     """Creates a new urllib request."""
-    logging.debug("Creating request for: '%s' with payload:\n%s", url, data)
+    LOGGER.debug("Creating request for: '%s' with payload:\n%s", url, data)
     req = urllib2.Request(url, data=data, headers={"Accept": "text/plain"})
     if self.host_override:
       req.add_header("Host", self.host_override)
@@ -934,7 +935,7 @@ def GetRpcServer(server, email=None, host_override=None, save_cookies=True,
   if re.match(r'(http://)?localhost([:/]|$)', host):
     if email is None:
       email = "test@example.com"
-      logging.info("Using debug user %s.  Override with --email" % email)
+      LOGGER.info("Using debug user %s.  Override with --email" % email)
     server = HttpRpcServer(
         server,
         lambda: (email, "password"),
@@ -1020,7 +1021,7 @@ def RunShellWithReturnCodeAndStderr(command, print_output=False,
   Returns:
     Tuple (stdout, stderr, return code)
   """
-  logging.info("Running %s", command)
+  LOGGER.info("Running %s", command)
   env = env.copy()
   env['LC_MESSAGES'] = 'C'
   p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -1282,7 +1283,7 @@ class SubversionVCS(VersionControlSystem):
         path = path + "/"
         base = urlparse.urlunparse((scheme, netloc, path, params,
                                     query, fragment))
-        logging.info("Guessed %sbase = %s", guess, base)
+        LOGGER.info("Guessed %sbase = %s", guess, base)
         return base
     if required:
       ErrorExit("Can't find URL in output from svn info")
@@ -1310,7 +1311,7 @@ class SubversionVCS(VersionControlSystem):
     for line in data.splitlines():
       if line.startswith("Index:") or line.startswith("Property changes on:"):
         count += 1
-        logging.info(line)
+        LOGGER.info(line)
     if not count:
       ErrorExit("No valid patches found in output from svn diff")
     return data
@@ -1741,7 +1742,7 @@ class CVSVCS(VersionControlSystem):
       for line in data.splitlines():
         if line.startswith("Index:"):
           count += 1
-          logging.info(line)
+          LOGGER.info(line)
 
     if not count:
       ErrorExit("No valid patches found in output from cvs diff")
@@ -1803,7 +1804,7 @@ class MercurialVCS(VersionControlSystem):
         svndiff.append("Index: %s" % filename)
         svndiff.append("=" * 67)
         filecount += 1
-        logging.info(line)
+        LOGGER.info(line)
       else:
         svndiff.append(line)
     if not filecount:
@@ -2532,9 +2533,9 @@ def RealMain(argv, data=None):
   global verbosity
   verbosity = options.verbose
   if verbosity >= 3:
-    logging.getLogger().setLevel(logging.DEBUG)
+    LOGGER.setLevel(logging.DEBUG)
   elif verbosity >= 2:
-    logging.getLogger().setLevel(logging.INFO)
+    LOGGER.setLevel(logging.INFO)
 
   vcs = GuessVCS(options)
 
@@ -2552,7 +2553,7 @@ def RealMain(argv, data=None):
 
   if not base and options.download_base:
     options.download_base = True
-    logging.info("Enabled upload of base file")
+    LOGGER.info("Enabled upload of base file")
   if not options.assume_yes:
     vcs.CheckForUnknownFiles()
   if data is None:
@@ -2584,7 +2585,7 @@ def RealMain(argv, data=None):
     b = urlparse.urlparse(base)
     username, netloc = urllib.splituser(b.netloc)
     if username:
-      logging.info("Removed username from base URL")
+      LOGGER.info("Removed username from base URL")
       base = urlparse.urlunparse((b.scheme, netloc, b.path, b.params,
                                   b.query, b.fragment))
     form_fields.append(("base", base))
