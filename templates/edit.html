@@ -28,7 +28,8 @@ M_addTextResizer_(document.getElementById("edit-form"));
 {%ifequal issue.owner user%}
 <h2>Delete This Issue</h2>
 
-<form action="{%url codereview.views.delete issue.key.id%}" method="post">
+<form action="{%url codereview.views.delete issue.key.id%}" method="post"
+      onsubmit="return confirm('Are you sure? The entire issue will be permanently deleted.');">
 <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
 <input type="submit" value="Delete Issue"> There is no undo!
 </form>
