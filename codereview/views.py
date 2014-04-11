@@ -896,7 +896,7 @@ def _show_user(request):
   _optimize_draft_counts(all_issues)
   account = models.Account.get_account_for_user(request.user_to_show)
   return respond(request, 'user.html',
-                 {'account': account,
+                 {'viewed_account': account,
                   'outgoing_issues': outgoing_issues,
                   'unsent_issues': unsent_issues,
                   'review_issues': review_issues,
@@ -963,7 +963,7 @@ def block_user(request):
     form = BlockForm()
   form.initial['blocked'] = account.blocked
   templates = {
-    'account': account,
+    'viewed_account': account,
     'form': form,
   }
   return respond(request, 'block_user.html', templates)
@@ -4820,7 +4820,7 @@ def show_user_stats(request, when):
       request,
       'user_stats.html',
       {
-        'account': request.user_to_show,
+        'viewed_account': request.user_to_show,
         'incoming': incoming,
         'outgoing': outgoing,
         'stats': stats,
