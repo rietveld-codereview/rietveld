@@ -7,9 +7,9 @@
 {%block title1%}Block a user -{%endblock%}
 {%block head%}{{form.media}}{%endblock%}
 {%block body%}
-<h2>Blocking {{account.email}} ({{account.nickname}})</h2>
+<h2>Blocking {{viewed_account.email}} ({{viewed_account.nickname}})</h2>
 
-<form action="{%url codereview.views.block_user account.email%}" method="post">
+<form action="{%url codereview.views.block_user viewed_account.email%}" method="post">
 <table>
 {{form}}
 <tr><td><input type="submit" value="Update"></td></tr>

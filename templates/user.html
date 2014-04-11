@@ -1,13 +1,13 @@
 {%extends "issue_base.html"%}
-{%block title1%}Issues for {{account.nickname}} -{%endblock%}
+{%block title1%}Issues for {{viewed_account.nickname}} -{%endblock%}
 {%block body%}
 <script language="JavaScript" type="text/javascript"><!--
 document.onkeydown = M_dashboardKeyDown;
 -->
 </script>
-<h2 style="display:inline">Issues for {{account.nickname}}</h2>
-{%if show_block and account.blocked %}<a href="{%url codereview.views.block_user account.email%}">Unblock</a>{%endif%}
-{%if show_block and not account.blocked %}<a href="{%url codereview.views.block_user account.email%}">Block</a>{%endif%}
+<h2 style="display:inline">Issues for {{viewed_account.nickname}}</h2>
+{%if show_block and viewed_account.blocked %}<a href="{%url codereview.views.block_user viewed_account.email%}">Unblock</a>{%endif%}
+{%if show_block and not viewed_account.blocked %}<a href="{%url codereview.views.block_user viewed_account.email%}">Block</a>{%endif%}
 <p>
 <div class="issue-list">
   <table id="queues">
