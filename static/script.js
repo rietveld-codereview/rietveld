@@ -568,6 +568,10 @@ function M_createRevertPatchset() {
   }
 
   document.getElementById("revert-form")["revert_reason"].value = revert_reason;
+
+  check_cq_value = document.getElementById("check_cq").checked ? '1' : '0';
+  document.getElementById("revert-form")["revert_cq"].value = check_cq_value;
+
   // Confirm that this patchset should really be reverted.
   return confirm("Proceed with creating a revert of this patchset?");
 }
