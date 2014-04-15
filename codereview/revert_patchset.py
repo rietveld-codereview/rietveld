@@ -165,6 +165,7 @@ def revert_patchset(request):
   original_issue_link = request.build_absolute_uri(
       reverse('codereview.views.show', args=[original_issue.key().id()]))
   revert_reason = request.POST['revert_reason']
+  revert_cq = request.POST['revert_cq'] == '1'
   description = _get_revert_description(
       revert_reason=revert_reason,
       reviewers=reviewers,
@@ -293,8 +294,10 @@ def revert_patchset(request):
   views.make_message(request, issue, 'Created %s' % subject,
                      send_mail=True).put()
 
-  # Now that all patchsets and patches have been committed check the commit box.
-  issue.commit = True
+  # Now that all patchsets and patches have been committed check the commit box
+  # if the revert_cq checkbox was checked.
+  if revert_cq:
+    issue.commit = True
   issue.put()
 
   return HttpResponseRedirect(reverse('codereview.views.show',
