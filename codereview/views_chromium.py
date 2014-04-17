@@ -180,6 +180,9 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
     # The try job key property will only be present for try jobs started from
     # rietveld itself, either from the webui or from the try_patchset endpoint.
     try_job_key = properties.get('try_job_key')
+    # Issue and patchset might be missing in triggered jobs.
+    issue = int(properties.get('issue', 0))
+    patchset = int(properties.get('patchset', 0))
 
     # Keep them last.
     # The parent_XXX means that this is a build triggered from another build,
@@ -191,27 +194,27 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
       parent_buildername = properties['parent_buildername']
       logging.info(
           'Dereferencing from %s/%d' % (parent_buildername, parent_buildnumber))
-    else:
-      issue = int(properties['issue'])
-      patchset = int(properties['patchset'])
     project = packet['project']
   except (KeyError, TypeError, ValueError), e:
     logging.warn(
         'Failure when parsing properties: %s; i:%s/%s b:%s/%s' %
         (e, issue, patchset, buildername, buildnumber))
 
-  # When parent_XXX build properties are specified, we need to grab the parent
-  # build to figure out the child build. This is not super efficient since this
-  # adds yet another datastore request.
-  if parent_buildername:
+  # When issue or patchset are missing in a triggered job, try to
+  # recover those from the parent build.  Note that this is not
+  # reliable, as build numbers are not unique, and is not super
+  # efficient since this adds yet another datastore request.
+  if not (issue and patchset) and parent_buildername:
     parent_build_key = models.TryJobResult.all(keys_only=True
           ).filter('builder =', parent_buildername
           ).filter('buildnumber =', parent_buildnumber).get()
     if parent_build_key:
       # Dereference the parent Patchset object. Luckily, this is in the key.
       patchset_key = parent_build_key.parent()
-      patchset = patchset_key.id()
-      issue = patchset_key.parent().id()
+      if not patchset:
+        patchset = patchset_key.id()
+      if not issue:
+        issue = patchset_key.parent().id()
       logging.info('Dereferenced %d/%d' % (issue, patchset))
       try_job_key = None
     else:
