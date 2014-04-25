@@ -16,6 +16,7 @@
 
 import hashlib
 import re
+import time
 
 from codereview import decorators as deco
 from codereview import exceptions
@@ -37,14 +38,20 @@ MAX_LARGE_PATCHES_REVERSIBLE = 5
 
 ERROR_MSG_POSTPEND = ' Please revert manually.\nSorry for the inconvenience.'
 
+# We make it easier to revert recent CLs by adding a TBR= line.  We don't do
+# that for older CLs because they are less likely to be urgent and more
+# likely to require careful review of the revert itself.
+# It would be great if we could know that the signed-in user was a sheriff.
+MAX_TBR_AGE_SECS = 60 * 60 * 24 * 14
 
-def _get_revert_description(revert_reason, reviewers,
-                            original_issue_link, original_issue_subject,
-                            original_issue_description):
+
+def _get_revert_description(request, revert_reason, reviewers, original_issue):
   """Creates and returns a description for the revert CL."""
   revert_description = []
   # Contain link to original CL.
-  revert_description.append('Revert of %s (%s)' % (original_issue_subject,
+  original_issue_link = request.build_absolute_uri(
+      reverse('codereview.views.show', args=[original_issue.key().id()]))
+  revert_description.append('Revert of %s (%s)' % (original_issue.subject,
                                                    original_issue_link))
   # Display the reason for reverting.
   revert_description.append('')  # Extra new line to separate sections.
@@ -54,23 +61,26 @@ def _get_revert_description(revert_reason, reviewers,
   # Add the original issue's decription.
   revert_description.append('')  # Extra new line to separate sections.
   revert_description.append('Original issue\'s description:')
-  for line in original_issue_description.split('\n'):
+  for line in original_issue.description.split('\n'):
     revert_description.append('> %s' % line)
 
-  # TBR original author + reviewers.
-  revert_description.append('')  # Extra new line to separate sections.
-  revert_description.append('TBR=%s' % ','.join(
-      [str(reviewer) for reviewer in reviewers]))
-  # Skip tree status checks.
-  revert_description.append('NOTREECHECKS=true')
-  # Do not run trybots on the revert CL.
-  revert_description.append('NOTRY=true')
-  # Check to see if the original description contains "BUG=" if it does then
-  # use it in the revert description.
-  match_bugline = re.search(r'^\s*(BUG=.*)$', original_issue_description or '',
-                            re.M | re.I)
-  if match_bugline:
-    revert_description.append('%s' % match_bugline.groups(0))
+  age = int(time.time()) - time.mktime(original_issue.created.timetuple())
+  if age < MAX_TBR_AGE_SECS:
+    # TBR original author + reviewers.
+    revert_description.append('')  # Extra new line to separate sections.
+    revert_description.append('TBR=%s' % ','.join(
+        [str(reviewer) for reviewer in reviewers]))
+    # Skip tree status checks.
+    revert_description.append('NOTREECHECKS=true')
+    # Do not run trybots on the revert CL.
+    revert_description.append('NOTRY=true')
+    # Check to see if the original description contains "BUG=" if it does then
+    # use it in the revert description.
+    match_bugline = re.search(
+      r'^\s*(BUG=.*)$', original_issue.description or '', re.M | re.I)
+    if match_bugline:
+      revert_description.append('%s' % match_bugline.groups(0))
+
   return '\n'.join(revert_description)
 
 
@@ -115,9 +125,8 @@ def check_patches_reversable(patches):
   return True
 
 
-@deco.login_required
 @deco.xsrf_required
-@deco.patchset_required
+@deco.patchset_editor_required
 def revert_patchset(request):
   """/api/<issue>/<patchset>/revert_patchset - Create an inverted changeset."""
 
@@ -162,16 +171,10 @@ def revert_patchset(request):
   pending_commits = []
 
   subject = _get_revert_subject(original_issue.subject)
-  original_issue_link = request.build_absolute_uri(
-      reverse('codereview.views.show', args=[original_issue.key().id()]))
   revert_reason = request.POST['revert_reason']
   revert_cq = request.POST['revert_cq'] == '1'
   description = _get_revert_description(
-      revert_reason=revert_reason,
-      reviewers=reviewers,
-      original_issue_link=original_issue_link,
-      original_issue_subject=original_issue.subject,
-      original_issue_description=original_issue.description)
+      request, revert_reason, reviewers, original_issue)
   issue = models.Issue(subject=subject,
                        description=description,
                        base=original_issue.base,
