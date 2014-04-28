@@ -84,6 +84,11 @@ indexes:
 
 - kind: Issue
   properties:
+  - name: __key__
+    direction: desc
+
+- kind: Issue
+  properties:
   - name: cc
   - name: closed
   - name: modified
@@ -142,6 +147,12 @@ indexes:
   properties:
   - name: owner
   - name: created
+
+- kind: Issue
+  properties:
+  - name: owner
+  - name: created
+    direction: desc
 
 - kind: Issue
   properties:
