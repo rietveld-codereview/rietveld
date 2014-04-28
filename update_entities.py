@@ -10,16 +10,17 @@
 
 
 import logging
-from google.appengine.ext import db
+from google.appengine.api import datastore_errors
+from google.appengine.ext import ndb
 from codereview import models
 import urllib2
 
 def run(model_class, batch_size=100, last_key=None):
     while True:
-      q = model_class.all()
+      q = model_class.query()
       if last_key:
-        q.filter('__key__ >', last_key)
-      q.order('__key__')
+        q.filter(model_class.key > last_key)
+      q.order(model_class.key)
       this_batch_size = batch_size
 
       while True:
@@ -28,7 +29,7 @@ def run(model_class, batch_size=100, last_key=None):
             batch = q.fetch(this_batch_size)
           except urllib2.URLError, err:
             if 'timed out' in str(err):
-              raise db.Timeout
+              raise datastore_errors.Timeout
             else:
               raise
           break
@@ -45,7 +46,7 @@ def run(model_class, batch_size=100, last_key=None):
       keys = None
       while not keys:
         try:
-          keys = db.put(batch)
+          keys = ndb.put_multi(batch)
         except db.Timeout:
           logging.warn("Put timed out, retrying")
 
