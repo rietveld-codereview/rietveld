@@ -72,7 +72,7 @@ def notify_issue(request, issue, message):
   Returns:
     True if the message was (apparently) delivered, False if not.
   """
-  iid = issue.key().id()
+  iid = issue.key.id()
   emails = set()
   emails.add(issue.owner.email())
   if issue.reviewers:
