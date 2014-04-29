@@ -1443,14 +1443,14 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
           account = models.Account.get_account_for_nickname(email)
           if account is None:
             raise db.BadValueError('Unknown user: %s' % email)
-          db_email = db.Email(account.user.email().lower())
+          db_email = account.user.email().lower()
         elif email.count('@') != 1:
           raise db.BadValueError('Invalid email address: %s' % email)
         else:
           _, tail = email.split('@')
           if '.' not in tail:
             raise db.BadValueError('Invalid email address: %s' % email)
-          db_email = db.Email(email.lower())
+          db_email = email.lower()
       except db.BadValueError, err:
         if form:
           form.errors[label] = [unicode(err)]
@@ -2652,7 +2652,7 @@ def _get_mail_template(request, issue, full_diff=False):
   template = 'mails/comment.txt'
   if request.user == issue.owner:
     if db.GqlQuery('SELECT * FROM Message WHERE ANCESTOR IS :1 AND sender = :2',
-                   issue, db.Email(request.user.email())).count(1) == 0:
+                   issue, request.user.email()).count(1) == 0:
       template = 'mails/review.txt'
       files, patch = _get_affected_files(issue, full_diff)
       context.update({'files': files, 'patch': patch, 'base': issue.base})
@@ -2727,7 +2727,7 @@ def publish(request):
     if (request.user != issue.owner and
         request.user.email() not in reviewers and
         not issue.is_collaborator(request.user)):
-      reviewers.append(db.Email(request.user.email()))
+      reviewers.append(request.user.email())
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
   else:
@@ -2916,13 +2916,13 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   attach_patch = request.POST.get("attach_patch") == "yes"
   template, context = _get_mail_template(request, issue, full_diff=attach_patch)
   # Decide who should receive mail
-  my_email = db.Email(request.user.email())
-  to = ([db.Email(issue.owner.email())] +
+  my_email = request.user.email()
+  to = ([issue.owner.email()] +
         issue.reviewers +
-        [db.Email(email) for email in issue.collaborator_emails()])
+        [email for email in issue.collaborator_emails()])
   cc = issue.cc[:]
   if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
-    cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
+    cc.append(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS)
   reply_to = to + cc
   if my_email in to and len(to) > 1:  # send_mail() wants a non-empty to list
     to.remove(my_email)
@@ -3643,8 +3643,8 @@ def _process_incoming_mail(raw_message, recipients):
   subject = ' '.join([x.strip() for x in subject.splitlines()])
   msg = models.Message(issue=issue, parent=issue,
                        subject=subject,
-                       sender=db.Email(sender),
-                       recipients=[db.Email(x) for x in recipients],
+                       sender=sender,
+                       recipients=recipients,
                        date=datetime.datetime.now(),
                        text=db.Text(body),
                        draft=False)
@@ -3661,7 +3661,7 @@ def _process_incoming_mail(raw_message, recipients):
     if account is not None:
       issue.reviewers.append(account.email)  # e.g. account.email is CamelCase
     else:
-      issue.reviewers.append(db.Email(sender))
+      issue.reviewers.append(sender)
 
   issue.calculate_updates_for(msg)
   issue.put()
