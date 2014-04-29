@@ -86,9 +86,9 @@ def image_required(func):
   def image_wrapper(request, image_type, *args, **kwds):
     content = None
     if image_type == "0":
-      content = request.patch.content.get()
+      content = request.patch.content
     elif image_type == "1":
-      content = request.patch.patched_content.get()
+      content = request.patch.patched_content
     # Other values are erroneous so request.content won't be set.
     if not content or not content.data:
       return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
@@ -184,11 +184,11 @@ def patch_filename_required(func):
   @patchset_required
   def patch_wrapper(request, patch_filename, *args, **kwds):
     patch = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                             request.patchset.key, patch_filename).get()
+                             request.patchset, patch_filename).get()
     if patch is None and patch_filename.isdigit():
       # It could be an old URL which has a patch ID instead of a filename
       patch = models.Patch.get_by_id(int(patch_filename),
-                                     parent=request.patchset.key)
+                                     parent=request.patchset)
     if patch is None:
       return respond(request, 'diff_missing.html',
                      {'issue': request.issue,
@@ -196,7 +196,7 @@ def patch_filename_required(func):
                       'patch': None,
                       'patchsets': request.issue.patchsets,
                       'filename': patch_filename})
-    patch.patchset = request.patchset.key
+    patch.patchset = request.patchset
     request.patch = patch
     return func(request, *args, **kwds)
 
@@ -208,13 +208,13 @@ def patch_required(func):
 
   @patchset_required
   def patch_wrapper(request, patch_id, *args, **kwds):
-    patch = models.Patch.get_by_id(int(patch_id), parent=request.patchset.key)
+    patch = models.Patch.get_by_id(int(patch_id), parent=request.patchset)
     if patch is None:
       return HttpTextResponse(
           'No patch exists with that id (%s/%s)' %
-          (request.patchset.key.id(), patch_id),
+          (request.patchset.key().id(), patch_id),
           status=404)
-    patch.patchset = request.patchset.key
+    patch.patchset = request.patchset
     request.patch = patch
     return func(request, *args, **kwds)
 
@@ -308,12 +308,11 @@ def patchset_required(func):
 
   @issue_required
   def patchset_wrapper(request, patchset_id, *args, **kwds):
-    patchset = models.PatchSet.get_by_id(
-      int(patchset_id), parent=request.issue.key)
+    patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
     if patchset is None:
       return HttpTextResponse(
           'No patch set exists with that id (%s)' % patchset_id, status=404)
-    patchset.issue = request.issue.key
+    patchset.issue = request.issue
     request.patchset = patchset
     return func(request, *args, **kwds)
 
