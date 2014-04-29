@@ -19,7 +19,6 @@ import difflib
 import re
 
 from google.appengine.ext import db
-from google.appengine.ext import ndb
 
 from django.conf import settings
 from django.template import loader, RequestContext
@@ -82,17 +81,17 @@ def ParsePatchSet(patchset):
     A list of models.Patch instances.
   """
   patches = []
-  ps_key = patchset.key
+  ps_key = patchset.key()
   splitted = SplitPatch(patchset.data)
   if not splitted:
     return []
-  first_id, last_id = models.Patch.allocate_ids(len(splitted), parent=ps_key)
+  first_id, last_id = db.allocate_ids(
+    db.Key.from_path(models.Patch.kind(), 1, parent=ps_key), len(splitted))
   ids = range(first_id, last_id + 1)
   for filename, text in splitted:
-    key = ndb.Key(models.Patch, ids.pop(0), parent=ps_key)
-    patches.append(models.Patch(
-        patchset=patchset.key, text=utils.to_dbtext(text),
-        filename=filename, key=key))
+    key = db.Key.from_path(models.Patch.kind(), ids.pop(0), parent=ps_key)
+    patches.append(models.Patch(patchset=patchset, text=utils.to_dbtext(text),
+                                filename=filename, key=key))
   return patches
 
 
@@ -245,8 +244,8 @@ def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
   for patch, dct in [(old_patch, old_dict), (new_patch, new_dict)]:
     # XXX GQL doesn't support OR yet...  Otherwise we'd be using that.
     for comment in models.Comment.gql(
-        'WHERE patch = :1 AND left = FALSE ORDER BY date', patch.key):
-      if comment.draft and comment.author.get() != request.user:
+        'WHERE patch = :1 AND left = FALSE ORDER BY date', patch):
+      if comment.draft and comment.author != request.user:
         continue  # Only show your own drafts
       comment.complete()
       lst = dct.setdefault(comment.lineno, [])
@@ -290,7 +289,7 @@ def _GetComments(request):
   # .gql('WHERE patch = :1 AND (draft = FALSE OR author = :2) ORDER BY data',
   #      patch, request.user)
   for comment in models.Comment.gql('WHERE patch = :1 ORDER BY date',
-                                    request.patch.key):
+                                    request.patch):
     if comment.draft and comment.author != request.user:
       continue  # Only show your own drafts
     comment.complete()
@@ -587,15 +586,13 @@ def _RenderInlineComments(line_valid, lineno, data, user,
   if line_valid:
     comments.append('<td id="%s-line-%s">' % (prefix, lineno))
     if lineno in data:
-      patchset = patch.patchset.get()
-      issue = patchset.issue.get()
       comments.append(
         _ExpandTemplate('inline_comment.html',
                         request,
                         user=user,
                         patch=patch,
-                        patchset=patchset,
-                        issue=issue,
+                        patchset=patch.patchset,
+                        issue=patch.patchset.issue,
                         snapshot=snapshot,
                         side='a' if prefix == 'old' else 'b',
                         comments=data[lineno],
