@@ -42,67 +42,41 @@ from codereview.exceptions import FetchError
 CONTEXT_CHOICES = (3, 10, 25, 50, 75, 100)
 
 
-### GQL query cache ###
-
-
-_query_cache = {}
-
-
-def gql(cls, clause, *args, **kwds):
-  """Return a query object, from the cache if possible.
-
-  Args:
-    cls: a db.Model subclass.
-    clause: a query clause, e.g. 'WHERE draft = TRUE'.
-    *args, **kwds: positional and keyword arguments to be bound to the query.
-
-  Returns:
-    A db.GqlQuery instance corresponding to the query with *args and
-    **kwds bound to the query.
-  """
-  query_string = 'SELECT * FROM %s %s' % (cls.kind(), clause)
-  query = _query_cache.get(query_string)
-  if query is None:
-    _query_cache[query_string] = query = db.GqlQuery(query_string)
-  query.bind(*args, **kwds)
-  return query
-
-
 ### Issues, PatchSets, Patches, Contents, Comments, Messages ###
 
 
-class Issue(db.Model):
+class Issue(ndb.Model):
   """The major top-level entity.
 
   It has one or more PatchSets as its descendants.
   """
 
-  subject = db.StringProperty(required=True)
-  description = db.TextProperty()
+  subject = ndb.StringProperty(required=True)
+  description = ndb.TextProperty()
   #: in Subversion - repository path (URL) for files in patch set
-  base = db.StringProperty()
-  repo_guid = db.StringProperty()
+  base = ndb.StringProperty()
+  repo_guid = ndb.StringProperty()
   owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True,
                                          required=True)
-  created = db.DateTimeProperty(auto_now_add=True)
-  modified = db.DateTimeProperty(auto_now=True)
-  reviewers = db.StringListProperty()
-  cc = db.StringListProperty()
-  closed = db.BooleanProperty(default=False)
-  private = db.BooleanProperty(default=False)
-  n_comments = db.IntegerProperty()
+  created = ndb.DateTimeProperty(auto_now_add=True)
+  modified = ndb.DateTimeProperty(auto_now=True)
+  reviewers = ndb.StringProperty(repeated=True)
+  cc = ndb.StringProperty(repeated=True)
+  closed = ndb.BooleanProperty(default=False)
+  private = ndb.BooleanProperty(default=False)
+  n_comments = ndb.IntegerProperty()
 
   # NOTE: Use num_messages instead of using n_messages_sent directly.
-  n_messages_sent = db.IntegerProperty()
+  n_messages_sent = ndb.IntegerProperty()
 
   # List of emails that this issue has updates for.
-  updates_for = db.StringListProperty()
+  updates_for = ndb.StringProperty(repeated=True)
 
   # JSON: {reviewer_email -> [bool|None]}
-  reviewer_approval = db.TextProperty()
+  reviewer_approval = ndb.TextProperty()
 
   # JSON: {reviewer_email -> int}
-  draft_count_by_user = db.TextProperty()
+  draft_count_by_user = ndb.TextProperty()
 
   _is_starred = None
   _has_updates_for_current_user = None
@@ -113,7 +87,7 @@ class Issue(db.Model):
     if self._is_starred is not None:
       return self._is_starred
     account = Account.current_user_account
-    self._is_starred = account is not None and self.key().id() in account.stars
+    self._is_starred = account is not None and self.key.id() in account.stars
     return self._is_starred
 
   def user_can_edit(self, user):
@@ -156,11 +130,11 @@ class Issue(db.Model):
 
   @property
   def patchsets(self):
-    return PatchSet.all().ancestor(self).order('created')
+    return PatchSet.query(ancestor=self.key).order(Issue.created)
 
   @property
   def messages(self):
-    return Message.all().ancestor(self).order('date')
+    return Message.query(ancestor=self.key).order(Message.date)
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n.
@@ -187,9 +161,8 @@ class Issue(db.Model):
 
   def _get_num_comments(self):
     """Helper to compute the number of comments through a query."""
-    return gql(Comment,
-               'WHERE ANCESTOR IS :1 AND draft = FALSE',
-               self).count()
+    return Comment.gql(
+      'WHERE ANCESTOR IS :1 AND draft = FALSE', self.key).count()
 
   _num_drafts = None
 
@@ -214,7 +187,7 @@ class Issue(db.Model):
     Initializes _num_drafts as a side effect.
     """
     self._num_drafts = {}
-    query = Comment.all().filter('draft =', True).ancestor(self).run()
+    query = Comment.query(Comment.draft == True, ancestor=self.key)
     for comment in query:
       cur = self._num_drafts.setdefault(comment.author.email(), 0)
       self._num_drafts[comment.author.email()] = cur + 1
@@ -293,7 +266,8 @@ class Issue(db.Model):
     updates_for_set = set(self.updates_for)
     approval_dict = {r: None for r in self.reviewers}
     self.num_messages = 0
-    old_messages = Message.all().ancestor(self).filter('draft =', False).run()
+    old_messages = Message.query(ancestor=self.key).filter(
+        Message.draft == False)
     for msg in itertools.chain(old_messages, msgs):
       self.num_messages += 1
       if msg.sender == self.owner.email():
@@ -307,7 +281,7 @@ class Issue(db.Model):
           approval_dict[msg.sender] = False
       updates_for_set.discard(msg.sender)
       self.modified = msg.date
-    self.updates_for = [x for x in updates_for_set]
+    self.updates_for = updates_for_set
     self.reviewer_approval = json.dumps(approval_dict)
 
   def calculate_and_save_updates_if_None(self):
@@ -324,7 +298,7 @@ class Issue(db.Model):
         # Don't change self.modified when filling cache values. AFAICT, there's
         # no better way...
         self.__class__.modified.auto_now = False
-        return db.put_async(self)
+        return self.put_async()
       finally:
         self.__class__.modified.auto_now = True
 
@@ -343,40 +317,41 @@ class Issue(db.Model):
     patchsets = list(self.patchsets)
     try:
       if not patchset_id and patchsets:
-        patchset_id = patchsets[-1].key().id()
+        patchset_id = patchsets[-1].key.id()
 
       if user:
         drafts = list(Comment.gql(
-          'WHERE ANCESTOR IS :1 AND draft = TRUE AND author = :2', self, user))
+          'WHERE ANCESTOR IS :1 AND draft = TRUE AND author = :2', self.key,
+          user))
       else:
         drafts = []
       comments = list(
-        Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE', self))
+        Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE', self.key))
       # TODO(andi) Remove draft_count attribute, we already have _num_drafts
       # and it's additional magic.
       self.draft_count = len(drafts)
       for c in drafts:
-        c.ps_key = c.patch.patchset.key()  # Issues a query!
+        c.ps_key = c.patch.get().patchset
       patchset_id_mapping = {}  # Maps from patchset id to its ordering number.
       for patchset in patchsets:
-        patchset_id_mapping[patchset.key().id()] = len(patchset_id_mapping) + 1
-        patchset.n_drafts = sum(c.ps_key == patchset.key() for c in drafts)
+        patchset_id_mapping[patchset.key.id()] = len(patchset_id_mapping) + 1
+        patchset.n_drafts = sum(c.ps_key == patchset.key for c in drafts)
         patchset.patches_cache = None
         patchset.parsed_patches = None
         patchset.total_added = 0
         patchset.total_removed = 0
-        if patchset_id == patchset.key().id():
+        if patchset_id == patchset.key.id():
           patchset.patches_cache = list(patchset.patches)
           for patch in patchset.patches_cache:
-            pkey = patch.key()
-            patch._num_comments = sum(c.parent_key() == pkey for c in comments)
+            pkey = patch.key
+            patch._num_comments = sum(c.patch == pkey for c in comments)
             if user:
               patch._num_my_comments = sum(
-                  c.parent_key() == pkey and c.author == user
+                  c.patch == pkey and c.author == user
                   for c in comments)
             else:
               patch._num_my_comments = 0
-            patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
+            patch._num_drafts = sum(c.patch == pkey for c in drafts)
             if not patch.delta_calculated:
               if last_attempt:
                 # Too many patchsets or files and we're not able to generate the
@@ -422,7 +397,7 @@ class Issue(db.Model):
               else:
                 logging.error(
                     'Issue %d: %d is missing from %s',
-                    self.key().id(), delta, patchset_id_mapping)
+                    self.key.id(), delta, patchset_id_mapping)
             if not patch.is_binary:
               patchset.total_added += patch.num_added
               patchset.total_removed += patch.num_removed
@@ -448,7 +423,7 @@ def _calculate_delta(patch, patchset_id, patchsets):
   if patch.no_base_file:
     return delta
   for other in patchsets:
-    if patchset_id == other.key().id():
+    if patchset_id == other.key.id():
       break
     if not hasattr(other, 'parsed_patches'):
       other.parsed_patches = None  # cache variable for already parsed patches
@@ -461,9 +436,9 @@ def _calculate_delta(patch, patchset_id, patchsets):
         # Late-import engine because engine imports modules.
         from codereview import engine
 
-        # PatchSet.data is stored as db.Blob (str). Try to convert it
+        # PatchSet.data is stored as ndb.Blob (str). Try to convert it
         # to unicode so that Python doesn't need to do this conversion
-        # when comparing text and patch.text, which is db.Text
+        # when comparing text and patch.text, which is ndb.Text
         # (unicode).
         try:
           other.parsed_patches = engine.SplitPatch(other.data.decode('utf-8'))
@@ -473,48 +448,48 @@ def _calculate_delta(patch, patchset_id, patchsets):
       for filename, text in other.parsed_patches:
         if filename == patch.filename:
           if text != patch.text:
-            delta.append(other.key().id())
+            delta.append(other.key.id())
           break
       else:
         # We could not find the file in the previous patchset. It must
         # be new wrt that patchset.
-        delta.append(other.key().id())
+        delta.append(other.key.id())
     else:
       # other (patchset) is too big to hold all the patches inside itself, so
       # we need to go to the datastore.  Use the index to see if there's a
       # patch against our current file in other.
-      query = Patch.all()
-      query.filter("filename =", patch.filename)
-      query.filter("patchset =", other.key())
+      query = Patch.query()
+      query = query.filter(Patch.filename == patch.filename)
+      query = query.filter(Patch.patchset == other.key)
       other_patches = query.fetch(100)
       if other_patches and len(other_patches) > 1:
         logging.info("Got %s patches with the same filename for a patchset",
                      len(other_patches))
       for op in other_patches:
         if op.text != patch.text:
-          delta.append(other.key().id())
+          delta.append(other.key.id())
           break
       else:
         # We could not find the file in the previous patchset. It must
         # be new wrt that patchset.
-        delta.append(other.key().id())
+        delta.append(other.key.id())
 
   return delta
 
 
-class PatchSet(db.Model):
+class PatchSet(ndb.Model):
   """A set of patchset uploaded together.
 
   This is a descendant of an Issue and has Patches as descendants.
   """
 
-  issue = db.ReferenceProperty(Issue)  # == parent
-  message = db.StringProperty()
-  data = db.BlobProperty()
-  url = db.LinkProperty()
-  created = db.DateTimeProperty(auto_now_add=True)
-  modified = db.DateTimeProperty(auto_now=True)
-  n_comments = db.IntegerProperty(default=0)
+  issue = ndb.KeyProperty(Issue)  # == parent
+  message = ndb.StringProperty()
+  data = ndb.BlobProperty()
+  url = ndb.StringProperty()
+  created = ndb.DateTimeProperty(auto_now_add=True)
+  modified = ndb.DateTimeProperty(auto_now=True)
+  n_comments = ndb.IntegerProperty(default=0)
 
   @property
   def patches(self):
@@ -523,7 +498,7 @@ class PatchSet(db.Model):
       base, ext = os.path.splitext(patch.filename)
       return (base, ext not in ('.h', '.hxx', '.hpp'), ext)
     
-    patch_list = Patch.all().ancestor(self).run()
+    patch_list = list(Patch.query(ancestor=self.key))
     return sorted(patch_list, key=reading_order)    
 
   def update_comment_count(self, n):
@@ -541,9 +516,10 @@ class PatchSet(db.Model):
     return self.n_comments or 0
 
   def calculate_deltas(self):
-    patchset_id = self.key().id()
+    patchset_id = self.key.id()
     patchsets = None
-    for patch in Patch.all().ancestor(self).filter('delta_calculated =', False):
+    q = Patch.query(ancestor=self.key).filter(Patch.delta_calculated == False)
+    for patch in q:
       if patchsets is None:
         # patchsets is retrieved on first iteration because patchsets
         # isn't needed outside the loop at all.
@@ -553,9 +529,9 @@ class PatchSet(db.Model):
       patch.put()
 
   def nuke(self):
-    ps_id = self.key().id()
+    ps_id = self.key.id()
     patches = []
-    for patchset in self.issue.patchsets:
+    for patchset in self.issue.get().patchsets:
       if patchset.created <= self.created:
         continue
       patches.extend(
@@ -568,35 +544,35 @@ class PatchSet(db.Model):
         patches: Patches that have delta against patches of ps_delete.
 
       """
-      patchset_id = self.key().id()
+      patchset_id = self.key.id()
       tbp = []
       for patch in patches:
         patch.delta.remove(patchset_id)
         tbp.append(patch)
       if tbp:
-        db.put(tbp)
+        ndb.put_multi(tbp)
       tbd = [self]
       for cls in [Patch, Comment]:
-        tbd += cls.gql('WHERE ANCESTOR IS :1', self)
-      db.delete(tbd)
-    db.run_in_transaction(_patchset_delete, patches)
+        tbd.extend(cls.query(ancestor=self.key))
+      ndb.delete_multi(entity.key for entity in tbd)
+    ndb.transaction(lambda: _patchset_delete(patches))
 
 
-class Message(db.Model):
+class Message(ndb.Model):
   """A copy of a message sent out in email.
 
   This is a descendant of an Issue.
   """
 
-  issue = db.ReferenceProperty(Issue)  # == parent
-  subject = db.StringProperty()
-  sender = db.StringProperty()
-  recipients = db.StringListProperty()
-  date = db.DateTimeProperty(auto_now_add=True)
-  text = db.TextProperty()
-  draft = db.BooleanProperty(default=False)
-  in_reply_to = db.SelfReferenceProperty()
-  issue_was_closed = db.BooleanProperty(default=False)
+  issue = ndb.KeyProperty(Issue)  # == parent
+  subject = ndb.StringProperty()
+  sender = ndb.StringProperty()
+  recipients = ndb.StringProperty(repeated=True)
+  date = ndb.DateTimeProperty(auto_now_add=True)
+  text = ndb.TextProperty()
+  draft = ndb.BooleanProperty(default=False)
+  in_reply_to = ndb.KeyProperty('Message')
+  issue_was_closed = ndb.BooleanProperty(default=False)
 
   _approval = None
   _disapproval = None
@@ -607,7 +583,8 @@ class Message(db.Model):
     - Must not be written by the issue owner.
     - Must contain |text| in a line that doesn't start with '>'.
     """
-    if not owner_allowed and self.issue.owner.email() == self.sender:
+    issue = self.issue.get()
+    if not owner_allowed and issue.owner.email() == self.sender:
       return False
     return any(
         True for line in self.text.lower().splitlines()
@@ -628,20 +605,20 @@ class Message(db.Model):
     return self._disapproval
 
 
-class Content(db.Model):
+class Content(ndb.Model):
   """The content of a text file.
 
   This is a descendant of a Patch.
   """
 
   # parent => Patch
-  text = db.TextProperty()
-  data = db.BlobProperty()
+  text = ndb.TextProperty()
+  data = ndb.BlobProperty()
   # Checksum over text or data depending on the type of this content.
-  checksum = db.TextProperty()
-  is_uploaded = db.BooleanProperty(default=False)
-  is_bad = db.BooleanProperty(default=False)
-  file_too_large = db.BooleanProperty(default=False)
+  checksum = ndb.TextProperty()
+  is_uploaded = ndb.BooleanProperty(default=False)
+  is_bad = ndb.BooleanProperty(default=False)
+  file_too_large = ndb.BooleanProperty(default=False)
 
   @property
   def lines(self):
@@ -651,22 +628,22 @@ class Content(db.Model):
     return self.text.splitlines(True)
 
 
-class Patch(db.Model):
+class Patch(ndb.Model):
   """A single patch, i.e. a set of changes to a single file.
 
   This is a descendant of a PatchSet.
   """
 
-  patchset = db.ReferenceProperty(PatchSet)  # == parent
-  filename = db.StringProperty()
-  status = db.StringProperty()  # 'A', 'A  +', 'M', 'D' etc
-  text = db.TextProperty()
-  content = db.ReferenceProperty(Content)
-  patched_content = db.ReferenceProperty(Content, collection_name='patch2_set')
-  is_binary = db.BooleanProperty(default=False)
+  patchset = ndb.KeyProperty(PatchSet)  # == parent
+  filename = ndb.StringProperty()
+  status = ndb.StringProperty()  # 'A', 'A  +', 'M', 'D' etc
+  text = ndb.TextProperty()
+  content = ndb.KeyProperty(Content)
+  patched_content = ndb.KeyProperty(Content)
+  is_binary = ndb.BooleanProperty(default=False)
   # Ids of patchsets that have a different version of this file.
-  delta = db.ListProperty(int)
-  delta_calculated = db.BooleanProperty(default=False)
+  delta = ndb.IntegerProperty(repeated=True)
+  delta_calculated = ndb.BooleanProperty(default=False)
 
   _lines = None
 
@@ -749,9 +726,8 @@ class Patch(db.Model):
     The value is cached.
     """
     if self._num_comments is None:
-      self._num_comments = gql(Comment,
-                               'WHERE patch = :1 AND draft = FALSE',
-                               self).count()
+      self._num_comments = Comment.gql(
+        'WHERE patch = :1 AND draft = FALSE', self).count()
     return self._num_comments
 
   _num_my_comments = None
@@ -766,9 +742,9 @@ class Patch(db.Model):
       if account is None:
         self._num_my_comments = 0
       else:
-        query = gql(Comment,
-                    'WHERE patch = :1 AND draft = FALSE AND author = :2',
-                    self, account.user)
+        query = Comment.gql(
+          'WHERE patch = :1 AND draft = FALSE AND author = :2',
+          self, account.user)
         self._num_my_comments = query.count()
     return self._num_my_comments
 
@@ -785,9 +761,9 @@ class Patch(db.Model):
       if account is None:
         self._num_drafts = 0
       else:
-        query = gql(Comment,
-                    'WHERE patch = :1 AND draft = TRUE AND author = :2',
-                    self, account.user)
+        query = Comment.gql(
+          'WHERE patch = :1 AND draft = TRUE AND author = :2',
+          self, account.user)
         self._num_drafts = query.count()
     return self._num_drafts
 
@@ -808,16 +784,17 @@ class Patch(db.Model):
     """
     try:
       if self.content is not None:
-        if self.content.is_bad:
+        content = self.content.get()
+        if content.is_bad:
           msg = 'Bad content. Try to upload again.'
           logging.warn('Patch.get_content: %s', msg)
           raise FetchError(msg)
-        if self.content.is_uploaded and self.content.text == None:
+        if content.is_uploaded and content.text == None:
           msg = 'Upload in progress.'
           logging.warn('Patch.get_content: %s', msg)
           raise FetchError(msg)
         else:
-          return self.content
+          return content
     except db.Error:
       # This may happen when a Content entity was deleted behind our back.
       self.content = None
@@ -841,7 +818,7 @@ class Patch(db.Model):
     """
     try:
       if self.patched_content is not None:
-        return self.patched_content
+        return self.patched_content.get()
     except db.Error:
       # This may happen when a Content entity was deleted behind our back.
       self.patched_content = None
@@ -852,17 +829,17 @@ class Patch(db.Model):
     new_lines = []
     for _, _, new in patching.PatchChunks(old_lines, chunks):
       new_lines.extend(new)
-    text = db.Text(''.join(new_lines))
-    patched_content = Content(text=text, parent=self)
+    text = ''.join(new_lines)
+    patched_content = Content(text=text, parent=self.key)
     patched_content.put()
-    self.patched_content = patched_content
+    self.patched_content = patched_content.key
     self.put()
     return patched_content
 
   @property
   def no_base_file(self):
     """Returns True iff the base file is not available."""
-    return self.content and self.content.file_too_large
+    return self.content and self.content.get().file_too_large
 
   def fetch_base(self):
     """Fetch base file for the patch.
@@ -877,7 +854,7 @@ class Patch(db.Model):
     if rev is not None:
       if rev == 0:
         # rev=0 means it's a new file.
-        return Content(text=db.Text(u''), parent=self)
+        return Content(text=ndb.Text(u''), parent=self.key)
 
     # AppEngine can only fetch URLs that db.Link() thinks are OK,
     # so try converting to a db.Link() here.
@@ -901,24 +878,24 @@ class Patch(db.Model):
       logging.warn('FetchBase: %s', msg)
       raise FetchError(msg)
     return Content(text=utils.to_dbtext(utils.unify_linebreaks(result.content)),
-                   parent=self)
+                   parent=self.key)
 
 
 
-class Comment(db.Model):
+class Comment(ndb.Model):
   """A Comment for a specific line of a specific file.
 
   This is a descendant of a Patch.
   """
 
-  patch = db.ReferenceProperty(Patch)  # == parent
-  message_id = db.StringProperty()  # == key_name
+  patch = ndb.KeyProperty(Patch)  # == parent
+  message_id = ndb.StringProperty()  # == key_name
   author = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
-  date = db.DateTimeProperty(auto_now=True)
-  lineno = db.IntegerProperty()
-  text = db.TextProperty()
-  left = db.BooleanProperty()
-  draft = db.BooleanProperty(required=True, default=True)
+  date = ndb.DateTimeProperty(auto_now=True)
+  lineno = ndb.IntegerProperty()
+  text = ndb.TextProperty()
+  left = ndb.BooleanProperty()
+  draft = ndb.BooleanProperty(required=True, default=True)
 
   buckets = None
   shorttext = None
@@ -967,7 +944,7 @@ class Comment(db.Model):
         break
 
 
-class Bucket(db.Model):
+class Bucket(ndb.Model):
   """A 'Bucket' of text.
 
   A comment may consist of multiple text buckets, some of which may be
@@ -977,43 +954,44 @@ class Bucket(db.Model):
   """
   # TODO(guido): Flesh this out.
 
-  text = db.TextProperty()
-  quoted = db.BooleanProperty()
+  text = ndb.TextProperty()
+  quoted = ndb.BooleanProperty()
 
 
 ### Repositories and Branches ###
 
 
-class Repository(db.Model):
+class Repository(ndb.Model):
   """A specific Subversion repository."""
 
-  name = db.StringProperty(required=True)
-  url = db.LinkProperty(required=True)
+  name = ndb.StringProperty(required=True)
+  url = ndb.StringProperty(required=True)
   owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
-  guid = db.StringProperty()  # global unique repository id
+  guid = ndb.StringProperty()  # global unique repository id
 
   def __str__(self):
     return self.name
 
 
-class Branch(db.Model):
+BRANCH_CATEGORY_CHOICES = ('*trunk*', 'branch', 'tag')
+
+class Branch(ndb.Model):
   """A trunk, branch, or a tag in a specific Subversion repository."""
 
-  repo = db.ReferenceProperty(Repository, required=True)
+  repo = ndb.KeyProperty(Repository, required=True)
   # Cache repo.name as repo_name, to speed up set_branch_choices()
   # in views.IssueBaseForm.
-  repo_name = db.StringProperty()
-  category = db.StringProperty(required=True,
-                               choices=('*trunk*', 'branch', 'tag'))
-  name = db.StringProperty(required=True)
-  url = db.LinkProperty(required=True)
+  repo_name = ndb.StringProperty()
+  category = ndb.StringProperty(required=True, choices=BRANCH_CATEGORY_CHOICES)
+  name = ndb.StringProperty(required=True)
+  url = ndb.StringProperty(required=True)
   owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
 
 
 ### Accounts ###
 
 
-class Account(db.Model):
+class Account(ndb.Model):
   """Maps a user or email address to a user-selected nickname, and more.
 
   Nicknames do not have to be unique.
@@ -1033,27 +1011,27 @@ class Account(db.Model):
 
   user = auth_utils.AnyAuthUserProperty(auto_current_user_add=True,
                                         required=True)
-  email = db.StringProperty(required=True)  # key == <email>
-  nickname = db.StringProperty(required=True)
-  default_context = db.IntegerProperty(default=settings.DEFAULT_CONTEXT,
-                                       choices=CONTEXT_CHOICES)
-  default_column_width = db.IntegerProperty(
+  email = ndb.StringProperty(required=True)  # key == <email>
+  nickname = ndb.StringProperty(required=True)
+  default_context = ndb.IntegerProperty(default=settings.DEFAULT_CONTEXT,
+                                        choices=CONTEXT_CHOICES)
+  default_column_width = ndb.IntegerProperty(
       default=settings.DEFAULT_COLUMN_WIDTH)
-  created = db.DateTimeProperty(auto_now_add=True)
-  modified = db.DateTimeProperty(auto_now=True)
-  stars = db.ListProperty(int)  # Issue ids of all starred issues
-  fresh = db.BooleanProperty()
-  notify_by_email = db.BooleanProperty(default=True)
-  notify_by_chat = db.BooleanProperty(default=False)
+  created = ndb.DateTimeProperty(auto_now_add=True)
+  modified = ndb.DateTimeProperty(auto_now=True)
+  stars = ndb.IntegerProperty(repeated=True)  # Issue ids of all starred issues
+  fresh = ndb.BooleanProperty()
+  notify_by_email = ndb.BooleanProperty(default=True)
+  notify_by_chat = ndb.BooleanProperty(default=False)
   # Spammer; only blocks sending messages, not uploading issues.
-  blocked = db.BooleanProperty(default=False)
+  blocked = ndb.BooleanProperty(default=False)
 
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
 
-  lower_email = db.StringProperty()
-  lower_nickname = db.StringProperty()
-  xsrf_secret = db.BlobProperty()
+  lower_email = ndb.StringProperty()
+  lower_nickname = ndb.StringProperty()
+  xsrf_secret = ndb.BlobProperty()
 
   # Note that this doesn't get called when doing multi-entity puts.
   def put(self):
@@ -1070,14 +1048,14 @@ class Account(db.Model):
     """Get the Account for a user, creating a default one if needed."""
     email = user.email()
     assert email
-    key = cls.get_id_for_email(email)
+    id_str = cls.get_id_for_email(email)
     # Since usually the account already exists, first try getting it
     # without the transaction implied by get_or_insert().
-    account = cls.get_by_key_name(key)
+    account = cls.get_by_id(id_str)
     if account is not None:
       return account
     nickname = cls.create_nickname_for_user(user)
-    return cls.get_or_insert(key, user=user, email=email, nickname=nickname,
+    return cls.get_or_insert(id_str, user=user, email=email, nickname=nickname,
                              fresh=True)
 
   @classmethod
@@ -1104,21 +1082,14 @@ class Account(db.Model):
   def get_account_for_email(cls, email):
     """Get the Account for an email address, or return None."""
     assert email
-    key = '<%s>' % email
-    return cls.get_by_key_name(key)
+    id_str = '<%s>' % email
+    return cls.get_by_id(id_str)
 
   @classmethod
   def get_accounts_for_emails(cls, emails):
     """Get the Accounts for each of a list of email addresses."""
-    return cls.get_by_key_name(['<%s>' % email for email in emails])
-
-  @classmethod
-  def get_by_key_name(cls, key, **kwds):
-    """Override db.Model.get_by_key_name() to use cached value if possible."""
-    if not kwds and cls.current_user_account is not None:
-      if key == cls.current_user_account.key().name():
-        return cls.current_user_account
-    return super(Account, cls).get_by_key_name(key, **kwds)
+    keys = [ndb.Key(cls, '<%s>' % email) for email in emails]
+    return ndb.get_multi(keys)
 
   @classmethod
   def get_multiple_accounts_by_email(cls, emails):
@@ -1129,9 +1100,9 @@ class Account(db.Model):
       if cls.current_user_account and email == cls.current_user_account.email:
         results[email] = cls.current_user_account
       else:
-        keys.append('<%s>' % email)
+        keys.append(ndb.Key(cls,'<%s>' % email))
     if keys:
-      accounts = cls.get_by_key_name(keys)
+      accounts = ndb.get_multi(keys)
       for account in accounts:
         if account is not None:
           results[account.email] = account
@@ -1162,7 +1133,7 @@ class Account(db.Model):
     """Get the list of Accounts that have this nickname."""
     assert nickname
     assert '@' not in nickname
-    return cls.all().filter('lower_nickname =', nickname.lower()).get()
+    return cls.query(cls.lower_nickname == nickname.lower()).get()
 
   @classmethod
   def get_email_for_nickname(cls, nickname):
@@ -1218,7 +1189,7 @@ class Account(db.Model):
     dirty = False
     if self._drafts is None:
       dirty = self._initialize_drafts()
-    keyid = issue.key().id()
+    keyid = issue.key.id()
     if have_drafts is None:
       # Beware, this may do a query.
       have_drafts = bool(issue.get_num_drafts(self.user))
@@ -1248,10 +1219,10 @@ class Account(db.Model):
       return False
     # We're looking for the Issue key id.  The ancestry of comments goes:
     # Issue -> PatchSet -> Patch -> Comment.
-    issue_ids = set(comment.key().parent().parent().parent().id()
-                    for comment in gql(Comment,
-                                       'WHERE author = :1 AND draft = TRUE',
-                                       self.user))
+    draft_query = Comment.query(
+      Comment.author == self.user, Comment.draft == True)
+    issue_ids = set(comment.key.parent().parent().parent().id()
+                    for comment in draft_query)
     self._drafts = list(issue_ids)
     ##logging.info('INITIALIZED: %s -> %s', self.email, self._drafts)
     return True

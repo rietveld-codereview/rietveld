@@ -141,7 +141,7 @@
           </div>
           <div class="message-actions">
             {%if user%}
-              <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{%nickname message.sender True%}', '{{message.key}}')"
+              <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{%nickname message.sender True%}', '{{message.key.id}}')"
                  id="message-reply-href-{{forloop.counter0}}">Reply</a>
               <textarea rows="20" name="message" style="display:none; width:99%"></textarea>
               <div id="message-reply-{{forloop.counter0}}"
