@@ -1957,11 +1957,12 @@ def _issue_as_dict(issue, messages, request=None):
 
 def _patchset_as_dict(patchset, comments, request):
   """Converts a patchset into a dict."""
+  issue = patchset.issue.get()
   values = {
     'patchset': patchset.key.id(),
-    'issue': patchset.issue.key.id(),
-    'owner': library.get_nickname(patchset.issue.owner, True, request),
-    'owner_email': patchset.issue.owner.email(),
+    'issue': issue.key.id(),
+    'owner': library.get_nickname(issue.owner, True, request),
+    'owner_email': issue.owner.email(),
     'message': patchset.message,
     'url': patchset.url,
     'created': str(patchset.created),
@@ -1987,7 +1988,7 @@ def _patchset_as_dict(patchset, comments, request):
       visible_comments = []
       requester_email = request.user.email() if request.user else 'no email'
       for c in models.Comment.gql('WHERE patch = :patch ORDER BY date',
-                                  patch=patch):
+                                  patch=patch.key):
         if not c.draft or requester_email == c.author.email():
           visible_comments.append({
               'author': library.get_nickname(c.author, True, request),
