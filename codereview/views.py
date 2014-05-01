@@ -3244,7 +3244,7 @@ def search(request):
         extra_nav_parameters=nav_params)
 
   results, cursor, unused_has_more = q.fetch_page(limit)
-  form.cleaned_data['cursor'] = cursor.urlsafe()
+  form.cleaned_data['cursor'] = cursor.urlsafe() if cursor else ''
   if keys_only:
     # There's not enough information to filter. The only thing that is leaked is
     # the issue's key.
@@ -4599,7 +4599,7 @@ def update_monthly_stats(cursor, day_to_process):
       if not more:
         cursor = ''
         break
-      cursor = next_curs.urlsafe()
+      cursor = next_curs.urlsafe() if next_curs else ''
       days_stats_fetched += len(day_stats_keys)
       if not (days_stats_fetched % 1000):
         logging.info('Scanned %d AccountStatsDay.', days_stats_fetched)
@@ -4736,7 +4736,7 @@ def task_refresh_all_stats_score(request):
           url=reverse(task_refresh_all_stats_score),
           params={
             'cls': cls_name,
-            'cursor': cursor.urlsafe(),
+            'cursor': cursor.urlsafe() if cursor else '',
             'destroy': str(destroy),
             'task_count': str(task_count+1),
           },
