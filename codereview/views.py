@@ -3273,15 +3273,15 @@ def repos(request):
     ndb.delete_multi(bad_branch_keys)
   repo_map = {}
   for repo in models.Repository.query().fetch(1000, batch_size=100):
-    repo_map[str(repo.key)] = repo
+    repo_map[repo.key] = repo
   branches = []
   for branch in models.Branch.query().fetch(2000, batch_size=100):
     repo_key = branch.repo
-    if repo in repo_map:
+    if repo_key in repo_map:
       branch.repository = repo_map[repo_key]
       branches.append(branch)
   branches.sort(key=lambda b: map(
-    unicode.lower, (b.repository.get().name, b.category, b.name)))
+    unicode.lower, (b.repository.name, b.category, b.name)))
   return respond(request, 'repos.html', {'branches': branches})
 
 
