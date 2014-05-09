@@ -49,7 +49,7 @@ from codereview import views
 class EditFlagsForm(forms.Form):
   last_patchset = forms.IntegerField(widget=forms.HiddenInput())
   commit = forms.BooleanField(required=False)
-  builders = forms.CharField(max_length=255, required=False)
+  builders = forms.CharField(max_length=16*1024, required=False)
 
 
 class TryPatchSetForm(forms.Form):
