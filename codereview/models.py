@@ -95,8 +95,8 @@ class Issue(db.Model):
                                          required=True)
   created = db.DateTimeProperty(auto_now_add=True)
   modified = db.DateTimeProperty(auto_now=True)
-  reviewers = db.ListProperty(db.Email)
-  cc = db.ListProperty(db.Email)
+  reviewers = db.StringListProperty()
+  cc = db.StringListProperty()
   closed = db.BooleanProperty(default=False)
   private = db.BooleanProperty(default=False)
   n_comments = db.IntegerProperty()
@@ -106,7 +106,7 @@ class Issue(db.Model):
   n_messages_sent = db.IntegerProperty()
 
   # List of emails that this issue has updates for.
-  updates_for = db.ListProperty(db.Email)
+  updates_for = db.StringListProperty()
 
   # JSON: {reviewer_email -> [bool|None]}
   reviewer_approval = db.TextProperty()
@@ -313,7 +313,7 @@ class Issue(db.Model):
           approval_dict[msg.sender] = False
       updates_for_set.discard(msg.sender)
       self.modified = msg.date
-    self.updates_for = [db.Email(x) for x in updates_for_set]
+    self.updates_for = [x for x in updates_for_set]
     self.reviewer_approval = json.dumps(approval_dict)
 
   def calculate_and_save_updates_if_None(self):
@@ -704,8 +704,8 @@ class Message(db.Model):
 
   issue = db.ReferenceProperty(Issue)  # == parent
   subject = db.StringProperty()
-  sender = db.EmailProperty()
-  recipients = db.ListProperty(db.Email)
+  sender = db.StringProperty()
+  recipients = db.StringListProperty()
   date = db.DateTimeProperty(auto_now_add=True)
   text = db.TextProperty()
   draft = db.BooleanProperty(default=False)
@@ -1172,7 +1172,7 @@ class Account(db.Model):
 
   user = auth_utils.AnyAuthUserProperty(auto_current_user_add=True,
                                         required=True)
-  email = db.EmailProperty(required=True)  # key == <email>
+  email = db.StringProperty(required=True)  # key == <email>
   nickname = db.StringProperty(required=True)
   default_context = db.IntegerProperty(default=settings.DEFAULT_CONTEXT,
                                        choices=CONTEXT_CHOICES)
