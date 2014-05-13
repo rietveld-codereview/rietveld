@@ -65,7 +65,7 @@ def key_required(func):
       return HttpResponseForbidden('You must be admin in for this function')
     value = memcache.get('key_required')
     if not value:
-      obj = models_chromium.Key.all().get()
+      obj = models_chromium.Key.query().get()
       if not obj:
         # Create a dummy value so it can be edited from the datastore admin.
         obj = models_chromium.Key(hash='invalid hash')

@@ -1338,7 +1338,7 @@ def _get_data_url(form):
     return None
 
   if data is not None:
-    data = db.Blob(utils.unify_linebreaks(data.read()))
+    data = utils.unify_linebreaks(data.read())
     url = None
   elif url:
     try:
@@ -1349,7 +1349,7 @@ def _get_data_url(form):
     if fetch_result.status_code != 200:
       form.errors['url'] = ['HTTP status code %s' % fetch_result.status_code]
       return None
-    data = db.Blob(utils.unify_linebreaks(fetch_result.content))
+    data = utils.unify_linebreaks(fetch_result.content)
 
   return data, url, separate_patches
 
@@ -2807,6 +2807,7 @@ def publish(request):
       request.user.email() not in reviewers and
       not issue.is_collaborator(request.user)):
     reviewers.append(request.user.email())
+
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
   else:
@@ -2999,8 +3000,7 @@ def make_message(request, issue, message, comments=None, send_mail=False,
   template, context = _get_mail_template(request, issue, full_diff=attach_patch)
   # Decide who should receive mail
   my_email = request.user.email()
-  to = ([issue.owner.email()] +
-        issue.reviewers + issue.collaborator_emails())
+  to = [issue.owner.email()] + issue.reviewers + issue.collaborator_emails()
   cc = issue.cc[:]
   # Chromium's instance adds reply@chromiumcodereview.appspotmail.com to the
   # Google Group which is CCd on all reviews.
@@ -3574,7 +3574,8 @@ def _process_incoming_mail(request, recipients):
                        text=body,
                        draft=False)
   if msg.approval:
-    publish_url = _absolute_url_in_preferred_domain(publish, args=[issue.key().id()])
+    publish_url = _absolute_url_in_preferred_domain(
+        publish, args=[issue.key.id()])
     _send_lgtm_reminder(sender, subject, publish_url)
   msg.was_inbound_email = True
 

@@ -152,9 +152,8 @@ def revert_patchset(request):
     return HttpTextResponse(e.message + ERROR_MSG_POSTPEND, status=404)
 
   # Create the new revert issue to use as the key in the new patchset.
-  issue_key = db.Key.from_path(
-      models.Issue.kind(),
-      db.allocate_ids(db.Key.from_path(models.Issue.kind(), 1), 1)[0])
+  first_id, _ = models.Issue.allocate_ids(1)
+  issue_key = ndb.Key(models.Issue, first_id)
 
   reviewers = original_issue.reviewers
   original_owner = original_issue.owner
@@ -188,13 +187,10 @@ def revert_patchset(request):
   pending_commits.append(issue);
 
   # Create the new revert patchset to use as the key in the new patches.
-  ps_key = db.Key.from_path(
-      models.PatchSet.kind(),
-      db.allocate_ids(db.Key.from_path(models.PatchSet.kind(), 1,
-                                       parent=issue.key()), 1)[0],
-      parent=issue.key())
+  ps_id, _ = models.PatcheSet.allocate_ids(1, parent=issue.key)
+  ps_key = ndb.Key(models.PatchSet, ps_id, parent=issue.key)
   patchset = models.PatchSet(
-      issue=issue,
+      issue=issue.key,
       url=None,
       key=ps_key)
   pending_commits.append(patchset)
@@ -220,16 +216,11 @@ def revert_patchset(request):
       original_patched_content = original_patch.get_patched_content()
 
     # Allocate keys for content and patched_content.
-    content_key = db.Key.from_path(
-        models.Content.kind(),
-        db.allocate_ids(db.Key.from_path(models.Content.kind(), 1,
-                                         parent=patch.key()), 1)[0],
-        parent=patch.key())
-    patched_content_key = db.Key.from_path(
-        models.Content.kind(),
-        db.allocate_ids(db.Key.from_path(models.Content.kind(), 1,
-                                         parent=patch.key()), 1)[0],
-        parent=patch.key())
+    content_id, _ = models.Content.allocate_ids(1, parent=patch.key)
+    content_key = ndb.Key(models.Content, content_id, parent=patch.key)
+    patched_content_id, _ = models.Content.allocate_ids(1, parent=patch.key)
+    patched_content_key = ndb.Key(
+      models.Content, patched_content_id, parent=patch.key)
 
     if original_patch.patched_content:
       content = models.Content(
@@ -242,7 +233,7 @@ def revert_patchset(request):
         file_too_large=original_patched_content.file_too_large)
     else:
       # Create an empty content if there is no patched_content.
-      empty_data = db.Blob()
+      empty_data = ''
       content = models.Content(
         key=content_key,
         text='',
@@ -264,7 +255,7 @@ def revert_patchset(request):
     else:
       # Create an empty patched content if it is an 'A +' status. This is
       # because the inverted status becomes a 'D' request.
-      empty_data = db.Blob()
+      empty_data = ''
       patched_content = models.Content(
         key=patched_content_key,
         text='',
@@ -286,7 +277,7 @@ def revert_patchset(request):
 
   # Notify the original issue that a revert issue has been created.
   revert_issue_link = request.build_absolute_uri(
-      reverse('codereview.views.show', args=[issue.key().id()]))
+      reverse('codereview.views.show', args=[issue.key.id()]))
   revert_message = (
       'A revert of this CL has been created in %s by %s.\n\nThe reason for '
       'reverting is: %s.' % (revert_issue_link, request.user.email(),
@@ -304,7 +295,7 @@ def revert_patchset(request):
   issue.put()
 
   return HttpResponseRedirect(reverse('codereview.views.show',
-                                      args=[issue.key().id()]))
+                                      args=[issue.key.id()]))
 
 
 def _db_commit_all_pending_commits(pending_commits):

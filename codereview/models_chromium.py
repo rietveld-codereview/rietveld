@@ -22,28 +22,29 @@ from google.appengine.api import memcache
 from google.appengine.api import urlfetch
 from google.appengine.api import users
 from google.appengine.ext import db
+from google.appengine.ext import ndb
 
 from codereview import models
 
 
-class UrlMap(db.Model):
+class UrlMap(ndb.Model):
   """Mapping between base url and source code viewer url."""
 
-  base_url_template = db.StringProperty(required=True)
-  source_code_url_template = db.StringProperty(required=True)
+  base_url_template = ndb.StringProperty(required=True)
+  source_code_url_template = ndb.StringProperty(required=True)
 
   @staticmethod
   def user_can_edit(user):
     return models.is_privileged_user(user)
 
 
-class Key(db.Model):
+class Key(ndb.Model):
   """Hash to be able to push data from a server."""
-  hash = db.StringProperty()
+  hash = ndb.StringProperty()
 
 
 def to_dict(self):
-  """Converts a db.Model instance into a dict.
+  """Converts an ndb.Model instance into a dict.
 
   Useful for json serialization.
   """
@@ -58,7 +59,7 @@ def to_dict(self):
       return unicode(item)
   result = dict([(p, convert(getattr(self, p))) for p in self.properties()])
   try:
-    result['key'] = str(self.key())
+    result['key'] = str(self.key)
   except db.NotSavedError:
     pass
   return result
@@ -67,7 +68,7 @@ def to_dict(self):
 db.Model.to_dict = to_dict
 
 
-class TryserverBuilders(db.Model):
+class TryserverBuilders(ndb.Model):
   JSON_SOURCES = {
     'tryserver.blink': [
       'http://build.chromium.org/p/tryserver.blink/json/builders'
@@ -99,7 +100,7 @@ class TryserverBuilders(db.Model):
 
   # Dictionary mapping tryserver names like tryserver.chromium to a list
   # of builders.
-  json_contents = db.TextProperty(default='{}')
+  json_contents = ndb.TextProperty(default='{}')
 
   @classmethod
   def get_instance(cls):
@@ -142,7 +143,7 @@ class TryserverBuilders(db.Model):
     instance.put()
 
 
-class DefaultBuilderList(db.Model):
+class DefaultBuilderList(ndb.Model):
   """An instance to hold the list of default builder names for trying patchsets.
 
   Each instance of this class holds the list of builder names for use with
@@ -162,8 +163,8 @@ class DefaultBuilderList(db.Model):
 
   _DEFAULT_CHROMIUM_TRYSERVER_NAME = 'tryserver.chromium'
 
-  categories_and_builders_json = db.TextProperty(default="{}")
-  trybot_documentation_link = db.LinkProperty()
+  categories_and_builders_json = ndb.TextProperty(default="{}")
+  trybot_documentation_link = ndb.StringProperty()
 
   @classmethod
   def get_doc_link(cls, base_url):
@@ -264,8 +265,8 @@ class DefaultBuilderList(db.Model):
     successful = {}
     failed = []
 
-    for obj in cls.all():
-      tryserver_name = obj.key().name()
+    for obj in cls.query():
+      tryserver_name = obj.key.id()
       try:
         # pylint: disable=W0212
         successful[tryserver_name] = obj._update_builders(tryserver_name)
@@ -309,7 +310,7 @@ class DefaultBuilderList(db.Model):
     self.categories_and_builders_json = json.dumps(
         categories_to_builders,
         default=lambda x: (sorted(list(x)) if isinstance(x, set) else x))
-    memcache.set(self._DEFAULT_BUILDER_MEMCACHE_KEY + self.key().name(),
+    memcache.set(self._DEFAULT_BUILDER_MEMCACHE_KEY + self.key.id(),
                  self.categories_and_builders_json,
                  self._MEMCACHE_EXPIRY_SECS)
     self.put()
@@ -338,7 +339,7 @@ class DefaultBuilderList(db.Model):
     return dict((desc, items) for (desc, items) in changes if items)
 
 
-class BaseUrlTryServer(db.Model):
+class BaseUrlTryServer(ndb.Model):
   """Maps a Base URL to a TryServer name and JSON URL."""
 
   _DEFAULT_CHROMIUM_TRYSERVER_JSON_URLS = [
@@ -347,8 +348,8 @@ class BaseUrlTryServer(db.Model):
       # 'http://build.chromium.org/p/tryserver.chromium.linux/json/builders',
   ]
 
-  tryserver_name = db.StringProperty(required=True)
-  json_urls = db.StringListProperty()
+  tryserver_name = ndb.StringProperty(required=True)
+  json_urls = ndb.StringProperty(repeated=True)
 
   @classmethod
   def get_instance(cls, base_url, tryserver_name):
@@ -365,8 +366,8 @@ class BaseUrlTryServer(db.Model):
   @classmethod
   def get_json_urls(cls, tryserver_name):
     """Get the TryServer JSON URL(s) for a specified TryServer name."""
-    baseurl_tryserver = cls.all().filter(
-        'tryserver_name', tryserver_name).get()
+    baseurl_tryserver = cls.query(
+        BaseUrlTryServer.tryserver_name == tryserver_name).get()
     return (baseurl_tryserver.json_urls
             if baseurl_tryserver and baseurl_tryserver.json_urls
             else cls._DEFAULT_CHROMIUM_TRYSERVER_JSON_URLS)
