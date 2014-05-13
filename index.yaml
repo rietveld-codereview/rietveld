@@ -112,6 +112,12 @@ indexes:
 - kind: Issue
   properties:
   - name: closed
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: closed
   - name: owner
   - name: created
 

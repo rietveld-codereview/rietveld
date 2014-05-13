@@ -74,7 +74,7 @@ class Issue(ndb.Model):
   closed = ndb.BooleanProperty(default=False)
   private = ndb.BooleanProperty(default=False)
   n_comments = ndb.IntegerProperty()
-  commit = db.BooleanProperty(default=False)
+  commit = ndb.BooleanProperty(default=False)
 
   # NOTE: Use num_messages instead of using n_messages_sent directly.
   n_messages_sent = ndb.IntegerProperty()
@@ -484,7 +484,7 @@ def _calculate_delta(patch, patchset_id, patchsets):
   return delta
 
 
-class TryJobResult(db.Model):
+class TryJobResult(ndb.Model):
   """Try jobs are associated to a patchset.
 
   Multiple try jobs can be associated to a single patchset.
@@ -505,23 +505,23 @@ class TryJobResult(db.Model):
   )
 
   # Parent is PatchSet
-  url = db.StringProperty()
-  result = db.IntegerProperty()
-  master = db.StringProperty()
-  builder = db.StringProperty()
-  parent_name = db.StringProperty()
-  slave = db.StringProperty()
-  buildnumber = db.IntegerProperty()
-  reason = db.StringProperty(multiline=True)
-  revision = db.StringProperty()
-  timestamp = db.DateTimeProperty(auto_now_add=True)
-  clobber = db.BooleanProperty()
-  tests = db.StringListProperty(default=[])
+  url = ndb.StringProperty()
+  result = ndb.IntegerProperty()
+  master = ndb.StringProperty()
+  builder = ndb.StringProperty()
+  parent_name = ndb.StringProperty()
+  slave = ndb.StringProperty()
+  buildnumber = ndb.IntegerProperty()
+  reason = ndb.StringProperty()
+  revision = ndb.StringProperty()
+  timestamp = ndb.DateTimeProperty(auto_now_add=True)
+  clobber = ndb.BooleanProperty()
+  tests = ndb.StringProperty(repeated=True)
   # Should be an entity.
-  project = db.StringProperty()
+  project = ndb.StringProperty()
   # The user that requested this try job, which may not be the same person
   # that owns the issue.
-  requester = db.UserProperty(auto_current_user_add=True)
+  requester = ndb.UserProperty(auto_current_user_add=True)
 
   @property
   def status(self):
@@ -559,7 +559,7 @@ class PatchSet(ndb.Model):
   n_comments = ndb.IntegerProperty(default=0)
   # TODO(maruel): Deprecated, remove once the live instance has all its data
   # converted to TryJobResult instances.
-  build_results = db.StringListProperty()
+  build_results = ndb.StringProperty(repeated=True)
 
   @property
   def patches(self):
@@ -607,7 +607,7 @@ class PatchSet(ndb.Model):
     Note the value is cached and doesn't expose a method to be refreshed.
     """
     if self._try_job_results is None:
-      self._try_job_results = TryJobResult.all().ancestor(self).fetch(1000)
+      self._try_job_results = TryJobResult.query(ancestor=self.key).fetch(1000)
 
       # Append fake object for all build_results properties.
       # TODO(maruel): Deprecated. Delete this code as soon as the live
@@ -623,7 +623,7 @@ class PatchSet(ndb.Model):
           result = -1
         self._try_job_results.append(
             TryJobResult(
-              parent=self,
+              parent=self.key,
               url=details_url,
               result=result,
               builder=platform_id,
@@ -688,7 +688,7 @@ class Message(ndb.Model):
   in_reply_to = ndb.KeyProperty('Message')
   issue_was_closed = ndb.BooleanProperty(default=False)
   # If message came in through email, we might not count "lgtm"
-  was_inbound_email = db.BooleanProperty(default=False)
+  was_inbound_email = ndb.BooleanProperty(default=False)
 
   _approval = None
   _disapproval = None
@@ -758,7 +758,7 @@ class Patch(ndb.Model):
 
   patchset = ndb.KeyProperty(PatchSet)  # == parent
   filename = ndb.StringProperty()
-  status = ndb.StringProperty()  # 'A', 'A  +', 'M', 'D' etc
+  status = ndb.StringProperty()  # 'A', 'A +', 'M', 'D' etc
   text = ndb.TextProperty()
   content = ndb.KeyProperty(Content)
   patched_content = ndb.KeyProperty(Content)
@@ -766,7 +766,7 @@ class Patch(ndb.Model):
   # Ids of patchsets that have a different version of this file.
   delta = ndb.IntegerProperty(repeated=True)
   delta_calculated = ndb.BooleanProperty(default=False)
-  lint_error_count = db.IntegerProperty(default=-1)
+  lint_error_count = ndb.IntegerProperty(default=-1)
 
   _lines = None
 
@@ -850,7 +850,7 @@ class Patch(ndb.Model):
     """
     if self._num_comments is None:
       self._num_comments = Comment.gql(
-        'WHERE patch = :1 AND draft = FALSE', self).count()
+        'WHERE patch = :1 AND draft = FALSE', self.key).count()
     return self._num_comments
 
   _num_my_comments = None
@@ -867,7 +867,7 @@ class Patch(ndb.Model):
       else:
         query = Comment.gql(
           'WHERE patch = :1 AND draft = FALSE AND author = :2',
-          self, account.user)
+          self.key, account.user)
         self._num_my_comments = query.count()
     return self._num_my_comments
 
@@ -886,7 +886,7 @@ class Patch(ndb.Model):
       else:
         query = Comment.gql(
           'WHERE patch = :1 AND draft = TRUE AND author = :2',
-          self, account.user)
+          self.key, account.user)
         self._num_drafts = query.count()
     return self._num_drafts
 
@@ -906,8 +906,8 @@ class Patch(ndb.Model):
 
     # Find the content and the patched content to use for inverse diffing.
     if self.is_binary:
-      original_content = self.content
-      original_patched_content = self.patched_content
+      original_content = self.content.get()
+      original_patched_content = self.patched_content.get()
     else:
       original_content = self.get_content()
       original_patched_content = self.get_patched_content()
@@ -927,13 +927,10 @@ class Patch(ndb.Model):
     inverted_patch_text = invert_git_patches.get_inverted_patch_text(
         content_for_diff, patched_content_for_diff)
 
-    patch_key = db.Key.from_path(
-        Patch.kind(),
-        db.allocate_ids(db.Key.from_path(Patch.kind(), 1,
-                                         parent=patchset.key()), 1)[0],
-        parent=patchset.key())
+    first_patch_id, _ = Patch.allocate_ids(1, parent=patchset.key)
+    patch_key = ndb.Key(Patch, first_patch_id, parent=patchset.key)
     return Patch(key=patch_key,
-                 patchset=patchset,
+                 patchset=patchset.key,
                  filename=self.filename,
                  status=invert_git_patches.inverted_patch_status,
                  text=inverted_patch_text,

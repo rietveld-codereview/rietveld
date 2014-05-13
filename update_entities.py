@@ -19,8 +19,8 @@ def run(model_class, batch_size=100, last_key=None):
     while True:
       q = model_class.query()
       if last_key:
-        q.filter(model_class.key > last_key)
-      q.order(model_class.key)
+        q = q.filter(model_class.key > last_key)
+      q = q.order(model_class.key)
       this_batch_size = batch_size
 
       while True:

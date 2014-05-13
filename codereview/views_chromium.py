@@ -22,6 +22,7 @@ import re
 
 from google.appengine.api import taskqueue
 from google.appengine.ext import db
+from google.appengine.ext import ndb
 from google.appengine.runtime import DeadlineExceededError
 
 from django import forms
@@ -165,8 +166,8 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
     key is passed through since the TryJobResult object exists.
   - An existing try job is updated. Most frequent case.
   """
-  issue = None
-  patchset = None
+  issue_id = None
+  patchset_id = None
   parent_buildername = None
   parent_buildnumber = None
   buildername = None
@@ -181,8 +182,8 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
     # rietveld itself, either from the webui or from the try_patchset endpoint.
     try_job_key = properties.get('try_job_key')
     # Issue and patchset might be missing in triggered jobs.
-    issue = int(properties.get('issue', 0))
-    patchset = int(properties.get('patchset', 0))
+    issue_id = int(properties.get('issue', 0))
+    patchset_id = int(properties.get('patchset', 0))
 
     # Keep them last.
     # The parent_XXX means that this is a build triggered from another build,
@@ -198,42 +199,42 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
   except (KeyError, TypeError, ValueError), e:
     logging.warn(
         'Failure when parsing properties: %s; i:%s/%s b:%s/%s' %
-        (e, issue, patchset, buildername, buildnumber))
+        (e, issue_id, patchset_id, buildername, buildnumber))
 
   # When issue or patchset are missing in a triggered job, try to
   # recover those from the parent build.  Note that this is not
   # reliable, as build numbers are not unique, and is not super
   # efficient since this adds yet another datastore request.
-  if not (issue and patchset) and parent_buildername:
-    parent_build_key = models.TryJobResult.all(keys_only=True
-          ).filter('builder =', parent_buildername
-          ).filter('buildnumber =', parent_buildnumber).get()
+  if not (issue_id and patchset_id) and parent_buildername:
+    parent_build_key = models.TryJobResult.query(
+      models.TryJobResult.builder == parent_buildername,
+      models.TryJobResult.buildnumber == parent_buildnumber).get(keys_only=True)
     if parent_build_key:
       # Dereference the parent Patchset object. Luckily, this is in the key.
       patchset_key = parent_build_key.parent()
       if not patchset:
-        patchset = patchset_key.id()
+        patchset_id = patchset_key.id()
       if not issue:
-        issue = patchset_key.parent().id()
-      logging.info('Dereferenced %d/%d' % (issue, patchset))
+        issue_id = patchset_key.parent().id()
+      logging.info('Dereferenced %d/%d' % (issue_id, patchset_id))
       try_job_key = None
     else:
       logging.warn('Failed to find deferenced build')
 
-  if not issue or not patchset:
+  if not issue_id or not patchset_id:
     logging.warn('Bad packet, no issue or patchset: %r' % properties)
     return
 
   result = unpack_result(result)
-  issue_key = db.Key.from_path('Issue', issue)
-  patchset_key = db.Key.from_path('PatchSet', patchset, parent=issue_key)
+  issue_key = ndb.Key(models.Issue, issue_id)
+  patchset_key = ndb.Key(models.PatchSet, patchset_id, parent=issue_key)
   # Verify the key validity by getting the instance.
-  if db.get(patchset_key) == None:
-    logging.warn('Bad issue/patch id: %s/%s' % (issue, patchset))
+  if patchset_key.get() == None:
+    logging.warn('Bad issue/patch id: %s/%s' % (issue_id, patchset_id))
     return
 
   # Used only for logging.
-  keyname = '%s-%s-%s-%s' % (issue, patchset, buildername, buildnumber)
+  keyname = '%s-%s-%s-%s' % (issue_id, patchset_id, buildername, buildnumber)
 
   def tx_try_job_result():
     if try_job_key:
@@ -243,10 +244,10 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
         logging.error('Try job not found by key=%s %s', try_job_key, keyname)
         return False
     else:
-      try_obj = models.TryJobResult.all(
-          ).ancestor(patchset_key
-          ).filter('builder =', buildername
-          ).filter('buildnumber =', buildnumber).get()
+      try_obj = models.TryJobResult.query(
+          models.TryJobResult.builder == buildername,
+          models.TryJobResult.buildnumber == buildnumber,
+          ancestor=patchset_key).get()
 
     if buildername and buildnumber >= 0:
       url = '%sbuilders/%s/builds/%s' % (
@@ -298,7 +299,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
           'Updated %s: %s' % (keyname, try_obj.result))
     try_obj.put()
     return True
-  if not db.run_in_transaction(tx_try_job_result):
+  if not ndb.transaction(tx_try_job_result):
     logging.error('Failed to update %s' % keyname)
     return False
   return True
@@ -349,14 +350,14 @@ def _is_job_valid(job):
   """
   if job.result == models.TryJobResult.TRYPENDING:
     patchset = job.parent()
-    issue = patchset.issue
+    issue = patchset.issue.get()
 
     if issue.closed:
       return False
 
-    last_patchset_key = models.PatchSet.all(keys_only=True).ancestor(
-        issue).order('-created').get()
-    if last_patchset_key != patchset.key():
+    last_patchset_key = models.PatchSet.query(ancestor=issue.key).order(
+      -models.PatchSet.created).get(keys_only=True)
+    if last_patchset_key != patchset.key:
       return False
 
   return True
@@ -368,8 +369,8 @@ def _is_job_valid(job):
 @deco.xsrf_required
 def edit_flags(request):
   """/<issue>/edit_flags - Edit issue's flags."""
-  last_patchset = models.PatchSet.all().ancestor(
-      request.issue).order('-created').get()
+  last_patchset = models.PatchSet.query(ancestor=request.issue.key).order(
+    -models.PatchSet.created).get()
   if not last_patchset:
     return HttpResponseForbidden('Can only modify flags on last patchset',
         content_type='text/plain')
@@ -381,7 +382,7 @@ def edit_flags(request):
     # TODO(maruel): Have it set per project.
     initial_builders = 'win_rel, mac_rel, linux_rel'
     form = EditFlagsForm(initial={
-        'last_patchset': last_patchset.key().id(),
+        'last_patchset': last_patchset.key.id(),
         'commit': request.issue.commit,
         'builders': initial_builders})
 
@@ -393,7 +394,7 @@ def edit_flags(request):
   if not form.is_valid():
     return HttpResponseBadRequest('Invalid POST arguments',
         content_type='text/plain')
-  if (form.cleaned_data['last_patchset'] != last_patchset.key().id()):
+  if (form.cleaned_data['last_patchset'] != last_patchset.key.id()):
     return HttpResponseForbidden('Can only modify flags on last patchset',
         content_type='text/plain')
 
@@ -422,7 +423,7 @@ def edit_flags(request):
       # Add any new builders.
       for builder in new_builders:
         mastername, buildername = builder.split(':', 1)
-        try_job = models.TryJobResult(parent=last_patchset,
+        try_job = models.TryJobResult(parent=last_patchset.key,
                                       reason='',
                                       result=models.TryJobResult.TRYPENDING,
                                       master=mastername,
@@ -432,8 +433,8 @@ def edit_flags(request):
         jobs_to_save.append(try_job)
 
       # Commit everything.
-      db.put(jobs_to_save)
-    db.run_in_transaction(txn)
+      ndb.put_multi(jobs_to_save)
+    ndb.transaction(txn)
 
   return HttpResponse('OK', content_type='text/plain')
 
@@ -504,7 +505,7 @@ def lint(request):
 
     for line in patch.lint_errors:
       patch.lint_error_count += len(patch.lint_errors[line])
-  db.put(patches)
+  ndb.put_multi(patches)
 
   return HttpResponse('Done', content_type='text/plain')
 
@@ -648,32 +649,33 @@ def delete_old_pending_jobs_task(request):
 
   Delete invalid pending try jobs older than a day old.
   """
-  cursor = request.POST.get('cursor')
+  encoded_cursor = request.POST.get('cursor')
   cutoff_date_str = request.POST.get('cutoff_date')
   cutoff_date = datetime.datetime.strptime(
       cutoff_date_str, "DATETIME(%Y-%m-%d %H:%M:%S)")
   limit = int(request.POST.get('limit'))
   offset = int(request.POST.get('offset'))
 
-  q = models.TryJobResult.all().filter(
-      'result =', models.TryJobResult.TRYPENDING).order('timestamp')
-  if cursor:
-    q.with_cursor(cursor)
+  q = models.TryJobResult.query(
+      models.TryJobResult.result == models.TryJobResult.TRYPENDING).order(
+      models.TryJobResult.timestamp)
+  cursor = None
+  if encoded_cursor:
+    cursor = datastore_query.Cursor(urlsafe=encoded_cursor)
 
   logging.info('cutoffdate=%s, limit=%d, offset=%d cursor=%s', cutoff_date_str,
       limit, offset, cursor)
-  items = q.fetch(limit)
+  items, next_cursor, _ = q.fetch_page(limit, start_cursor=cursor)
   if not items:
     msg = 'Iteration done'
     logging.info(msg)
     return HttpResponse(msg, content_type='text/plain')
 
   # Enqueue the next one right away.
-  cursor = q.cursor()
   taskqueue.add(
       url=reverse(delete_old_pending_jobs_task),
       params={
-        'cursor': q.cursor(),
+        'cursor': next_cursor.urlsafe() if next_cursor else '',
         'cutoff_date': cutoff_date_str,
         'limit': str(limit),
         'offset': str(offset + len(items)),
@@ -698,12 +700,12 @@ def delete_old_pending_jobs_task(request):
 def try_patchset(request):
   """/<issue>/try/<patchset> - Add a try job for the given patchset."""
   # Only allow trying the last patchset of an issue.
-  last_patchset_key = models.PatchSet.all(keys_only=True).ancestor(
-      request.issue).order('-created').get()
-  if last_patchset_key != request.patchset.key():
+  last_patchset_key = models.PatchSet.query(ancestor=request.issue.key).order(
+    -models.PatchSet.created).get(keys_only=True)
+  if last_patchset_key != request.patchset.key:
     content = (
         'Patchset %d/%d invalid: Can only try the last patchset of an issue.' %
-        (request.issue.key().id(), request.patchset.key().id()))
+        (request.issue.key.id(), request.patchset.key.id()))
     logging.info(content)
     return HttpResponseBadRequest(content, content_type='text/plain')
 
@@ -739,7 +741,7 @@ def try_patchset(request):
 
     jobs_to_save = []
     for builder, tests in builders.iteritems():
-      try_job = models.TryJobResult(parent=patchset,
+      try_job = models.TryJobResult(parent=patchset.key,
                                     result=models.TryJobResult.TRYPENDING,
                                     master=master,
                                     builder=builder,
@@ -751,9 +753,9 @@ def try_patchset(request):
       jobs_to_save.append(try_job)
 
     if jobs_to_save:
-      db.put(jobs_to_save)
-    return dict((j.builder, j.key().id()) for j in jobs_to_save)
-  job_saved = db.run_in_transaction(txn)
+      ndb.put_multi(jobs_to_save)
+    return dict((j.builder, j.key.id()) for j in jobs_to_save)
+  job_saved = ndb.transaction(txn)
   content = 'Started %d jobs.' % len(job_saved)
   logging.info('%s\n%s', content, job_saved)
   return {
@@ -767,7 +769,10 @@ def get_pending_try_patchsets(request):
     limit = 1000
 
   master = request.GET.get('master', None)
-  cursor = request.GET.get('cursor', None)
+  encoded_cursor = request.GET.get('cursor', None)
+  cursor = None
+  if encoded_cursor:
+    cursor = datastore_query.Cursor(urlsafe=encoded_cursor)
 
   def MakeJobDescription(job):
     patchset = job.parent()
@@ -777,7 +782,7 @@ def get_pending_try_patchsets(request):
     # The job description is the basically the job itself with some extra
     # data from the patchset and issue.
     description = job.to_dict()
-    description['name'] = '%d-%d: %s' % (issue.key().id(), patchset.key().id(),
+    description['name'] = '%d-%d: %s' % (issue.key.id(), patchset.key.id(),
                                          patchset.message)
     description['user'] = owner.nickname()
     description['email'] = owner.email()
@@ -787,21 +792,22 @@ def get_pending_try_patchsets(request):
       description['root'] = 'src/third_party/WebKit'
     else:
       description['root'] = 'src'
-    description['patchset'] = patchset.key().id()
-    description['issue'] = issue.key().id()
+    description['patchset'] = patchset.key.id()
+    description['issue'] = issue.key.id()
     description['baseurl'] = issue.base
     return description
 
-  q = models.TryJobResult.all()
-  q.filter('result =', models.TryJobResult.TRYPENDING)
+  q = models.TryJobResult.query()
+  q = q.filter(models.TryJobResult.result == models.TryJobResult.TRYPENDING)
   if master:
-    q.filter('master =', master)
-  q.order('timestamp')
-  if cursor:
-    q.with_cursor(cursor)
+    q = q.filter(models.TryJobResult.master == master)
+  q = q.order(models.TryJobResult.timestamp)
 
-  jobs = q.fetch(limit)
+  jobs, next_cursor, _ = q.fetch_page(limit, start_cursor=cursor)
   total = len(jobs)
   jobs = [MakeJobDescription(job) for job in jobs if _is_job_valid(job)]
   logging.info('Found %d entries, returned %d' % (total, len(jobs)))
-  return {'cursor': q.cursor(), 'jobs': jobs}
+  return {
+    'cursor': next_cursor.urlsafe() if next_cursor else '',
+    'jobs': jobs
+    }
