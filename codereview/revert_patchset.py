@@ -161,10 +161,10 @@ def revert_patchset(request):
   # Add the original_owner to the list of reviewers if different from the
   # current user.
   if original_owner.email() != request.user.email():
-    reviewers.append(db.Email(original_owner.email()))
+    reviewers.append(original_owner.email())
   # Remove current user from the reviewers.
   if request.user.email() in reviewers:
-    reviewers.remove(db.Email(request.user.email()))
+    reviewers.remove(request.user.email())
 
   # Datastructure that will hold all pending Issue, PatchSet, Patches and
   # Contents of the revert Issue.

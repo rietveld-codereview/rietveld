@@ -404,7 +404,7 @@ def edit_flags(request):
         user_email != request.issue.owner.email() and
         user_email not in request.issue.reviewers and
         user_email not in request.issue.collaborator_emails()):
-      request.issue.reviewers.append(db.Email(request.user.email()))
+      request.issue.reviewers.append(request.user.email())
     # Update the issue with the checking/unchecking of the CQ box but reduce
     # spam by not emailing users.
     action = 'checked' if request.issue.commit else 'unchecked'
