@@ -727,7 +727,7 @@ class Patch(ndb.Model):
     """
     if self._num_comments is None:
       self._num_comments = Comment.gql(
-        'WHERE patch = :1 AND draft = FALSE', self).count()
+        'WHERE patch = :1 AND draft = FALSE', self.key).count()
     return self._num_comments
 
   _num_my_comments = None
@@ -744,7 +744,7 @@ class Patch(ndb.Model):
       else:
         query = Comment.gql(
           'WHERE patch = :1 AND draft = FALSE AND author = :2',
-          self, account.user)
+          self.key, account.user)
         self._num_my_comments = query.count()
     return self._num_my_comments
 
@@ -763,7 +763,7 @@ class Patch(ndb.Model):
       else:
         query = Comment.gql(
           'WHERE patch = :1 AND draft = TRUE AND author = :2',
-          self, account.user)
+          self.key, account.user)
         self._num_drafts = query.count()
     return self._num_drafts
 
