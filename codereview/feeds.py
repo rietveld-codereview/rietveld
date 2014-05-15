@@ -41,13 +41,13 @@ class BaseFeed(Feed):
     if isinstance(item, models.PatchSet):
       if item.data is not None:
         return reverse('codereview.views.download',
-                       args=[item.issue.key.id(),item.key.id()])
+                       args=[item.issue.id(),item.key.id()])
       else:
         # Patch set is too large, only the splitted diffs are available.
         return reverse('codereview.views.show', args=[item.key.parent().id()])
     if isinstance(item, models.Message):
       return '%s#msg-%s' % (reverse('codereview.views.show',
-                                    args=[item.issue.key.id()]),
+                                    args=[item.issue.id()]),
                             item.key.id())
     return reverse('codereview.views.show', args=[item.key.id()])
 
