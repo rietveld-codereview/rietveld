@@ -246,7 +246,7 @@ def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
     # XXX GQL doesn't support OR yet...  Otherwise we'd be using that.
     for comment in models.Comment.gql(
         'WHERE patch = :1 AND left = FALSE ORDER BY date', patch.key):
-      if comment.draft and comment.author.get() != request.user:
+      if comment.draft and comment.author != request.user:
         continue  # Only show your own drafts
       comment.complete()
       lst = dct.setdefault(comment.lineno, [])
