@@ -21,6 +21,7 @@ import os
 import re
 
 from google.appengine.api import taskqueue
+from google.appengine.datastore import datastore_query
 from google.appengine.ext import db
 from google.appengine.ext import ndb
 from google.appengine.runtime import DeadlineExceededError
@@ -238,7 +239,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
 
   def tx_try_job_result():
     if try_job_key:
-      try_obj = models.TryJobResult.get(try_job_key)
+      try_obj = try_job_key.get()
       # If a key is given, then we must only update that try job.
       if not try_obj:
         logging.error('Try job not found by key=%s %s', try_job_key, keyname)
@@ -349,7 +350,7 @@ def _is_job_valid(job):
     True if the pending try job is invalid, False otherwise.
   """
   if job.result == models.TryJobResult.TRYPENDING:
-    patchset = job.parent()
+    patchset = job.key.parent().get()
     issue = patchset.issue.get()
 
     if issue.closed:
@@ -737,7 +738,7 @@ def try_patchset(request):
   def txn():
     # Get list of existing pending try jobs for this patchset.  Don't create
     # duplicates here.
-    patchset = models.PatchSet.get(last_patchset_key)
+    patchset = last_patchset_key.get()
 
     jobs_to_save = []
     for builder, tests in builders.iteritems():
@@ -775,8 +776,8 @@ def get_pending_try_patchsets(request):
     cursor = datastore_query.Cursor(urlsafe=encoded_cursor)
 
   def MakeJobDescription(job):
-    patchset = job.parent()
-    issue = patchset.issue
+    patchset = job.key.parent().get()
+    issue = patchset.issue.get()
     owner = issue.owner
 
     # The job description is the basically the job itself with some extra

@@ -57,15 +57,15 @@ def to_dict(self):
       return item.email()
     else:
       return unicode(item)
-  result = dict([(p, convert(getattr(self, p))) for p in self.properties()])
+  result = dict([(p, convert(getattr(self, p))) for p in self._properties])
   try:
     result['key'] = str(self.key)
   except db.NotSavedError:
     pass
   return result
 
-# Monkey-patch db.Model to make it easier to JSON-serialize it.
-db.Model.to_dict = to_dict
+# Monkey-patch ndb.Model to make it easier to JSON-serialize it.
+ndb.Model.to_dict = to_dict
 
 
 class TryserverBuilders(ndb.Model):
