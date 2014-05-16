@@ -801,7 +801,7 @@ class Patch(ndb.Model):
 
     content = self.fetch_base()
     content.put()
-    self.content = content
+    self.content = content.key
     self.put()
     return content
 
@@ -854,7 +854,7 @@ class Patch(ndb.Model):
     if rev is not None:
       if rev == 0:
         # rev=0 means it's a new file.
-        return Content(text=ndb.Text(u''), parent=self.key)
+        return Content(text=u'', parent=self.key)
 
     # AppEngine can only fetch URLs that db.Link() thinks are OK,
     # so try converting to a db.Link() here.
