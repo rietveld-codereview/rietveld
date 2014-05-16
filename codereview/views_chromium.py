@@ -167,6 +167,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
     key is passed through since the TryJobResult object exists.
   - An existing try job is updated. Most frequent case.
   """
+  logging.info('properties is %r', properties)
   issue_id = None
   patchset_id = None
   parent_buildername = None
@@ -239,7 +240,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
 
   def tx_try_job_result():
     if try_job_key:
-      try_obj = try_job_key.get()
+      try_obj = ndb.Key(urlsafe=try_job_key).get()
       # If a key is given, then we must only update that try job.
       if not try_obj:
         logging.error('Try job not found by key=%s %s', try_job_key, keyname)

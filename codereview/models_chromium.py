@@ -59,7 +59,7 @@ def to_dict(self):
       return unicode(item)
   result = dict([(p, convert(getattr(self, p))) for p in self._properties])
   try:
-    result['key'] = str(self.key)
+    result['key'] = self.key.urlsafe()
   except db.NotSavedError:
     pass
   return result
