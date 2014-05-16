@@ -445,8 +445,7 @@ def _calculate_delta(patch, patchset_id, patchsets):
 
         # PatchSet.data is stored as ndb.Blob (str). Try to convert it
         # to unicode so that Python doesn't need to do this conversion
-        # when comparing text and patch.text, which is ndb.Text
-        # (unicode).
+        # when comparing text and patch.text, which is unicode.
         try:
           other.parsed_patches = engine.SplitPatch(other.data.decode('utf-8'))
         except UnicodeDecodeError:  # Fallback to str - unicode comparison.
@@ -966,7 +965,7 @@ class Patch(ndb.Model):
 
     content = self.fetch_base()
     content.put()
-    self.content = content
+    self.content = content.key
     self.put()
     return content
 
@@ -1019,7 +1018,7 @@ class Patch(ndb.Model):
     if rev is not None:
       if rev == 0:
         # rev=0 means it's a new file.
-        return Content(text=ndb.Text(u''), parent=self.key)
+        return Content(text=u'', parent=self.key)
 
     # AppEngine can only fetch URLs that db.Link() thinks are OK,
     # so try converting to a db.Link() here.
