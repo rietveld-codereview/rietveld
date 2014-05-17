@@ -244,13 +244,14 @@ def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
   new_dict = {}
   for patch, dct in [(old_patch, old_dict), (new_patch, new_dict)]:
     # XXX GQL doesn't support OR yet...  Otherwise we'd be using that.
-    for comment in models.Comment.gql(
-        'WHERE patch = :1 AND left = FALSE ORDER BY date', patch.key):
-      if comment.draft and comment.author != request.user:
-        continue  # Only show your own drafts
-      comment.complete()
-      lst = dct.setdefault(comment.lineno, [])
-      lst.append(comment)
+    if patch:  # Skip if the patchset had no patch for this file.
+      for comment in models.Comment.gql(
+          'WHERE patch = :1 AND left = FALSE ORDER BY date', patch.key):
+        if comment.draft and comment.author != request.user:
+          continue  # Only show your own drafts
+        comment.complete()
+        lst = dct.setdefault(comment.lineno, [])
+        lst.append(comment)
   return _TableRowGenerator(old_patch, old_dict, len(old_lines)+1, 'new',
                             new_patch, new_dict, len(new_lines)+1, 'new',
                             _GenerateTriples(old_lines, new_lines),
