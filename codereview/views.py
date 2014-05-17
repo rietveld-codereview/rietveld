@@ -696,7 +696,7 @@ def _paginate_issues(page_url,
 def _paginate_issues_with_cursor(page_url,
                                  request,
                                  query,
-                                 encoded_cursor,
+                                 cursor,
                                  limit,
                                  template,
                                  extra_nav_parameters=None,
@@ -709,7 +709,7 @@ def _paginate_issues_with_cursor(page_url,
       function.
     request: Request containing offset and limit parameters.
     query: Query over issues
-    encoded_cursor: string cursor value passed to web form and back again.
+    cursor: cursor object passed to web form and back again.
     limit: Maximum number of issues to return.
     template: Name of template that renders issue page.
     extra_nav_parameters: Dictionary of extra parameters to append to the
@@ -720,12 +720,11 @@ def _paginate_issues_with_cursor(page_url,
   Returns:
     Response for sending back to browser.
   """
-  issues, cursor, has_more = query.fetch_page(
-    limit, start_cursor=datastore_query.Cursor(urlsafe=encoded_cursor))
+  issues, next_cursor, has_more = query.fetch_page(limit, start_cursor=cursor)
   nav_parameters = {}
   if extra_nav_parameters:
     nav_parameters.update(extra_nav_parameters)
-  nav_parameters['cursor'] = cursor.urlsafe() if cursor else ''
+  nav_parameters['cursor'] = next_cursor.urlsafe() if next_cursor else ''
 
   params = {
     'limit': limit,
@@ -3192,6 +3191,11 @@ def search(request):
 
   q = models.Issue.query(default_options=ndb.QueryOptions(keys_only=keys_only))
   encoded_cursor = form.cleaned_data['cursor'] or None
+  if encoded_cursor:
+    cursor = datastore_query.Cursor(urlsafe=encoded_cursor)
+  else:
+    cursor = None
+
   if form.cleaned_data['closed'] is not None:
     q = q.filter(models.Issue.closed == form.cleaned_data['closed'])
   if form.cleaned_data['owner']:
@@ -3238,13 +3242,13 @@ def search(request):
         reverse(search),
         request,
         q,
-        encoded_cursor,
+        cursor,
         limit,
         'search_results.html',
         extra_nav_parameters=nav_params)
 
-  results, cursor, unused_has_more = q.fetch_page(limit)
-  form.cleaned_data['cursor'] = cursor.urlsafe() if cursor else ''
+  results, next_cursor, has_more = q.fetch_page(limit, start_cursor=cursor)
+  form.cleaned_data['cursor'] = next_cursor.urlsafe() if next_cursor else ''
   if keys_only:
     # There's not enough information to filter. The only thing that is leaked is
     # the issue's key.
@@ -3253,6 +3257,7 @@ def search(request):
     filtered_results = [i for i in results if i.view_allowed]
   data = {
     'cursor': form.cleaned_data['cursor'],
+    'has_more': has_more,
   }
   if keys_only:
     data['results'] = [i.id() for i in filtered_results]
