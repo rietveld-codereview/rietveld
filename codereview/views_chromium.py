@@ -142,6 +142,7 @@ def handle_build_started(base_url, timestamp, packet, payload):
   build = payload['build']
   # results should always be absent.
   result = build.get('results', [-1])
+  logging.info('handle_build_started result is %r', result)
   return inner_handle(
       build.get('reason', ''), base_url, timestamp, packet, result,
       build.get('properties', []))
@@ -151,6 +152,7 @@ def handle_build_finished(base_url, timestamp, packet, payload):
   build = payload['build']
   # results is omitted if success so insert it manually.
   result = build.get('results', [models.TryJobResult.SUCCESS])
+  logging.info('handle_build_finished result is %r', result)
   return inner_handle(
       build.get('reason', ''), base_url, timestamp, packet, result,
       build.get('properties', []))
@@ -321,6 +323,7 @@ def process_status_push(packets_json, base_url):
   done = 0
   try:
     for packet in packets:
+      logging.info('packet is %r', packet)
       timestamp = string_to_datetime(packet['timestamp'])
       event = packet.get('event', '')
       if event not in HANDLER_MAP:
