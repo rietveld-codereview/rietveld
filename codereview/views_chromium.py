@@ -806,11 +806,24 @@ def get_pending_try_patchsets(request):
   q = q.filter(models.TryJobResult.result == models.TryJobResult.TRYPENDING)
   if master:
     q = q.filter(models.TryJobResult.master == master)
-  q = q.order(models.TryJobResult.timestamp)
+  q = q.order(models.TryJobResult.key)
 
-  jobs, next_cursor, _ = q.fetch_page(limit, start_cursor=cursor)
-  total = len(jobs)
-  jobs = [MakeJobDescription(job) for job in jobs if _is_job_valid(job)]
+  # We do not simply use fetch_page() because we do some post-filtering which
+  # could lead to under-filled pages.   Instead, we iterate, filter and keep
+  # going until we have enough post-filtered results, then return those along
+  # with the cursor after the last item.
+  jobs = []  # List of dicts to return as JSON. One dict for each TryJobResult.
+  total = 0
+  next_cursor = None
+  query_itertor = q.iter(limit=limit, start_cursor=cursor, produce_cursors=True)
+  for job in query_itertor:
+    total += 1
+    if _is_job_valid(job):
+      jobs.append(MakeJobDescription(job))
+      if len(jobs) >= limit:
+        next_cursor = query_itertor.cursor_after()
+        break
+      
   logging.info('Found %d entries, returned %d' % (total, len(jobs)))
   return {
     'cursor': next_cursor.urlsafe() if next_cursor else '',
