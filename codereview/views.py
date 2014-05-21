@@ -3247,17 +3247,28 @@ def search(request):
         'search_results.html',
         extra_nav_parameters=nav_params)
 
-  results, next_cursor, has_more = q.fetch_page(limit, start_cursor=cursor)
-  form.cleaned_data['cursor'] = next_cursor.urlsafe() if next_cursor else ''
-  if keys_only:
-    # There's not enough information to filter. The only thing that is leaked is
-    # the issue's key.
-    filtered_results = results
-  else:
-    filtered_results = [i for i in results if i.view_allowed]
+  # We do not simply use fetch_page() because we do some post-filtering which
+  # could lead to under-filled pages.   Instead, we iterate, filter and keep
+  # going until we have enough post-filtered results, then return those along
+  # with the cursor after the last item.
+  filtered_results = []
+  next_cursor = None
+  query_itertor = q.iter(limit=limit, start_cursor=cursor, produce_cursors=True)
+
+  for result in query_itertor:
+    if keys_only:
+      # There's not enough information to filter. The only thing that is leaked
+      # is the issue's key.
+      filtered_results.append(result)
+    elif result.view_allowed:
+      filtered_results.append(result)
+
+    if len(filtered_results) >= limit:
+      next_cursor = query_itertor.cursor_after()
+      break
+
   data = {
-    'cursor': form.cleaned_data['cursor'],
-    'has_more': has_more,
+    'cursor': next_cursor.urlsafe() if next_cursor else '',
   }
   if keys_only:
     data['results'] = [i.id() for i in filtered_results]
