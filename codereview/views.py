@@ -161,6 +161,7 @@ class UploadForm(forms.Form):
 
   subject = forms.CharField(max_length=MAX_SUBJECT)
   description = forms.CharField(max_length=MAX_DESCRIPTION, required=False)
+  project = forms.CharField(required=False)
   content_upload = forms.BooleanField(required=False)
   separate_patches = forms.BooleanField(required=False)
   base = forms.CharField(max_length=MAX_URL, required=False)
@@ -1265,6 +1266,7 @@ def _make_new(request, form):
 
   issue = models.Issue(subject=form.cleaned_data['subject'],
                        description=form.cleaned_data['description'],
+                       project=form.cleaned_data['project'],
                        base=base,
                        repo_guid=form.cleaned_data.get('repo_guid', None),
                        reviewers=reviewers,
@@ -1998,6 +2000,7 @@ def _issue_as_dict(issue, messages, request=None):
     'patchsets': [p.key.id() for p in issue.patchsets],
     'description': issue.description,
     'subject': issue.subject,
+    'project': issue.project,
     'issue': issue.key.id(),
     'base_url': issue.base,
     'private': issue.private,
