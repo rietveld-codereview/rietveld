@@ -53,6 +53,7 @@ class Issue(ndb.Model):
 
   subject = ndb.StringProperty(required=True)
   description = ndb.TextProperty()
+  project = ndb.StringProperty()
   #: in Subversion - repository path (URL) for files in patch set
   base = ndb.StringProperty()
   repo_guid = ndb.StringProperty()
