@@ -815,15 +815,18 @@ def get_pending_try_patchsets(request):
   jobs = []  # List of dicts to return as JSON. One dict for each TryJobResult.
   total = 0
   next_cursor = None
-  query_itertor = q.iter(limit=limit, start_cursor=cursor, produce_cursors=True)
-  for job in query_itertor:
+  query_iter = q.iter(limit=limit, start_cursor=cursor, produce_cursors=True)
+  for job in query_iter:
     total += 1
     if _is_job_valid(job):
       jobs.append(MakeJobDescription(job))
       if len(jobs) >= limit:
-        next_cursor = query_itertor.cursor_after()
         break
-      
+
+  # If any jobs are returned, also include a cursor to try to get more.
+  if jobs:
+    next_cursor = query_iter.cursor_after()
+
   logging.info('Found %d entries, returned %d' % (total, len(jobs)))
   return {
     'cursor': next_cursor.urlsafe() if next_cursor else '',

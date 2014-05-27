@@ -3337,9 +3337,9 @@ def search(request):
   # with the cursor after the last item.
   filtered_results = []
   next_cursor = None
-  query_itertor = q.iter(limit=limit, start_cursor=cursor, produce_cursors=True)
+  query_iter = q.iter(limit=limit, start_cursor=cursor, produce_cursors=True)
 
-  for result in query_itertor:
+  for result in query_iter:
     if keys_only:
       # There's not enough information to filter. The only thing that is leaked
       # is the issue's key.
@@ -3348,8 +3348,11 @@ def search(request):
       filtered_results.append(result)
 
     if len(filtered_results) >= limit:
-      next_cursor = query_itertor.cursor_after()
       break
+
+  # If any results are returned, also include a cursor to try to get more.
+  if filtered_results:
+    next_cursor = query_iter.cursor_after()
 
   data = {
     'cursor': next_cursor.urlsafe() if next_cursor else '',
