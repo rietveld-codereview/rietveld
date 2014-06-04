@@ -26,6 +26,7 @@ from codereview import views
 from codereview.responses import HttpTextResponse
 
 from google.appengine.ext import db
+from google.appengine.ext import ndb
 from google.appengine.runtime import DeadlineExceededError
 
 from django.core.urlresolvers import reverse
@@ -50,7 +51,7 @@ def _get_revert_description(request, revert_reason, reviewers, original_issue):
   revert_description = []
   # Contain link to original CL.
   original_issue_link = request.build_absolute_uri(
-      reverse('codereview.views.show', args=[original_issue.key().id()]))
+      reverse('codereview.views.show', args=[original_issue.key.id()]))
   revert_description.append('Revert of %s (%s)' % (original_issue.subject,
                                                    original_issue_link))
   # Display the reason for reverting.
@@ -188,7 +189,7 @@ def revert_patchset(request):
   pending_commits.append(issue);
 
   # Create the new revert patchset to use as the key in the new patches.
-  ps_id, _ = models.PatcheSet.allocate_ids(1, parent=issue.key)
+  ps_id, _ = models.PatchSet.allocate_ids(1, parent=issue.key)
   ps_key = ndb.Key(models.PatchSet, ps_id, parent=issue.key)
   patchset = models.PatchSet(
       issue=issue.key,
@@ -210,8 +211,8 @@ def revert_patchset(request):
 
     # Find the original content and patched content.
     if original_patch.is_binary:
-      original_content = original_patch.content
-      original_patched_content = original_patch.patched_content
+      original_content = original_patch.content.get()
+      original_patched_content = original_patch.patched_content.get()
     else:
       original_content = original_patch.get_content()
       original_patched_content = original_patch.get_patched_content()
@@ -269,8 +270,8 @@ def revert_patchset(request):
     pending_commits.append(content)
     pending_commits.append(patched_content)
 
-    patch.content = content
-    patch.patched_content = patched_content
+    patch.content = content.key
+    patch.patched_content = patched_content.key
     pending_commits.append(patch)
 
   # Commit the gathered revert Issue, PatchSet, Patches and Contents.
