@@ -1030,15 +1030,9 @@ class Account(ndb.Model):
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
 
-  lower_email = ndb.StringProperty()
-  lower_nickname = ndb.StringProperty()
+  lower_email = ndb.ComputedProperty(lambda self: self.email.lower())  
+  lower_nickname = ndb.ComputedProperty(lambda self: self.nickname.lower())
   xsrf_secret = ndb.BlobProperty()
-
-  # Note that this doesn't get called when doing multi-entity puts.
-  def put(self):
-    self.lower_email = str(self.email).lower()
-    self.lower_nickname = self.nickname.lower()
-    super(Account, self).put()
 
   @classmethod
   def get_id_for_email(cls, email):
@@ -1056,8 +1050,8 @@ class Account(ndb.Model):
     if account is not None:
       return account
     nickname = cls.create_nickname_for_user(user)
-    return cls.get_or_insert(id_str, user=user, email=email, nickname=nickname,
-                             fresh=True)
+    return cls.get_or_insert(
+      id_str, user=user, email=email, nickname=nickname, fresh=True)
 
   @classmethod
   def create_nickname_for_user(cls, user):
