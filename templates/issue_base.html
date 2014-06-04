@@ -2,14 +2,15 @@
 
 {%block mainmenu%}
   <a href="{%url codereview.views.index%}" class="active">Issues</a>
-  <a href="{%url codereview.views.repos%}">Repositories</a>
   <a href="{%url codereview.views.search%}">Search</a>
 {%endblock%}
 
 
 {%block mainmenu2%}
   {%if user%}
+    {%comment%}
     <a href="{%url codereview.views.use_uploadpy%}">Create Issue</a>
+    {%endcomment%}
     &nbsp;&nbsp;&nbsp;
     <a href="{%url codereview.views.mine%}">My Issues</a>
     |
@@ -99,12 +100,18 @@
           {%endif%}
           {%if issue.base%}
           <div><b>Base URL:</b><br/>
+            {%if src_url%}
+              <a href="{{src_url}}" target="blank">
+            {%endif%}
             {{issue.base}}
+            {%if src_url%}
+              </a>
+            {%endif%}
           </div>
           {%endif%}
           <div><b>Visibility:</b><br/>
             {%if issue.private%}
-                Private. Only viewable by reviewers and CCs.
+                Private/Protected. Only viewable by @chromium and @google accounts.
             {% else %}
                 Public.
             {%endif%}

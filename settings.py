@@ -16,6 +16,11 @@
 
 import logging
 import os
+import re
+
+DISALLOWED_USER_AGENTS = (
+    re.compile(r'^Googlebot'),
+)
 
 from google.appengine.api import app_identity
 
@@ -56,6 +61,8 @@ MIDDLEWARE_CLASSES = (
     'codereview.middleware.AddHSTSHeaderMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',
     'codereview.middleware.PropagateExceptionMiddleware',
+    # TODO: figure how/when to re-enable these redirects.
+    #'codereview.middleware.RedirectDotVersionMiddleware',
 )
 ROOT_URLCONF = 'urls'
 TEMPLATE_CONTEXT_PROCESSORS = (
@@ -79,6 +86,7 @@ MEDIA_URL = '/static/'
 appid = app_identity.get_application_id()
 RIETVELD_INCOMING_MAIL_ADDRESS = ('reply@%s.appspotmail.com' % appid)
 RIETVELD_INCOMING_MAIL_MAX_SIZE = 500 * 1024  # 500K
+RIETVELD_INCOMING_MAIL_RECOGNIZE_LGTM = False
 RIETVELD_REVISION = '<unknown>'
 try:
     RIETVELD_REVISION = open(
@@ -86,6 +94,16 @@ try:
     ).read()
 except:
     pass
+
+# When sending an email in response to an email, we don't know which domain
+# name is the preferred one for accessing the site, so we use this dict to build
+# URLs to put in the email message.  If the app_id is not found listed below,
+# then the canonical app_id.appspot.com domain is used.  A dict is used rather than
+# a simple string constant to make it safer to deploy and use staging instances
+# and other instances of the app.
+PREFERRED_DOMAIN_NAMES = {
+  'chromiumcodereview-hr': 'codereview.chromium.org',
+  }
 
 UPLOAD_PY_SOURCE = os.path.join(os.path.dirname(__file__), 'upload.py')
 
