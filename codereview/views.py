@@ -926,7 +926,7 @@ def edit_patchset_title(request):
   patchset.message = request.POST.get('patchset_title')
   patchset.put()
 
-  return HttpResponse('OK', content_type='text/plain') 
+  return HttpResponse('OK', content_type='text/plain')
 
 
 @deco.admin_required
@@ -1145,7 +1145,7 @@ def upload_content(request):
         patch.patched_content = content.key
       else:
         patch.content = content.key
-      patch.put()        
+      patch.put()
       return HttpTextResponse('OK')
     except db.TransactionFailedError as err:
       logging.exception(err)
@@ -3236,7 +3236,7 @@ def search(request):
     datastore_query.PropertyOrder.DESCENDING
     if sorted_by.startswith('-') else datastore_query.PropertyOrder.ASCENDING)
   q = q.order(datastore_query.PropertyOrder(sorted_by.lstrip('-'), direction))
-  
+
   # Update the cursor value in the result.
   if requested_format == 'html':
     nav_params = dict(

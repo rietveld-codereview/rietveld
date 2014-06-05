@@ -498,9 +498,9 @@ class PatchSet(ndb.Model):
       """Sort patches by filename, except .h files before .c files."""
       base, ext = os.path.splitext(patch.filename)
       return (base, ext not in ('.h', '.hxx', '.hpp'), ext)
-    
+
     patch_list = list(Patch.query(ancestor=self.key))
-    return sorted(patch_list, key=reading_order)    
+    return sorted(patch_list, key=reading_order)
 
   def update_comment_count(self, n):
     """Increment the n_comments property by n."""
@@ -1030,7 +1030,7 @@ class Account(ndb.Model):
   # Current user's Account.  Updated by middleware.AddUserToRequestMiddleware.
   current_user_account = None
 
-  lower_email = ndb.ComputedProperty(lambda self: self.email.lower())  
+  lower_email = ndb.ComputedProperty(lambda self: self.email.lower())
   lower_nickname = ndb.ComputedProperty(lambda self: self.nickname.lower())
   xsrf_secret = ndb.BlobProperty()
 
