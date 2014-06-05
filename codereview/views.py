@@ -2937,7 +2937,8 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   if my_email in cc:
     cc.remove(my_email)
   issue_id = issue.key.id()
-  subject = '%s (issue %d)' % (issue.subject, issue_id)
+  subject = '%s (issue %d by %s)' % (
+    issue.subject, issue_id, issue.owner.email())
   patch = None
   if attach_patch:
     subject = 'PATCH: ' + subject
