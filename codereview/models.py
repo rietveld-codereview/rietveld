@@ -267,8 +267,7 @@ class Issue(ndb.Model):
     updates_for_set = set(self.updates_for)
     approval_dict = {r: None for r in self.reviewers}
     self.num_messages = 0
-    old_messages = Message.query(ancestor=self.key).filter(
-        Message.draft == False)
+    old_messages = Message.query(Message.draft == False, ancestor=self.key)
     for msg in itertools.chain(old_messages, msgs):
       self.num_messages += 1
       if msg.sender == self.owner.email():
@@ -459,9 +458,8 @@ def _calculate_delta(patch, patchset_id, patchsets):
       # other (patchset) is too big to hold all the patches inside itself, so
       # we need to go to the datastore.  Use the index to see if there's a
       # patch against our current file in other.
-      query = Patch.query()
-      query = query.filter(Patch.filename == patch.filename)
-      query = query.filter(Patch.patchset == other.key)
+      query = Patch.query(
+          Patch.filename == patch.filename, Patch.patchset == other.key)
       other_patches = query.fetch(100)
       if other_patches and len(other_patches) > 1:
         logging.info("Got %s patches with the same filename for a patchset",
@@ -519,7 +517,7 @@ class PatchSet(ndb.Model):
   def calculate_deltas(self):
     patchset_id = self.key.id()
     patchsets = None
-    q = Patch.query(ancestor=self.key).filter(Patch.delta_calculated == False)
+    q = Patch.query(Patch.delta_calculated == False, ancestor=self.key)
     for patch in q:
       if patchsets is None:
         # patchsets is retrieved on first iteration because patchsets
