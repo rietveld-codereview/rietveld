@@ -746,11 +746,11 @@ def view_all(request, index_call=False):
   if closed is not None:
     nav_parameters['closed'] = int(closed)
 
-  query = models.Issue.query().filter(models.Issue.private == False)
+  query = models.Issue.query(
+      models.Issue.private == False).order(-models.Issue.modified)
   if closed is not None:
     # return only opened or closed issues
     query = query.filter(models.Issue.closed == closed)
-  query = query.order(-models.Issue.modified)
 
   return _paginate_issues(reverse(view_all),
                           request,
@@ -824,14 +824,16 @@ def show_user(request):
 def _show_user(request):
   user = request.user_to_show
   if user == request.user:
-    query = models.Comment.query().filter(models.Comment.draft == True)
-    query = query.filter(models.Comment.author == request.user).fetch(100)
-    draft_keys = set(d.key.parent().parent().parent() for d in query)
-    draft_issues = ndb.get_multi(draft_keys)
+    draft_query = models.Comment.query(
+        models.Comment.draft == True, models.Comment.author == request.user)
+    draft_issue_keys = {
+        draft_key.parent().parent().parent()
+        for draft_key in draft_query.fetch(100, keys_only=True)}
+    draft_issues = ndb.get_multi(draft_issue_keys)
     # Reduce the chance of someone trying to block himself.
     show_block = False
   else:
-    draft_issues = draft_keys = []
+    draft_issues = draft_issue_keys = []
     show_block = request.user_is_admin
   my_issues = [
       issue for issue in ndb.gql(
@@ -840,7 +842,7 @@ def _show_user(request):
           'ORDER BY modified DESC '
           'LIMIT 100',
           user)
-      if issue.key not in draft_keys and issue.view_allowed]
+      if issue.key not in draft_issue_keys and issue.view_allowed]
   review_issues = [
       issue for issue in ndb.gql(
           'SELECT * FROM Issue '
@@ -848,7 +850,7 @@ def _show_user(request):
           'ORDER BY modified DESC '
           'LIMIT 100',
           user.email().lower())
-      if (issue.key not in draft_keys and issue.owner != user
+      if (issue.key not in draft_issue_keys and issue.owner != user
           and issue.view_allowed)]
   closed_issues = [
       issue for issue in ndb.gql(
@@ -858,7 +860,7 @@ def _show_user(request):
           'LIMIT 100',
           datetime.datetime.now() - datetime.timedelta(days=7),
           user)
-      if issue.key not in draft_keys and issue.view_allowed]
+      if issue.key not in draft_issue_keys and issue.view_allowed]
   cc_issues = [
       issue for issue in ndb.gql(
           'SELECT * FROM Issue '
@@ -866,7 +868,7 @@ def _show_user(request):
           'ORDER BY modified DESC '
           'LIMIT 100',
           user.email())
-      if (issue.key not in draft_keys and issue.owner != user
+      if (issue.key not in draft_issue_keys and issue.owner != user
           and issue.view_allowed)]
   all_issues = my_issues + review_issues + closed_issues + cc_issues
 
@@ -938,13 +940,13 @@ def block_user(request):
         # email communication anymore.
         tbd = {}
         email = account.user.email()
-        query = models.Issue.query().filter(models.Issue.reviewers == email)
+        query = models.Issue.query(models.Issue.reviewers == email)
         for issue in query:
           issue.reviewers.remove(email)
           issue.calculate_updates_for()
           tbd[issue.key] = issue
         # look for issues where blocked user is in cc only
-        query = models.Issue.query().filter(models.Issue.cc == email)
+        query = models.Issue.query(models.Issue.cc == email)
         for issue in query:
           if issue.key in tbd:
             # Update already changed instance instead. This happens when the
@@ -1206,10 +1208,10 @@ def upload_complete(request, patchset_id=None):
   # Check for completeness
   errors = []
   if patchset is not None:
-    query = models.Patch.query(ancestor=patchset.key).filter(
-      models.Patch.is_binary == False)
-    # all uploaded file have a status
-    query = query.filter(models.Patch.status == None)
+    query = models.Patch.query(
+        models.Patch.is_binary == False, models.Patch.status == None,
+        ancestor=patchset.key)
+    # All uploaded files have a status, any with status==None are missing.
     if query.count() > 0:
       errors.append('Base files missing.')
 
@@ -1616,14 +1618,12 @@ def patchset(request):
 def account(request):
   """/account/?q=blah&limit=10&timestamp=blah - Used for autocomplete."""
   def searchAccounts(prop, domain, added, response):
-    query = request.GET.get('q').lower()
+    prefix = request.GET.get('q').lower()
     limit = _clean_int(request.GET.get('limit'), 10, 10, 100)
 
-    accounts = models.Account.query()
-    accounts = accounts.filter(prop >= query)
-    accounts = accounts.filter(prop < query + u"\ufffd")
-    accounts = accounts.order(prop)
-    for account in accounts:
+    accounts_query = models.Account.query(
+        prop >= prefix, prop < prefix + u"\ufffd").order(prop)
+    for account in accounts_query:
       if account.blocked:
         continue
       if account.key in added:
@@ -1822,8 +1822,7 @@ def tarball(request):
   """/tarball/<issue>/<patchset>/[lr] - Returns a .tar.bz2 file
   containing a/ and b/ trees of the complete files for the entire patchset."""
 
-  patches = (models.Patch.query()
-             .filter(models.Patch.patchset == request.patchset.key)
+  patches = (models.Patch.query(models.Patch.patchset == request.patchset.key)
              .order(models.Patch.filename)
              .fetch(1000))
 
@@ -2858,8 +2857,9 @@ def publish(request):
 @deco.xsrf_required
 def delete_drafts(request):
   """Deletes all drafts of the current user for an issue."""
-  query = models.Comment.query(ancestor=request.issue.key).filter(
-    models.Comment.author == request.user).filter(models.Comment.draft == True)
+  query = models.Comment.query(
+      models.Comment.author == request.user, models.Comment.draft == True,
+      ancestor=request.issue.key)
   keys = query.fetch(keys_only=True)
   ndb.delete_multi(keys)
   request.issue.calculate_draft_count_by_user()
@@ -3471,10 +3471,9 @@ def task_migrate_entities(request):
   model = getattr(models, kind)
   encoded_key = request.POST.get('key')
   model_cls = model.__class__
-  query = model.query().filter(model_cls.owner == old_account.user)
+  query = model.query(model_cls.owner == old_account.user).order(model_cls.key)
   if encoded_key:
     query = query.filter(model_cls.key > ndb.Key(urlsafe=encoded_key))
-  query = query.order(model_cls.key)
   tbd = []
   for entity in query.fetch(batch_size):
     entity.owner = new_account.user
@@ -4175,8 +4174,9 @@ def yield_people_issue_to_update(day_to_process, issues, messages_looked_up):
   cursor = None
   while True:
     query = models.Message.query(
-      default_options=ndb.QueryOptions(keys_only=True)).filter(
-      models.Message.date >= day_to_process).order(models.Message.date)
+        models.Message.date >= day_to_process,
+        default_options=ndb.QueryOptions(keys_only=True)).order(
+        models.Message.date)
     # Someone sane would ask: why the hell do this? I don't know either but
     # that's the only way to not have it throw an exception after 60 seconds.
     if cursor:
@@ -4555,9 +4555,9 @@ def update_monthly_stats(cursor, day_to_process):
     futures = []
     days_stats_fetched = 0
     yielded = 0
-    options = ndb.QueryOptions(keys_only=True)
-    q = models.AccountStatsDay.query(default_options=options)
-    q = q.filter(models.AccountStatsDay.modified >= day_to_process)
+    q = models.AccountStatsDay.query(
+        models.AccountStatsDay.modified >= day_to_process,
+        default_options=ndb.QueryOptions(keys_only=True))
     months_to_regenerate = set()
     while True:
       curs = datastore_query.Cursor(urlsafe=cursor or '')
@@ -4832,8 +4832,7 @@ def leaderboard_impl(when, limit):
       if when.count('-') == 2 else models.AccountStatsMulti)
   if months:
     # Use the IN operator to simultaneously select the 3 months.
-    results = cls.query().filter(
-        cls.name.IN(months)).order(cls.score).fetch(limit)
+    results = cls.query(cls.name.IN(months)).order(cls.score).fetch(limit)
     # Then merge all the results accordingly.
     tops = {}
     for i in results:
@@ -4846,7 +4845,7 @@ def leaderboard_impl(when, limit):
     tops = sorted(tops.itervalues(), key=lambda x: x.score)
   else:
     # Grabs the pre-calculated entities or daily entity.
-    tops = cls.query().filter(cls.name == when).order(cls.score).fetch(limit)
+    tops = cls.query(cls.name == when).order(cls.score).fetch(limit)
 
   # Remove anyone with a None score.
   return [t for t in tops if t.score is not None]
