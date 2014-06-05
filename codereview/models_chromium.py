@@ -87,9 +87,9 @@ class TryserverBuilders(ndb.Model):
           'android-buildbots/json/trybots',
       'http://skia-tree-status-staging.appspot.com/redirect/' +
           'compile-buildbots/json/trybots',
-      'http://skia-tree-status-staging.appspot.com/redirect/' + 
+      'http://skia-tree-status-staging.appspot.com/redirect/' +
           'fyi-buildbots/json/trybots',
-    ], 
+    ],
     'tryserver.v8': [
       'http://build.chromium.org/p/tryserver.v8/json/builders'
     ],
@@ -137,7 +137,7 @@ class TryserverBuilders(ndb.Model):
           category = parsed_json[builder].get('category', 'None')
           new_json_contents.setdefault(tryserver, {}).setdefault(
               category, []).append(builder)
-      
+
     instance = cls.get_instance()
     instance.json_contents = json.dumps(new_json_contents)
     instance.put()

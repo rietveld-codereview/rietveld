@@ -916,7 +916,7 @@ def edit_patchset_title(request):
   patchset.message = request.POST.get('patchset_title')
   patchset.put()
 
-  return HttpResponse('OK', content_type='text/plain') 
+  return HttpResponse('OK', content_type='text/plain')
 
 
 @deco.admin_required
@@ -1043,7 +1043,7 @@ def upload(request):
         new_content_entities = []
         patches = list(patchset.patches)
         logging.info('len(patches) = %r', len(patches))
-        
+
         existing_patches = {}
         patchsets = list(issue.patchsets)
         if len(patchsets) > 1:
@@ -1133,7 +1133,7 @@ def upload_content(request):
         patch.patched_content = content.key
       else:
         patch.content = content.key
-      patch.put()        
+      patch.put()
       return HttpTextResponse('OK')
     except db.TransactionFailedError as err:
       logging.exception(err)
@@ -1496,7 +1496,7 @@ def replace_bug(message):
   bugs = re.split(r"[\s,]+", message.group(1))
   base_tracker_url = 'http://code.google.com/p/%s/issues/detail?id=%s'
   valid_trackers = ('chromium', 'chromium-os', 'chrome-os-partner', 'gyp',
-                    'skia', 'v8')
+                    'skia', 'v8', 'webrtc')
   urls = []
   for bug in bugs:
     if not bug:
@@ -3317,7 +3317,7 @@ def search(request):
     datastore_query.PropertyOrder.DESCENDING
     if sorted_by.startswith('-') else datastore_query.PropertyOrder.ASCENDING)
   q = q.order(datastore_query.PropertyOrder(sorted_by.lstrip('-'), direction))
-  
+
   # Update the cursor value in the result.
   if requested_format == 'html':
     nav_params = dict(
@@ -3628,7 +3628,7 @@ def _absolute_url_in_preferred_domain(handler, args=None):
   host = django_settings.PREFERRED_DOMAIN_NAMES.get(app_id, canonical_host)
   return 'https://%s%s' % (host, handler_url_path)
 
-  
+
 LGTM_REMINDER_BODY = """
 REMINDER: If this change looks good, please use the LGTM button at
 %s
