@@ -36,3 +36,15 @@ queue:
     task_retry_limit: 60
     min_backoff_seconds: 10
     max_backoff_seconds: 60
+
+- name: delete-old-pending-jobs-task
+  rate: 1/s
+
+- name: delete-n-sent-messages
+  rate: 5/s
+  bucket_size: 10             # set to your number of instances
+  retry_parameters:
+    task_retry_limit: 100
+    min_backoff_seconds: 10
+    max_backoff_seconds: 600
+

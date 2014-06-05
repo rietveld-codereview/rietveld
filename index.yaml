@@ -84,11 +84,6 @@ indexes:
 
 - kind: Issue
   properties:
-  - name: __key__
-    direction: desc
-
-- kind: Issue
-  properties:
   - name: cc
   - name: closed
   - name: modified
@@ -97,6 +92,32 @@ indexes:
 - kind: Issue
   properties:
   - name: closed
+  - name: commit
+  - name: modified
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: commit
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: commit
+  - name: private
+  - name: modified
+
+- kind: Issue
+  properties:
+  - name: closed
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: closed
   - name: owner
   - name: created
 
@@ -147,12 +168,6 @@ indexes:
   properties:
   - name: owner
   - name: created
-
-- kind: Issue
-  properties:
-  - name: owner
-  - name: created
-    direction: desc
 
 - kind: Issue
   properties:
@@ -227,11 +242,6 @@ indexes:
   - name: patchset
   - name: filename
 
-- kind: Patch
-  ancestor: yes
-  properties:
-  - name: filename
-
 - kind: PatchSet
   properties:
   - name: issue
@@ -247,3 +257,14 @@ indexes:
   properties:
   - name: created
     direction: desc
+
+- kind: TryJobResult
+  properties:
+  - name: result
+  - name: master
+  - name: timestamp
+
+- kind: TryJobResult
+  properties:
+  - name: result
+  - name: timestamp
