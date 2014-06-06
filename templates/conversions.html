@@ -8,7 +8,7 @@
   {%if warning %}
     {{ warning }}
   {%endif%}
-  <form action="{%url codereview.views.conversions%}" method="post">
+  <form action="{%url codereview.views_chromium.conversions%}" method="post">
   <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
 {%endif%}
 <tr><th>Base url<th>Source code url
