@@ -448,7 +448,8 @@ def edit_flags(request):
 @deco.xsrf_required
 def conversions(request):
   """/conversions - Show and edit the list of base=>source code URL maps."""
-  rules = models_chromium.UrlMap.gql('ORDER BY base_url_template')
+  rules = models_chromium.UrlMap.query().order(
+      models_chromium.UrlMap.base_url_template).fetch()
   if request.method != 'POST':
     return responses.respond(request, 'conversions.html', {
             'rules': rules})
@@ -465,12 +466,12 @@ def conversions(request):
   for key, _ in request.POST.iteritems():
     if key.startswith('del '):
       del_key = key[4:]
-      urlmap = models_chromium.UrlMap.gql(
-          'WHERE base_url_template = :1', del_key)
+      urlmap_query = models_chromium.UrlMap.query(
+          models_chromium.UrlMap.base_url_template == del_key)
       if not urlmap:
         logging.error('No map for %s found' % del_key)
         continue
-      db.delete(urlmap)
+      ndb.delete_multi(urlmap_query.fetch(keys_only=True))
   base_url = request.POST.get('base_url_template')
   src_url = request.POST.get('source_code_url_template')
   if base_url and src_url:
@@ -480,12 +481,13 @@ def conversions(request):
     except re.error, err:
       warning = 'Regex error "%s"' % err
     if not warning:
-      urlmap = models_chromium.UrlMap.gql(
-          'WHERE base_url_template = :1', base_url)
-      if urlmap.count():
+      urlmap_query = models_chromium.UrlMap.query(
+          models_chromium.UrlMap.base_url_template == base_url)
+      if urlmap_query.count():
         warning = 'Attempt to add a duplicate Base Url'
     if warning:
-      rules = models_chromium.UrlMap.gql('ORDER BY base_url_template')
+      rules = models_chromium.UrlMap.query().order(
+          models_chromium.UrlMap.base_url_template).fetch()
       return responses.respond(request, 'conversions.html', {
          'warning': warning,
          'rules': rules,

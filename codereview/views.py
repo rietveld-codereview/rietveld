@@ -1510,7 +1510,8 @@ def replace_bug(message):
 
 def _map_base_url(base):
   """Check if Base URL can be converted into a source code viewer URL."""
-  for rule in models_chromium.UrlMap.gql('ORDER BY base_url_template'):
+  for rule in models_chromium.UrlMap.query().order(
+      models_chromium.UrlMap.base_url_template):
     base_template = r'^%s$' % rule.base_url_template
     match = re.match(base_template, base)
     if not match:
