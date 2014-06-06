@@ -186,8 +186,7 @@ class Issue(ndb.Model):
 
   def _get_num_comments(self):
     """Helper to compute the number of comments through a query."""
-    return Comment.gql(
-      'WHERE ANCESTOR IS :1 AND draft = FALSE', self.key).count()
+    return Comment.query(Comment.draft == False, ancestor=self.key).count()
 
   _num_drafts = None
 
@@ -327,13 +326,11 @@ class Issue(ndb.Model):
         patchset_id = patchsets[-1].key.id()
 
       if user:
-        drafts = list(Comment.gql(
-          'WHERE ANCESTOR IS :1 AND draft = TRUE AND author = :2', self.key,
-          user))
+        drafts = list(Comment.query(
+            Comment.draft == True, Comment.author == user, ancestor=self.key))
       else:
         drafts = []
-      comments = list(
-        Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE', self.key))
+      comments = list(Comment.query(Comment.draft == False, ancestor=self.key))
       # TODO(andi) Remove draft_count attribute, we already have _num_drafts
       # and it's additional magic.
       self.draft_count = len(drafts)
@@ -847,8 +844,8 @@ class Patch(ndb.Model):
     The value is cached.
     """
     if self._num_comments is None:
-      self._num_comments = Comment.gql(
-        'WHERE patch = :1 AND draft = FALSE', self.key).count()
+      self._num_comments = Comment.query(
+          Comment.patch == self.key, Comment.draft == False).count()
     return self._num_comments
 
   _num_my_comments = None
@@ -863,9 +860,9 @@ class Patch(ndb.Model):
       if account is None:
         self._num_my_comments = 0
       else:
-        query = Comment.gql(
-          'WHERE patch = :1 AND draft = FALSE AND author = :2',
-          self.key, account.user)
+        query = Comment.query(
+            Comment.patch == self.key, Comment.draft == False,
+            Comment.author == account.user)
         self._num_my_comments = query.count()
     return self._num_my_comments
 
@@ -882,9 +879,9 @@ class Patch(ndb.Model):
       if account is None:
         self._num_drafts = 0
       else:
-        query = Comment.gql(
-          'WHERE patch = :1 AND draft = TRUE AND author = :2',
-          self.key, account.user)
+        query = Comment.query(
+            Comment.patch == self.key, Comment.draft == True,
+            Comment.author == account.user)
         self._num_drafts = query.count()
     return self._num_drafts
 
@@ -1190,10 +1187,10 @@ class Account(ndb.Model):
     """Returns a unique nickname for a user."""
     name = nickname = user.email().split('@', 1)[0]
     next_char = chr(ord(nickname[0].lower())+1)
-    existing_nicks = [account.lower_nickname
-                      for account in cls.gql(('WHERE lower_nickname >= :1 AND '
-                                              'lower_nickname < :2'),
-                                             nickname.lower(), next_char)]
+    existing_nicks = [
+      account.lower_nickname for account in cls.query(
+          cls.lower_nickname >= nickname.lower(),
+          cls.lower_nickname < next_char)]
     suffix = 0
     while nickname.lower() in existing_nicks:
       suffix += 1
@@ -1347,7 +1344,7 @@ class Account(ndb.Model):
     # We're looking for the Issue key id.  The ancestry of comments goes:
     # Issue -> PatchSet -> Patch -> Comment.
     draft_query = Comment.query(
-      Comment.author == self.user, Comment.draft == True)
+        Comment.author == self.user, Comment.draft == True)
     issue_ids = set(comment.key.parent().parent().parent().id()
                     for comment in draft_query)
     self._drafts = list(issue_ids)
