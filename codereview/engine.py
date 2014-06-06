@@ -243,10 +243,11 @@ def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
   old_dict = {}
   new_dict = {}
   for patch, dct in [(old_patch, old_dict), (new_patch, new_dict)]:
-    # XXX GQL doesn't support OR yet...  Otherwise we'd be using that.
     if patch:  # Skip if the patchset had no patch for this file.
-      for comment in models.Comment.gql(
-          'WHERE patch = :1 AND left = FALSE ORDER BY date', patch.key):
+      query = models.Comment.query(
+          models.Comment.patch == patch.key,
+          models.Comment.left == False).order(models.Comment.date)
+      for comment in query:
         if comment.draft and comment.author != request.user:
           continue  # Only show your own drafts
         comment.complete()
@@ -287,11 +288,9 @@ def _GetComments(request):
   """
   old_dict = {}
   new_dict = {}
-  # XXX GQL doesn't support OR yet...  Otherwise we'd be using
-  # .gql('WHERE patch = :1 AND (draft = FALSE OR author = :2) ORDER BY data',
-  #      patch, request.user)
-  for comment in models.Comment.gql('WHERE patch = :1 ORDER BY date',
-                                    request.patch.key):
+  query = models.Comment.query(
+      models.Comment.patch == request.patch.key).order(models.Comment.date)
+  for comment in query:
     if comment.draft and comment.author != request.user:
       continue  # Only show your own drafts
     comment.complete()

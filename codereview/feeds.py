@@ -100,8 +100,9 @@ class ReviewsFeed(BaseUserFeed):
   description_template = 'feeds/reviews_description.html'
 
   def items(self, obj):
-    return _rss_helper(obj.email, 'closed = FALSE AND reviewers = :1',
-                       use_email=True)
+    return _rss_helper(
+      obj.email, models.Issue.closed == False, models.Issue.reviewers,
+      use_email=True)
 
 
 class ClosedFeed(BaseUserFeed):
@@ -110,7 +111,8 @@ class ClosedFeed(BaseUserFeed):
   description_template = 'feeds/closed_description.html'
 
   def items(self, obj):
-    return _rss_helper(obj.email, 'closed = TRUE AND owner = :1')
+    return _rss_helper(
+      obj.email, models.Issue.closed == True, models.Issue.owner)
 
 
 class MineFeed(BaseUserFeed):
@@ -119,7 +121,8 @@ class MineFeed(BaseUserFeed):
   description_template = 'feeds/mine_description.html'
 
   def items(self, obj):
-    return _rss_helper(obj.email, 'closed = FALSE AND owner = :1')
+    return _rss_helper(
+      obj.email, models.Issue.closed == False, models.Issue.owner)
 
 
 class AllFeed(BaseFeed):
@@ -128,8 +131,9 @@ class AllFeed(BaseFeed):
   description_template = 'feeds/all_description.html'
 
   def items(self):
-    query = models.Issue.gql('WHERE closed = FALSE AND private = FALSE '
-                             'ORDER BY modified DESC')
+    query = models.Issue.query(
+        models.Issue.closed == False, models.Issue.private == False).order(
+        -models.Issue.modified)
     return query.fetch(RSS_LIMIT)
 
 
@@ -162,13 +166,13 @@ class OneIssueFeed(BaseFeed):
 # Maximum number of issues reported by RSS feeds
 RSS_LIMIT = 20
 
-def _rss_helper(email, query_string, use_email=False):
+def _rss_helper(email, query_cond, query_attr, use_email=False):
   account = models.Account.get_account_for_email(email)
-  if account is None:
-    issues = []
-  else:
-    query = models.Issue.gql('WHERE %s AND private = FALSE '
-                             'ORDER BY modified DESC' % query_string,
-                             use_email and account.email or account.user)
-    issues = query.fetch(RSS_LIMIT)
-  return issues
+  if not account:
+    return []
+
+  attr_val = use_email and account.email or account.user
+  query = models.Issue.query(
+      query_cond, query_attr == attr_val, models.Issue.private == False).order(
+      -models.Issue.modified)
+  return query.fetch(RSS_LIMIT)

@@ -183,8 +183,9 @@ def patch_filename_required(func):
 
   @patchset_required
   def patch_wrapper(request, patch_filename, *args, **kwds):
-    patch = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                             request.patchset.key, patch_filename).get()
+    patch = models.Patch.query(
+        models.Patch.patchset == request.patchset.key,
+        models.Patch.filename == patch_filename).get()
     if patch is None and patch_filename.isdigit():
       # It could be an old URL which has a patch ID instead of a filename
       patch = models.Patch.get_by_id(int(patch_filename),

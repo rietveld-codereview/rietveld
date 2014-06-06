@@ -368,11 +368,11 @@ class SettingsForm(forms.Form):
       raise forms.ValidationError('Choose a different nickname.')
 
     # Look for existing nicknames
-    accounts = list(models.Account.gql('WHERE lower_nickname = :1',
-                                       nickname.lower()))
-    for account in accounts:
-      if account.key == models.Account.current_user_account.key:
-        continue
+    query = models.Account.query(
+        models.Account.lower_nickname == nickname.lower())
+    if any(
+        account.key != models.Account.current_user_account.key
+        for account in query):
       raise forms.ValidationError('This nickname is already in use.')
 
     return nickname
@@ -846,38 +846,29 @@ def _show_user(request):
     draft_issues = draft_issue_keys = []
     show_block = request.user_is_admin
   my_issues = [
-      issue for issue in ndb.gql(
-          'SELECT * FROM Issue '
-          'WHERE closed = FALSE AND owner = :1 '
-          'ORDER BY modified DESC '
-          'LIMIT 100',
-          user)
+      issue for issue in models.Issue.query(
+          models.Issue.closed == False, models.Issue.owner == user).order(
+            -models.Issue.modified).fetch(100)
       if issue.key not in draft_issue_keys and issue.view_allowed]
   review_issues = [
-      issue for issue in ndb.gql(
-          'SELECT * FROM Issue '
-          'WHERE closed = FALSE AND reviewers = :1 '
-          'ORDER BY modified DESC '
-          'LIMIT 100',
-          user.email().lower())
+      issue for issue in models.Issue.query(
+          models.Issue.closed == False,
+          models.Issue.reviewers == user.email().lower()).order(
+            -models.Issue.modified).fetch(100)
       if (issue.key not in draft_issue_keys and issue.owner != user
           and issue.view_allowed)]
+  earliest_closed = datetime.datetime.utcnow() - datetime.timedelta(days=7)
   closed_issues = [
-      issue for issue in ndb.gql(
-          'SELECT * FROM Issue '
-          'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
-          'ORDER BY modified DESC '
-          'LIMIT 100',
-          datetime.datetime.now() - datetime.timedelta(days=7),
-          user)
+      issue for issue in models.Issue.query(
+          models.Issue.closed == True,
+          models.Issue.modified > earliest_closed,
+          models.Issue.owner == user).order(
+            -models.Issue.modified).fetch(100)
       if issue.key not in draft_issue_keys and issue.view_allowed]
   cc_issues = [
-      issue for issue in ndb.gql(
-          'SELECT * FROM Issue '
-          'WHERE closed = FALSE AND cc = :1 '
-          'ORDER BY modified DESC '
-          'LIMIT 100',
-          user.email())
+      issue for issue in models.Issue.query(
+          models.Issue.closed == False, models.Issue.cc == user.email()).order(
+            -models.Issue.modified).fetch(100)
       if (issue.key not in draft_issue_keys and issue.owner != user
           and issue.view_allowed)]
   all_issues = my_issues + review_issues + closed_issues + cc_issues
@@ -1685,7 +1676,7 @@ def delete(request):
   tbd = [issue]
   for cls in [models.PatchSet, models.Patch, models.Comment,
               models.Message, models.Content]:
-    tbd += cls.gql('WHERE ANCESTOR IS :1', issue.key)
+    tbd += cls.query(ancestor=issue.key)
   ndb.delete_multi(entity.key for entity in tbd)
   return HttpResponseRedirect(reverse(mine))
 
@@ -1951,7 +1942,7 @@ def _issue_as_dict(issue, messages, request=None):
         'approval': m.approval,
         'disapproval': m.disapproval,
       }
-      for m in models.Message.gql('WHERE ANCESTOR IS :1', issue.key)),
+      for m in models.Message.query(ancestor=issue.key)),
       key=lambda x: x['date'])
   return values
 
@@ -1971,7 +1962,7 @@ def _patchset_as_dict(patchset, comments, request):
     'num_comments': patchset.num_comments,
     'files': {},
   }
-  for patch in models.Patch.gql("WHERE patchset = :1", patchset.key):
+  for patch in models.Patch.query(models.Patch.patchset == patchset.key):
     # num_comments and num_drafts are left out for performance reason:
     # they cause a datastore query on first access. They could be added
     # optionally if the need ever arises.
@@ -1988,8 +1979,9 @@ def _patchset_as_dict(patchset, comments, request):
     if comments:
       visible_comments = []
       requester_email = request.user.email() if request.user else 'no email'
-      for c in models.Comment.gql('WHERE patch = :patch ORDER BY date',
-                                  patch=patch.key):
+      query = models.Comment.query(models.Comment.patch == patch.key).order(
+          models.Comment.date)
+      for c in query:
         if not c.draft or requester_email == c.author.email():
           visible_comments.append({
               'author': library.get_nickname(c.author, True, request),
@@ -2240,8 +2232,9 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
     if patch_filename is None:
       patch_filename = patch_right.filename
   # Now find the corresponding patch in ps_left
-  patch_left = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                                ps_left.key, patch_filename).get()
+  patch_left = models.Patch.query(
+      models.Patch.patchset == ps_left.key,
+      models.Patch.filename == patch_filename).get()
 
   if patch_left:
     try:
@@ -2289,8 +2282,9 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
   patch_right = None
 
   if ps_right:
-    patch_right = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                                   ps_right.key, patch_filename).get()
+    patch_right = models.Patch.query(
+        models.Patch.patchset == ps_right.key,
+        models.Patch.filename == patch_filename).get()
 
   if patch_right:
     patch_id = patch_right.key.id()
@@ -2589,10 +2583,9 @@ def _inline_draft(request):
   issue.calculate_draft_count_by_user()
   issue_fut = issue.put_async()
 
-  query = models.Comment.gql(
-      'WHERE patch = :patch AND lineno = :lineno AND left = :left '
-      'ORDER BY date',
-      patch=patch.key, lineno=lineno, left=left)
+  query = models.Comment.query(
+      models.Comment.patch == patch.key, models.Comment.lineno == lineno,
+      models.Comment.left == left).order(models.Comment.date)
   comments = list(c for c in query if not c.draft or c.author == request.user)
   if comment is not None and comment.author is None:
     # Show anonymous draft even though we don't save it
@@ -2657,8 +2650,9 @@ def _get_mail_template(request, issue, full_diff=False):
   context = {}
   template = 'mails/comment.txt'
   if request.user == issue.owner:
-    if ndb.gql('SELECT * FROM Message WHERE ANCESTOR IS :1 AND sender = :2',
-               issue.key, request.user.email()).count(1) == 0:
+    query = models.Message.query(
+        models.Message.sender == request.user.email(), ancestor=issue.key)
+    if query.count(1) == 0:
       template = 'mails/review.txt'
       files, patch = _get_affected_files(issue, full_diff)
       context.update({'files': files, 'patch': patch, 'base': issue.base})
@@ -2677,9 +2671,10 @@ def publish(request):
     form_class = MiniPublishForm
   draft_message = None
   if not request.POST.get('message_only', None):
-    query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
-                                'AND draft = TRUE'), issue.key,
-                               request.user.email())
+    query = models.Message.query(
+        models.Message.issue == issue.key,
+        models.Message.sender == request.user.email(),
+        models.Message.draft == True)
     draft_message = query.get()
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
@@ -2816,9 +2811,9 @@ def _get_draft_comments(request, issue, preview=False):
   tbd = []
   # XXX Should request all drafts for this issue once, now we can.
   for patchset in issue.patchsets:
-    ps_comments = list(models.Comment.gql(
-        'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-        patchset.key, request.user))
+    ps_comments = list(models.Comment.query(
+        models.Comment.author == request.user,
+        models.Comment.draft == True, ancestor=patchset.key))
     if ps_comments:
       patches = dict((p.key, p) for p in patchset.patches)
       for p in patches.itervalues():
@@ -3102,9 +3097,10 @@ def draft_message(request):
   time out after 1 or 2 hours.  The final submit of the drafts for
   others to view *is* XSRF-protected.
   """
-  query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
-                              'AND draft = TRUE'),
-                             request.issue.key, request.user.email())
+  query = models.Message.query(
+      models.Message.issue == request.issue.key,
+      models.Message.sender == request.user.email(),
+      models.Message.draft == True)
   if query.count() == 0:
     draft_message = None
   else:
@@ -3291,8 +3287,8 @@ def search(request):
 def repos(request):
   """/repos - Show the list of known Subversion repositories."""
   # Clean up garbage created by buggy edits
-  bad_branch_keys = models.Branch.gql('WHERE owner = :1', None).fetch(
-    100, keys_only=True)
+  bad_branch_keys = models.Branch.query(models.Branch.owner == None).fetch(
+      100, keys_only=True)
   if bad_branch_keys:
     ndb.delete_multi(bad_branch_keys)
   repo_map = {}
@@ -3354,13 +3350,13 @@ BRANCHES = [
 @deco.admin_required
 def repo_init(_request):
   """/repo_init - Initialze the list of known Subversion repositories."""
-  python = models.Repository.gql("WHERE name = 'Python'").get()
+  python = models.Repository.query(models.Repository.name == 'Python').get()
   if python is None:
     python = models.Repository(name='Python', url=SVN_ROOT)
     python.put()
     pybranches = []
   else:
-    pybranches = list(models.Branch.gql('WHERE repo = :1', python))
+    pybranches = list(models.Branch.query(models.Branch.repo == python.key))
   for category, name, url in BRANCHES:
     url = python.url + url
     for br in pybranches:
@@ -3443,7 +3439,7 @@ def branch_delete(request, branch_id):
     return HttpTextResponse('You do not own this branch', status=403)
   repo = branch.repo
   branch.key.delete()
-  num_branches = models.Branch.gql('WHERE repo = :1', repo.key).count()
+  num_branches = models.Branch.query(models.Branch.repo == repo.key).count()
   if not num_branches:
     # Even if we don't own the repository?  Yes, I think so!  Empty
     # repositories have no representation on screen.
@@ -3589,14 +3585,11 @@ def _user_popup(request):
   user = request.user_to_show
   popup_html = memcache.get('user_popup:' + user.email())
   if popup_html is None:
-    num_issues_created = ndb.gql(
-      'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND owner = :1',
-      user).count()
-    num_issues_reviewed = ndb.gql(
-      'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND reviewers = :1',
-      user.email()).count()
+    num_issues_created = models.Issue.query(
+        models.Issue.closed == False, models.Issue.owner == user).count()
+    num_issues_reviewed = models.Issue.query(
+        models.Issue.closed == False,
+      models.Issue.reviewers == user.email()).count()
 
     user.nickname = models.Account.get_nickname_for_email(user.email())
     popup_html = render_to_response('user_popup.html',
