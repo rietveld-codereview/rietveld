@@ -86,15 +86,16 @@ def image_required(func):
   def image_wrapper(request, image_type, *args, **kwds):
     content = None
     if image_type == "0":
-      content = request.patch.content.get()
+      content_key = request.patch.content
     elif image_type == "1":
-      content = request.patch.patched_content.get()
+      content_key = request.patch.patched_content
+    content = content_key.get() if content_key else None      
     # Other values are erroneous so request.content won't be set.
     if not content or not content.data:
       return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
     request.mime_type = mimetypes.guess_type(request.patch.filename)[0]
-    if not request.mime_type or not request.mime_type.startswith('image/'):
-      return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
+    #if not request.mime_type or not request.mime_type.startswith('image/'):
+    #  return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
     request.content = content
     return func(request, *args, **kwds)
 
@@ -114,6 +115,23 @@ def issue_editor_required(func):
     return func(request, *args, **kwds)
 
   return issue_editor_wrapper
+
+
+def issue_uploader_required(func):
+  """Decorator that processes the issue_id argument and insists the user has
+  permission to add a patchset to it."""
+
+  @login_required
+  @issue_required
+  def issue_uploader_wrapper(request, *args, **kwds):
+    logging.info('issue_uploader_required checking')
+    if not request.issue.upload_allowed:
+      logging.info('issue_uploader_required failed')
+      return HttpTextResponse(
+          'You do not have permission to upload to this issue', status=403)
+    return func(request, *args, **kwds)
+
+  return issue_uploader_wrapper
 
 
 def issue_required(func):

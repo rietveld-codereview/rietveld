@@ -34,6 +34,8 @@ from google.appengine.ext import ndb
 from django.conf import settings
 
 from codereview import auth_utils
+from codereview import exceptions
+from codereview import invert_patches
 from codereview import patching
 from codereview import utils
 from codereview.exceptions import FetchError
@@ -42,8 +44,15 @@ from codereview.exceptions import FetchError
 CONTEXT_CHOICES = (3, 10, 25, 50, 75, 100)
 
 
-### Issues, PatchSets, Patches, Contents, Comments, Messages ###
+def is_privileged_user(user):
+  """Returns True if user is permitted special access rights."""
+  if not user:
+    return False
+  email = user.email().lower()
+  return email.endswith(('@chromium.org', '@google.com'))
 
+
+### Issues, PatchSets, Patches, Contents, Comments, Messages ###
 
 class Issue(ndb.Model):
   """The major top-level entity.
@@ -66,6 +75,7 @@ class Issue(ndb.Model):
   closed = ndb.BooleanProperty(default=False)
   private = ndb.BooleanProperty(default=False)
   n_comments = ndb.IntegerProperty()
+  commit = ndb.BooleanProperty(default=False)
 
   # NOTE: Use num_messages instead of using n_messages_sent directly.
   n_messages_sent = ndb.IntegerProperty()
@@ -93,13 +103,27 @@ class Issue(ndb.Model):
 
   def user_can_edit(self, user):
     """Returns True if the given user has permission to edit this issue."""
-    return user and (user == self.owner or self.is_collaborator(user)
-                     or auth_utils.is_current_user_admin())
+    return user and (user == self.owner or self.is_collaborator(user) or
+                     auth_utils.is_current_user_admin() or
+                     is_privileged_user(user))
 
   @property
   def edit_allowed(self):
     """Whether the current user can edit this issue."""
     return self.user_can_edit(auth_utils.get_current_user())
+
+  def user_can_upload(self, user):
+    """Returns True if the user may upload a patchset to this issue.
+
+    This is stricter than user_can_edit because users cannot qualify just based
+    on their email address domain."""
+    return user and (user == self.owner or self.is_collaborator(user) or
+                     auth_utils.is_current_user_admin())
+
+  @property
+  def upload_allowed(self):
+    """Whether the current user can upload a patchset to this issue."""
+    return self.user_can_upload(auth_utils.get_current_user())
 
   def user_can_view(self, user):
     """Returns True if the given user has permission to view this issue."""
@@ -193,31 +217,13 @@ class Issue(ndb.Model):
       self._num_drafts[comment.author.email()] = cur + 1
     self.draft_count_by_user = json.dumps(self._num_drafts)
 
-  @staticmethod
-  def _collaborator_emails_from_description(description):
-    """Parses a description, returning collaborator email addresses.
-
-    Broken out for unit testing.
-    """
-    collaborators = []
-    for line in description.splitlines():
-      m = re.match(
-        r'\s*COLLABORATOR\s*='
-        r'\s*([a-zA-Z0-9._]+@[a-zA-Z0-9_]+\.[a-zA-Z0-9._]+)\s*',
-        line)
-      if m:
-        collaborators.append(m.group(1))
-    return collaborators
-
   def collaborator_emails(self):
     """Returns a possibly empty list of emails specified in
     COLLABORATOR= lines.
 
     Note that one COLLABORATOR= lines is required per address.
     """
-    if not self.description:
-      return []
-    return Issue._collaborator_emails_from_description(self.description)
+    return []  # TODO(jrobbins): add a distinct collaborators field.
 
   def is_collaborator(self, user):
     """Returns true if the given user is a collaborator on this issue.
@@ -300,6 +306,7 @@ class Issue(ndb.Model):
         return self.put_async()
       finally:
         self.__class__.modified.auto_now = True
+
 
   def get_patchset_info(self, last_attempt, user, patchset_id):
     """Returns a list of patchsets for the issue, and calculates/caches data
@@ -435,8 +442,7 @@ def _calculate_delta(patch, patchset_id, patchsets):
 
         # PatchSet.data is stored as ndb.Blob (str). Try to convert it
         # to unicode so that Python doesn't need to do this conversion
-        # when comparing text and patch.text, which is ndb.Text
-        # (unicode).
+        # when comparing text and patch.text, which is unicode.
         try:
           other.parsed_patches = engine.SplitPatch(other.data.decode('utf-8'))
         except UnicodeDecodeError:  # Fallback to str - unicode comparison.
@@ -473,6 +479,66 @@ def _calculate_delta(patch, patchset_id, patchsets):
   return delta
 
 
+class TryJobResult(ndb.Model):
+  """Try jobs are associated to a patchset.
+
+  Multiple try jobs can be associated to a single patchset.
+  """
+  # The first 6 values come from buildbot/status/results.py, and should remain
+  # sync'ed.  The last is used internally to make a try job that should be
+  # tried with the commit queue, but has not been sent yet.
+  SUCCESS, WARNINGS, FAILURE, SKIPPED, EXCEPTION, RETRY, TRYPENDING = range(7)
+  OK = (SUCCESS, WARNINGS, SKIPPED)
+  FAIL = (FAILURE, EXCEPTION)
+  # Define the priority level of result value when updating it.
+  PRIORITIES = (
+      (TRYPENDING,),
+      (-1, None),
+      (RETRY,),
+      OK,
+      FAIL,
+  )
+
+  # Parent is PatchSet
+  url = ndb.StringProperty()
+  result = ndb.IntegerProperty()
+  master = ndb.StringProperty()
+  builder = ndb.StringProperty()
+  parent_name = ndb.StringProperty()
+  slave = ndb.StringProperty()
+  buildnumber = ndb.IntegerProperty()
+  reason = ndb.StringProperty()
+  revision = ndb.StringProperty()
+  timestamp = ndb.DateTimeProperty(auto_now_add=True)
+  clobber = ndb.BooleanProperty()
+  tests = ndb.StringProperty(repeated=True)
+  # Should be an entity.
+  project = ndb.StringProperty()
+  # The user that requested this try job, which may not be the same person
+  # that owns the issue.
+  requester = ndb.UserProperty(auto_current_user_add=True)
+
+  @property
+  def status(self):
+    """Returns a string equivalent so it can be used in CSS styles."""
+    if self.result in self.OK:
+      return 'success'
+    elif self.result in self.FAIL:
+      return 'failure'
+    elif self.result == self.TRYPENDING:
+      return 'try-pending'
+    else:
+      return 'pending'
+
+  @classmethod
+  def result_priority(cls, result):
+    """The higher the more important."""
+    for index, possible_values in enumerate(cls.PRIORITIES):
+      if result in possible_values:
+        return index
+    return None
+
+
 class PatchSet(ndb.Model):
   """A set of patchset uploaded together.
 
@@ -486,6 +552,9 @@ class PatchSet(ndb.Model):
   created = ndb.DateTimeProperty(auto_now_add=True)
   modified = ndb.DateTimeProperty(auto_now=True)
   n_comments = ndb.IntegerProperty(default=0)
+  # TODO(maruel): Deprecated, remove once the live instance has all its data
+  # converted to TryJobResult instances.
+  build_results = ndb.StringProperty(repeated=True)
 
   @property
   def patches(self):
@@ -524,6 +593,50 @@ class PatchSet(ndb.Model):
       patch.delta_calculated = True
       patch.put()
 
+  _try_job_results = None
+
+  @property
+  def try_job_results(self):
+    """Lazy load all the TryJobResult objects associated to this PatchSet.
+
+    Note the value is cached and doesn't expose a method to be refreshed.
+    """
+    if self._try_job_results is None:
+      self._try_job_results = TryJobResult.query(ancestor=self.key).fetch(1000)
+
+      # Append fake object for all build_results properties.
+      # TODO(maruel): Deprecated. Delete this code as soon as the live
+      # instance migrated to TryJobResult objects.
+      SEPARATOR = '|'
+      for build_result in self.build_results:
+        (platform_id, status, details_url) = build_result.split(SEPARATOR, 2)
+        if status == 'success':
+          result = TryJobResult.SUCCESS
+        elif status == 'failure':
+          result = TryJobResult.FAILURE
+        else:
+          result = -1
+        self._try_job_results.append(
+            TryJobResult(
+              parent=self.key,
+              url=details_url,
+              result=result,
+              builder=platform_id,
+              timestamp=self.modified))
+
+      def GetKey(job):
+        """Gets the key used to order jobs in the results list.
+
+        We want pending jobs to appear first in the list, so these jobs
+        return datetime.datetime.max, as the sort is in reverse chronological
+        order."""
+        if job.result == TryJobResult.TRYPENDING:
+          return datetime.datetime.max
+        return job.timestamp
+
+      self._try_job_results.sort(key=GetKey, reverse=True)
+    return self._try_job_results
+
   def nuke(self):
     ps_id = self.key.id()
     patches = []
@@ -548,7 +661,7 @@ class PatchSet(ndb.Model):
       if tbp:
         ndb.put_multi(tbp)
       tbd = [self]
-      for cls in [Patch, Comment]:
+      for cls in [Patch, Comment, TryJobResult]:
         tbd.extend(cls.query(ancestor=self.key))
       ndb.delete_multi(entity.key for entity in tbd)
     ndb.transaction(lambda: _patchset_delete(patches))
@@ -569,6 +682,8 @@ class Message(ndb.Model):
   draft = ndb.BooleanProperty(default=False)
   in_reply_to = ndb.KeyProperty('Message')
   issue_was_closed = ndb.BooleanProperty(default=False)
+  # If message came in through email, we might not count "lgtm"
+  was_inbound_email = ndb.BooleanProperty(default=False)
 
   _approval = None
   _disapproval = None
@@ -578,9 +693,12 @@ class Message(ndb.Model):
 
     - Must not be written by the issue owner.
     - Must contain |text| in a line that doesn't start with '>'.
+    - Must not be commit-bot.
     """
     issue = self.issue.get()
     if not owner_allowed and issue.owner.email() == self.sender:
+      return False
+    if self.sender == 'commit-bot@chromium.org':
       return False
     return any(
         True for line in self.text.lower().splitlines()
@@ -589,6 +707,9 @@ class Message(ndb.Model):
   @property
   def approval(self):
     """Is True when the message represents an approval of the review."""
+    if (self.was_inbound_email and
+        not settings.RIETVELD_INCOMING_MAIL_RECOGNIZE_LGTM):
+      return False
     if self._approval is None:
       self._approval = self.find('lgtm') and not self.disapproval
     return self._approval
@@ -632,7 +753,7 @@ class Patch(ndb.Model):
 
   patchset = ndb.KeyProperty(PatchSet)  # == parent
   filename = ndb.StringProperty()
-  status = ndb.StringProperty()  # 'A', 'A  +', 'M', 'D' etc
+  status = ndb.StringProperty()  # 'A', 'A +', 'M', 'D' etc
   text = ndb.TextProperty()
   content = ndb.KeyProperty(Content)
   patched_content = ndb.KeyProperty(Content)
@@ -640,6 +761,7 @@ class Patch(ndb.Model):
   # Ids of patchsets that have a different version of this file.
   delta = ndb.IntegerProperty(repeated=True)
   delta_calculated = ndb.BooleanProperty(default=False)
+  lint_error_count = ndb.IntegerProperty(default=-1)
 
   _lines = None
 
@@ -766,6 +888,48 @@ class Patch(ndb.Model):
   def count_startswith(self, prefix):
     """Returns the number of lines with the specified prefix."""
     return len([l for l in self.lines if l.startswith(prefix)])
+
+  def make_inverted(self, patchset):
+    """Calculates the inverse of this Patch.
+
+    Returns an inverted Patch object that has not been committed yet.
+    """
+    # Only git patches are supported.
+    diff_header = invert_patches.split_header(self.text)[0]
+    assert (invert_patches.is_git_diff_header(diff_header),
+            'Can only invert Git patches.')
+
+    # Find the content and the patched content to use for inverse diffing.
+    if self.is_binary:
+      original_content = self.content.get()
+      original_patched_content = self.patched_content.get()
+    else:
+      original_content = self.get_content()
+      original_patched_content = self.get_patched_content()
+
+    invert_git_patches = invert_patches.InvertGitPatches(
+        self.text, self.filename)
+
+    content_for_diff = (
+        original_patched_content.lines if original_patched_content else [])
+    if (original_content and not invert_git_patches.status ==
+          invert_patches.COPIED_AND_MODIFIED_STATUS):
+      patched_content_for_diff = original_content.lines
+    else:
+      # The patched content text for 'A +' statuses is always empty.
+      patched_content_for_diff = []
+
+    inverted_patch_text = invert_git_patches.get_inverted_patch_text(
+        content_for_diff, patched_content_for_diff)
+
+    first_patch_id, _ = Patch.allocate_ids(1, parent=patchset.key)
+    patch_key = ndb.Key(Patch, first_patch_id, parent=patchset.key)
+    return Patch(key=patch_key,
+                 patchset=patchset.key,
+                 filename=self.filename,
+                 status=invert_git_patches.inverted_patch_status,
+                 text=inverted_patch_text,
+                 is_binary=self.is_binary)
 
   def get_content(self):
     """Get self.content, or fetch it if necessary.
@@ -952,36 +1116,6 @@ class Bucket(ndb.Model):
 
   text = ndb.TextProperty()
   quoted = ndb.BooleanProperty()
-
-
-### Repositories and Branches ###
-
-
-class Repository(ndb.Model):
-  """A specific Subversion repository."""
-
-  name = ndb.StringProperty(required=True)
-  url = ndb.StringProperty(required=True)
-  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
-  guid = ndb.StringProperty()  # global unique repository id
-
-  def __str__(self):
-    return self.name
-
-
-BRANCH_CATEGORY_CHOICES = ('*trunk*', 'branch', 'tag')
-
-class Branch(ndb.Model):
-  """A trunk, branch, or a tag in a specific Subversion repository."""
-
-  repo = ndb.KeyProperty(Repository, required=True)
-  # Cache repo.name as repo_name, to speed up set_branch_choices()
-  # in views.IssueBaseForm.
-  repo_name = ndb.StringProperty()
-  category = ndb.StringProperty(required=True, choices=BRANCH_CATEGORY_CHOICES)
-  name = ndb.StringProperty(required=True)
-  url = ndb.StringProperty(required=True)
-  owner = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
 
 
 ### Accounts ###
