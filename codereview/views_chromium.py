@@ -814,11 +814,11 @@ def get_pending_try_patchsets(request):
     description['baseurl'] = issue.base
     return description
 
-  q = models.TryJobResult.query()
-  q = q.filter(models.TryJobResult.result == models.TryJobResult.TRYPENDING)
+  q = models.TryJobResult.query(
+      models.TryJobResult.result == models.TryJobResult.TRYPENDING)
   if master:
     q = q.filter(models.TryJobResult.master == master)
-  q = q.order(models.TryJobResult.key)
+  q = q.order(models.TryJobResult.timestamp)
 
   # We do not simply use fetch_page() because we do some post-filtering which
   # could lead to under-filled pages.   Instead, we iterate, filter and keep
@@ -835,12 +835,22 @@ def get_pending_try_patchsets(request):
       if len(jobs) >= limit:
         break
 
+  # If we stopped because we hit the limit, then there are probably more to
+  # get with next_cursor.  This could be wrong in the case where all
+  # TryJobResults with later timestamps are not valid, but that is rare and
+  # it is harmless for the client to request the next page and get zero results.
+  has_more = (len(jobs) >= limit)
+
   # If any jobs are returned, also include a cursor to try to get more.
+  # If no jobs, keep the same cursor to allow 'tail -f' behavior.
   if jobs:
     next_cursor = query_iter.cursor_after()
+  else:
+    next_cursor = cursor
 
   logging.info('Found %d entries, returned %d' % (total, len(jobs)))
   return {
+    'has_more': has_more,
     'cursor': next_cursor.urlsafe() if next_cursor else '',
     'jobs': jobs
     }
