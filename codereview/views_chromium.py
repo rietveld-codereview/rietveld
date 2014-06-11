@@ -827,7 +827,7 @@ def get_pending_try_patchsets(request):
   jobs = []  # List of dicts to return as JSON. One dict for each TryJobResult.
   total = 0
   next_cursor = None
-  query_iter = q.iter(limit=limit, start_cursor=cursor, produce_cursors=True)
+  query_iter = q.iter(start_cursor=cursor, produce_cursors=True)
   for job in query_iter:
     total += 1
     if _is_job_valid(job):
