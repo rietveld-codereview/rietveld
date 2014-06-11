@@ -3253,7 +3253,7 @@ def search(request):
   # with the cursor after the last item.
   filtered_results = []
   next_cursor = None
-  query_iter = q.iter(limit=limit, start_cursor=cursor, produce_cursors=True)
+  query_iter = q.iter(start_cursor=cursor, produce_cursors=True)
 
   for result in query_iter:
     if keys_only:
