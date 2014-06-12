@@ -521,8 +521,10 @@ class TryJobResult(ndb.Model):
   @property
   def status(self):
     """Returns a string equivalent so it can be used in CSS styles."""
-    if self.result in self.OK:
+    if self.result in (self.SUCCESS, self.WARNINGS):
       return 'success'
+    if self.result == self.SKIPPED:
+      return 'skipped'
     elif self.result in self.FAIL:
       return 'failure'
     elif self.result == self.TRYPENDING:
