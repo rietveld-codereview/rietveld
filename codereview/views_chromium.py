@@ -693,7 +693,8 @@ def delete_old_pending_jobs_task(request):
   for job in items:
     if not _is_job_valid(job):
       if job.timestamp <= cutoff_date:
-        job.delete()
+        job.result = models.TryJobResult.SKIPPED
+        job.put()
         count += 1
   msg = '%d pending jobs purged out of %d' % (count, len(items))
   logging.info(msg)

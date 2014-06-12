@@ -908,6 +908,10 @@ ul.errorlist li {
   background-color: rgb(223, 223, 223);
 }
 
+.build-status-color-skipped {
+  background-color: rgb(180, 180, 255);
+}
+
 
 #reviewmsgdlg {
   background-color: #E9F2DF;
