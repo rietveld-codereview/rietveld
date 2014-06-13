@@ -52,7 +52,7 @@
             {% if issue.owner != request.user %}
               <input type="submit" value="Quick LGTM"
                     onclick="return quick_lgtm(false);" />
-              {% if not issue.closed and not issue.commit %}
+              {% if not issue.closed and not issue.private and not issue.commit %}
                 </td><td>
                   <input type="submit" value="Quick LGTM & CQ"
                         onclick="return quick_lgtm(true);" />

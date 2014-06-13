@@ -132,7 +132,7 @@
          href="#" onclick="M_showTryJobResult('tryjobdiv-{{patchset.key.id}}', false); return false">
          &lt;&lt;&lt;Less</a>
 
-      {%if not issue.closed %}
+      {%if not issue.closed and not issue.private %}
         {%if user%}
           {%if not patchset.issue.commit %}
             {%ifequal last_patchset.key.id patchset.key.id%}
@@ -153,7 +153,7 @@
       <input type="hidden" name="last_patchset" value="{{last_patchset.key.id}}">
       Commit: <input type="checkbox" id="commit" name="commit"
         {%if issue.commit%}checked{%endif%}
-        {%if not request.user or issue.closed%}disabled{%endif%}
+        {%if not request.user or issue.closed or issue.private%}disabled{%endif%}
         onchange="M_editFlags('{{issue.key.id}}')" />
     </form>
 
