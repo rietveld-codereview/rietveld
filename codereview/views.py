@@ -3628,7 +3628,7 @@ def _process_incoming_mail(raw_message, recipients):
     raise InvalidIncomingEmailError('Mail sent by App Engine')
 
   subject = incoming_msg.subject or ''
-  match = re.search(r'\(issue *(?P<id>\d+)\)$', subject)
+  match = re.search(r'\(issue *(?P<id>\d+)', subject)
   if match is None:
     raise InvalidIncomingEmailError('No issue id found: %s', subject)
   issue_id = int(match.groupdict()['id'])
