@@ -344,7 +344,8 @@ def _is_job_valid(job):
   Pending try job results are those with result is set to
   models.TryJobResult.TRYPENDING.  These jobs are invalid if:
 
-  - their associated issue is already committed, and
+  - their associated issue is already committed, or
+  - their associated issue is marked private, or
   - their associated PatchSet is no longer the latest in the issue.
 
   Args:
@@ -354,15 +355,18 @@ def _is_job_valid(job):
     True if the pending try job is invalid, False otherwise.
   """
   if job.result == models.TryJobResult.TRYPENDING:
-    patchset = job.key.parent().get()
-    issue = patchset.issue.get()
+    patchset_key = job.key.parent()
+    issue_key = patchset_key.parent()
+    issue_future = issue_key.get_async()
+    last_patchset_key_future = models.PatchSet.query(ancestor=issue_key).order(
+      -models.PatchSet.created).get_async(keys_only=True)
 
-    if issue.closed:
+    issue = issue_future.get_result()
+    if issue.closed or issue.private:
       return False
 
-    last_patchset_key = models.PatchSet.query(ancestor=issue.key).order(
-      -models.PatchSet.created).get(keys_only=True)
-    if last_patchset_key != patchset.key:
+    last_patchset_key = last_patchset_key_future.get_result()
+    if last_patchset_key != patchset_key:
       return False
 
   return True
@@ -783,8 +787,10 @@ def get_pending_try_patchsets(request):
     cursor = datastore_query.Cursor(urlsafe=encoded_cursor)
 
   def MakeJobDescription(job):
-    patchset = job.key.parent().get()
-    issue = patchset.issue.get()
+    patchset_future = job.key.parent().get_async()
+    issue_future = job.key.parent().parent().get_async()
+    patchset = patchset_future.get_result()
+    issue = issue_future.get_result()
     owner = issue.owner
 
     # The job description is the basically the job itself with some extra
