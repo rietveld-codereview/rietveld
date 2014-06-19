@@ -42,6 +42,7 @@ from google.appengine.api import oauth
 from google.appengine.api import users
 from google.appengine.ext import db
 from google.appengine.ext import ndb
+from google.appengine.runtime import apiproxy_errors
 
 
 EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
@@ -94,6 +95,17 @@ class SecretKey(ndb.Model):
               config.additional_client_ids)
 
 
+def _get_client_id(tries=3):
+  """Call oauth.get_client_id() and retry if it times out."""
+  for attempt in xrange(tries):
+    try:
+      return oauth.get_client_id(EMAIL_SCOPE)
+    except apiproxy_errors.DeadlineExceededError:
+      logging.error('get_client_id() timed out on attempt %r', attempt)
+      if attempt == tries - 1:
+        raise
+
+  
 def get_current_rietveld_oauth_user():
   """Gets the current OAuth 2.0 user associated with a request.
 
@@ -106,7 +118,7 @@ def get_current_rietveld_oauth_user():
   """
   # TODO(dhermes): Address local environ here as well.
   try:
-    current_client_id = oauth.get_client_id(EMAIL_SCOPE)
+    current_client_id = _get_client_id()
   except oauth.Error:
     return
 
