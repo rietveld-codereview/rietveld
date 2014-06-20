@@ -408,6 +408,9 @@ def edit_flags(request):
         content_type='text/plain')
 
   if 'commit' in request.POST:
+    if request.issue.private and form.cleaned_data['commit'] :
+      return HttpResponseBadRequest(
+        'Cannot set commit on private issues', content_type='text/plain')
     request.issue.commit = form.cleaned_data['commit']
     user_email = request.user.email().lower()
     if (request.issue.commit and  # Add as reviewer if setting, not clearing.
@@ -424,10 +427,14 @@ def edit_flags(request):
     request.issue.put()
 
   if 'builders' in request.POST:
+    new_builders = filter(None, map(unicode.strip,
+                                    form.cleaned_data['builders'].split(',')))
+    if request.issue.private and new_builders:
+      return HttpResponseBadRequest(
+        'Cannot add trybots on private issues', content_type='text/plain')
+
     def txn():
       jobs_to_save = []
-      new_builders = filter(None, map(unicode.strip,
-                                      form.cleaned_data['builders'].split(',')))
 
       # Add any new builders.
       for builder in new_builders:
