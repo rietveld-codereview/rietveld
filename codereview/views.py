@@ -1192,7 +1192,7 @@ def upload_complete(request, patchset_id=None):
           'No patch set exists with that id (%s)' % patchset_id, status=403)
     # Add delta calculation task.
     taskqueue.add(url=reverse(task_calculate_delta),
-                  params={'key': str(patchset.key)},
+                  params={'key': patchset.key.urlsafe()},
                   queue_name='deltacalculation')
   else:
     patchset = None
@@ -3697,16 +3697,17 @@ def task_calculate_delta(request):
   This code is similar to the code in _get_patchset_info() which is
   run when a patchset should be displayed in the UI.
   """
-  ps_id = request.POST.get('key')
-  if not ps_id:
-    logging.debug('No patchset ID given.')
+  ps_key = request.POST.get('key')
+  if not ps_key:
+    logging.error('No patchset key given.')
     return HttpResponse()
   try:
-    patchset = ndb.Key(models.PatchSet, ps_id).get()
+    patchset = ndb.Key(urlsafe=ps_key).get()
   except (db.KindError, db.BadKeyError), err:
-    logging.debug('Invalid PatchSet ID %r: %s' % (ps_id, err))
+    logging.error('Invalid PatchSet key %r: %s' % (ps_key, err))
     return HttpResponse()
   if patchset is None:  # e.g. PatchSet was deleted inbetween
+    logging.error('Missing PatchSet key %r: %s' % (ps_key, err))
     return HttpResponse()
   patchset.calculate_deltas()
   return HttpResponse()

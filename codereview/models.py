@@ -590,7 +590,7 @@ class PatchSet(ndb.Model):
       if patchsets is None:
         # patchsets is retrieved on first iteration because patchsets
         # isn't needed outside the loop at all.
-        patchsets = list(self.issue.patchsets)
+        patchsets = list(self.issue.get().patchsets)
       patch.delta = _calculate_delta(patch, patchset_id, patchsets)
       patch.delta_calculated = True
       patch.put()
