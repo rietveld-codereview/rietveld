@@ -26,7 +26,7 @@ setup.process_args()
 from django.http import HttpRequest
 
 from google.appengine.api.users import User
-from google.appengine.ext import db
+from google.appengine.ext import ndb
 
 from utils import TestCase, load_file
 
@@ -54,45 +54,49 @@ class TestPublish(TestCase):
         self.issue = models.Issue(subject='test')
         self.issue.local_base = False
         self.issue.put()
-        self.ps = models.PatchSet(parent=self.issue, issue=self.issue)
+        self.ps = models.PatchSet(parent=self.issue.key, issue=self.issue.key)
         self.ps.data = load_file('ps1.diff')
-        self.ps.save()
+        self.ps.put()
         self.patches = engine.ParsePatchSet(self.ps)
-        db.put(self.patches)
+        ndb.put_multi(self.patches)
 
     def test_draft_details_no_base_file(self):
         request = MockRequest(User('foo@example.com'), issue=self.issue)
         # add a comment and render
-        cmt1 = models.Comment(patch=self.patches[0], parent=self.patches[0])
+        cmt1 = models.Comment(
+            patch=self.patches[0].key, parent=self.patches[0].key)
         cmt1.text = 'test comment'
         cmt1.lineno = 1
         cmt1.left = False
         cmt1.draft = True
         cmt1.author = self.user
-        cmt1.save()
+        cmt1.put()
         # Add a second comment
-        cmt2 = models.Comment(patch=self.patches[1], parent=self.patches[1])
+        cmt2 = models.Comment(
+            patch=self.patches[1].key, parent=self.patches[1].key)
         cmt2.text = 'test comment 2'
         cmt2.lineno = 2
         cmt2.left = False
         cmt2.draft = True
         cmt2.author = self.user
-        cmt2.save()
+        cmt2.put()
         # Add fake content
         content1 = models.Content(text="foo\nbar\nbaz\nline\n")
         content1.put()
         content2 = models.Content(text="foo\nbar\nbaz\nline\n")
         content2.put()
-        cmt1.patch.content = content1
-        cmt1.patch.put()
-        cmt2.patch.content = content2
-        cmt2.patch.put()
+        cmt1_patch = cmt1.patch.get()
+        cmt1_patch.content = content1.key
+        cmt1_patch.put()
+        cmt2_patch = cmt2.patch.get()
+        cmt2_patch.content = content2.key
+        cmt2_patch.put()
         # Mock get content calls. The first fails with an FetchError,
         # the second succeeds (see issue384).
         def raise_err():
             raise models.FetchError()
-        cmt1.patch.get_content = raise_err
-        cmt2.patch.get_patched_content = lambda: content2
+        cmt1.patch.get().get_content = raise_err
+        cmt2.patch.get().get_patched_content = lambda: content2
         tbd, comments = views._get_draft_comments(request, self.issue)
         self.assertEqual(len(comments), 2)
         # Try to render draft details using the patched Comment
@@ -112,13 +116,13 @@ class TestSearch(TestCase):
         self.user = User('foo@example.com')
         self.login('foo@example.com')
         issue1 = models.Issue(subject='test')
-        issue1.reviewers = [db.Email('test@groups.example.com'),
-                            db.Email('bar@example.com')]
+        issue1.reviewers = ['test@groups.example.com',
+                            'bar@example.com']
         issue1.local_base = False
         issue1.put()
         issue2 = models.Issue(subject='test')
-        issue2.reviewers = [db.Email('test2@groups.example.com'),
-                            db.Email('bar@example.com')]
+        issue2.reviewers = ['test2@groups.example.com',
+                            'bar@example.com']
         issue2.local_base = False
         issue2.put()
 
@@ -188,11 +192,11 @@ class TestModifierCount(TestCase):
         issue = models.Issue(subject="test with 1 line removed")
         issue.local_base = False
         issue.put()
-        ps = models.PatchSet(parent=issue, issue=issue)
+        ps = models.PatchSet(parent=issue.key, issue=issue.key)
         ps.data = self.makePatch(1, 0)
-        ps.save()
+        ps.put()
         patches = engine.ParsePatchSet(ps)
-        db.put(patches)
+        ndb.put_multi(patches)
         added, removed = views._get_modified_counts(issue)
         self.assertEqual(1, added)
         self.assertEqual(0, removed)
@@ -201,11 +205,11 @@ class TestModifierCount(TestCase):
         issue = models.Issue(subject="test with 1 line removed")
         issue.local_base = False
         issue.put()
-        ps = models.PatchSet(parent=issue, issue=issue)
+        ps = models.PatchSet(parent=issue.key, issue=issue.key)
         ps.data = self.makePatch(0, 1)
-        ps.save()
+        ps.put()
         patches = engine.ParsePatchSet(ps)
-        db.put(patches)
+        ndb.put_multi(patches)
         added, removed = views._get_modified_counts(issue)
         self.assertEqual(0, added)
         self.assertEqual(1, removed)
@@ -214,11 +218,11 @@ class TestModifierCount(TestCase):
         issue = models.Issue(subject="test with changes")
         issue.local_base = False
         issue.put()
-        ps = models.PatchSet(parent=issue, issue=issue)
+        ps = models.PatchSet(parent=issue.key, issue=issue.key)
         ps.data = self.makePatch(5, 7)
-        ps.save()
+        ps.put()
         patches = engine.ParsePatchSet(ps)
-        db.put(patches)
+        ndb.put_multi(patches)
         added, removed = views._get_modified_counts(issue)
         self.assertEqual(5, added)
         self.assertEqual(7, removed)

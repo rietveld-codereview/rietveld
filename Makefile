@@ -83,7 +83,7 @@ vacuum_indexes:
 	$(APPCFG) $(APPCFG_FLAGS) vacuum_indexes . --oauth2 --application $(APPID)
 
 test:
-	$(PYTHON) tests/run_tests.py $(SDK_PATH)
+	$(PYTHON) tests/run_tests.py
 
 coverage:
 	$(COVERAGE) run --branch tests/run_tests.py $(SDK_PATH)
