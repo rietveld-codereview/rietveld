@@ -42,9 +42,6 @@ class TestCase(_TestCase):
   def _fixture_teardown(self):  # defined in django.test.TestCase
     self.testbed.deactivate()
 
-  def tearDown(self):
-    THIS_IS_NOT_CALLED_GO_FIGURE
-
   def login(self, email):
     """Logs in a user identified by email."""
     os.environ['USER_EMAIL'] = email
