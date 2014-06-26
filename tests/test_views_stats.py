@@ -45,13 +45,17 @@ NOT_REQUESTED = models.AccountStatsBase.NOT_REQUESTED
 OUTGOING = models.AccountStatsBase.OUTGOING
 
 
+def format_header(head):
+  return ('http_' + head).replace('-', '_').upper()
+
+
 class MockRequestTask(HttpRequest):
   """Mock request class for testing."""
   def __init__(self, queue, tasks, date):
     super(MockRequestTask, self).__init__()
     self.method = 'POST'
     self.META['HTTP_HOST'] = 'testserver'
-    key = views.format_header('X-AppEngine-QueueName')
+    key = format_header('X-AppEngine-QueueName')
     self.META[key] = queue
     self.POST['tasks'] = json.dumps(tasks)
     self.POST['date'] = date
@@ -71,18 +75,13 @@ class TestCase(utils.TestCase):
   def setUp(self):
     super(TestCase, self).setUp()
     # Kill auto_now and auto_now_add support.
-    self._get_updated_value_for_datastore = (
-        db.DateTimeProperty.get_updated_value_for_datastore)
-    db.DateTimeProperty.get_updated_value_for_datastore = (
-        db.Property.get_updated_value_for_datastore)
-
-    self._default_value = db.DateTimeProperty.default_value
-    db.DateTimeProperty.default_value = db.Property.default_value
-
+    models.Issue.created._auto_now_add = False
+    models.Issue.modified._auto_now = False
+    
   def tearDown(self):
-    db.DateTimeProperty.get_updated_value_for_datastore = (
-        self._get_updated_value_for_datastore)
-    db.DateTimeProperty.default_value = self._default_value
+    # Restore auto_now and auto_now_add support.
+    models.Issue.created._auto_now_add = True
+    models.Issue.modified._auto_now = True
     super(TestCase, self).setUp()
 
 class TestDailyStats(TestCase):
@@ -111,21 +110,22 @@ class TestDailyStats(TestCase):
         modified=date)
     issue.put()
     # Verify that our auto_now hack works.
-    self.assertEqual(models.Issue.get(issue.key()).created, date)
-    self.assertEqual(models.Issue.get(issue.key()).modified, date)
-    ps = models.PatchSet(parent=issue, issue=issue, created=date, modified=date)
+    self.assertEqual(issue.key.get().created, date)
+    self.assertEqual(issue.key.get().modified, date)
+    ps = models.PatchSet(
+      parent=issue.key, issue=issue.key, created=date, modified=date)
     ps.data = utils.load_file('ps1.diff')
     ps.put()
     patches = engine.ParsePatchSet(ps)
-    db.put(patches)
+    ndb.put_multi(patches)
     return issue
 
   def add_message(self, issue, sender, recipients, date, text):
     """Adds a Message."""
     date = datetime.datetime.strptime('2011-03-' + date, '%Y-%m-%d %H:%M')
     models.Message(
-        parent=issue,
-        issue=issue,
+        parent=issue.key,
+        issue=issue.key,
         subject='Your code is great',
         sender=sender.email,
         recipients=[r.email for r in recipients],
@@ -690,7 +690,7 @@ class TestDailyStats(TestCase):
           issues[i], self.author, [self.reviewer1], '01 01:02', '.')
     expected = [
       {
-        'issues': [i.key().id() for i in issues],
+        'issues': [i.key.id() for i in issues],
         'latencies': [-1] * count,
         'lgtms': [0] * count,
         'name': '2011-03-01',
@@ -782,13 +782,13 @@ class TestMultiStats(TestCase):
     super(TestMultiStats, self).setUp()
     self.assertEqual([], models.AccountStatsDay.query().fetch())
     self.assertEqual([], models.AccountStatsMulti.query().fetch())
-    self.assertEqual(None, models.Issue.all().get())
+    self.assertEqual(None, models.Issue.query().get())
     self.userA = models.Account.get_account_for_user(
         User('user_a@example.com'))
-    self.userA_key = ndb.Key.from_old_key(self.userA.key())
+    self.userA_key = self.userA.key
     self.userB = models.Account.get_account_for_user(
         User('user_b@example.com'))
-    self.userB_key = ndb.Key.from_old_key(self.userB.key())
+    self.userB_key = self.userB.key
     # Real users have created at least one issue.
     models.Issue(owner=self.userA.user, subject='Damned').put()
     models.Issue(owner=self.userB.user, subject='Damned').put()
@@ -1015,7 +1015,7 @@ class TestFetchStats(TestCase):
   def setUp(self):
     super(TestFetchStats, self).setUp()
     user = models.Account.get_account_for_user(User('user@example.com'))
-    user_key = ndb.Key.from_old_key(user.key())
+    user_key = user.key
     # Daily.
     models.AccountStatsDay(
         id='2011-03-03',
@@ -1049,7 +1049,7 @@ class TestFetchStats(TestCase):
         review_types=[NORMAL, IGNORED]).put()
 
     user = models.Account.get_account_for_user(User('joe@example.com'))
-    user_key = ndb.Key.from_old_key(user.key())
+    user_key = user.key
     # Month.
     models.AccountStatsMulti(
         id='2011-02',
@@ -1068,7 +1068,7 @@ class TestFetchStats(TestCase):
         review_types=[NORMAL, NORMAL]).put()
 
     user = models.Account.get_account_for_user(User('john@example.com'))
-    user_key = ndb.Key.from_old_key(user.key())
+    user_key = user.key
     # Month.
     models.AccountStatsMulti(
         id='2011-02',
@@ -1304,8 +1304,8 @@ class TestProcessIssue(TestCase):
   def add_message(self, sender, recipients, seconds, text):
     """Adds a Message."""
     msg = models.Message(
-        parent=self.issue,
-        issue=self.issue,
+        parent=self.issue.key,
+        issue=self.issue.key,
         subject='Your code is great',
         sender=sender,
         recipients=[db.Email(r) for r in recipients],

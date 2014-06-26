@@ -71,9 +71,7 @@ class TestAuthUtils(TestCase):
     """Logs in OAuth user identified by email."""
     stub_map = self.testbed._test_stub_map._APIProxyStubMap__stub_map
     user_stub = stub_map['user']
-    user_stub._UserServiceStub__email = email
-    user_stub._UserServiceStub__is_admin = is_admin
-    user_stub._client_id = client_id
+    user_stub.SetOAuthUser(email=email, is_admin=is_admin, client_id=client_id)
 
   def oauth_logout(self):
     """Logs the OAuth user out."""
