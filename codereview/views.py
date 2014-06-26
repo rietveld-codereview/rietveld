@@ -4230,13 +4230,10 @@ def yield_people_issue_to_update(day_to_process, issues, messages_looked_up):
         models.Message.date)
     # Someone sane would ask: why the hell do this? I don't know either but
     # that's the only way to not have it throw an exception after 60 seconds.
-    if cursor:
-      query.with_cursor(start_cursor=cursor)
-    message_keys = query.fetch(100)
+    message_keys, cursor, more = query.fetch_page(100, start_cursor=cursor)
     if not message_keys:
       # We're done, no more cursor.
       break
-    cursor = query.cursor()
     for message_key in message_keys:
       # messages_looked_up may be overcounted, as the messages on the next day
       # on issues already processed will be accepted as valid, until a new issue
@@ -4251,7 +4248,7 @@ def yield_people_issue_to_update(day_to_process, issues, messages_looked_up):
       # Aggressively fetch data concurrently.
       message_future = message_key.get_async()
       issue_future = issue_key.get_async()
-      messages_futures = models.Message.query(ancestor=issue_key).run(
+      messages_future = models.Message.query(ancestor=issue_key).fetch_async(
           batch_size=1000)
       if message_future.get_result().date.date() > day_to_process_date:
         # Now on the next day. It is important to stop, especially when looking
@@ -4266,7 +4263,8 @@ def yield_people_issue_to_update(day_to_process, issues, messages_looked_up):
       # Sort manually instead of using .order('date') to save one index. Strips
       # off any Message after day_to_process.
       messages = sorted(
-          (m for m in messages_futures if m.date.date() <= day_to_process_date),
+          (m for m in messages_future.get_result()
+           if m.date.date() <= day_to_process_date),
           key=lambda x: x.date)
 
       # Updates the dict of the people-day pairs that will need to be updated.

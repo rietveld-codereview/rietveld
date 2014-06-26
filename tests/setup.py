@@ -19,6 +19,12 @@ import sys
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 
+POSSIBLE_SDK_PATHS = [
+  "../google_appengine",
+  "/usr/local/google_appengine",
+  ".locally/google_appengine",
+  ]
+
 
 def setup_test_env(sdk_path):
   """Sets up App Engine/Django test environment."""
@@ -38,17 +44,17 @@ def setup_test_env(sdk_path):
   # http://codereview.appspot.com/5305060/).
   os.environ['REQUEST_ID_HASH'] = 'testing'
   from google.appengine.dist import use_library
-  use_library('django', '1.2')
+  use_library('django', '1.3')
 
 
 def process_args():
   """Scans for a path to dev_appserver in sys.argv and pops it."""
   sdk_path = os.path.join(TESTS_DIR, '..', '..', 'google_appengine')
-  for i in range(1, len(sys.argv)):
-    if os.path.exists(os.path.join(sys.argv[i], 'dev_appserver.py')):
-      sdk_path = sys.argv.pop(i)
+  for possible_path in POSSIBLE_SDK_PATHS:
+    if os.path.exists(os.path.join(possible_path, 'dev_appserver.py')):
+      sdk_path = possible_path
       break
   if not os.path.exists(os.path.join(sdk_path, 'dev_appserver.py')):
-    sys.stderr.write('usage: %s SDK_PATH\n' % sys.argv[0])
+    sys.stderr.write('Could not find google_appengine SDK path')
     sys.exit(1)
   setup_test_env(sdk_path)
