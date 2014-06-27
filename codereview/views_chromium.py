@@ -813,7 +813,7 @@ def get_pending_try_patchsets(request):
       description['root'] = 'src/third_party/WebKit'
     elif ('native_client/src/native_client' in issue.base
         or (issue.base.startswith('svn:')
-            and issue.base.endswith('native_client/src/trunk'))):
+            and issue.base.endswith('native_client/trunk/src/native_client'))):
       description['root'] = 'native_client'
     elif ('external/gyp' in issue.base
         or (issue.base.startswith('http://gyp.')
