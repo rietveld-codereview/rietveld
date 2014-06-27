@@ -4267,7 +4267,7 @@ def task_update_stats(request):
   """
   tasks = json.loads(request.POST.get('tasks'))
   date_str = request.POST.get('date')
-  cursor = request.POST.get('cursor')
+  cursor = ndb.Cursor(urlsafe=request.POST.get('cursor'))
   countdown = 15
   if not tasks:
     msg = 'Nothing to execute!?'
@@ -4309,7 +4309,10 @@ def task_update_stats(request):
     # delay. 15s is not a lot but we are in an hurry!
     taskqueue.add(
         url=reverse(task_update_stats),
-        params={'tasks': json.dumps(tasks), 'date': date_str, 'cursor': cursor},
+        params={
+          'tasks': json.dumps(tasks),
+          'date': date_str,
+          'cursor': cursor.urlsafe() if cursor else ''},
         queue_name='update-stats',
         countdown=countdown)
   return out
@@ -4328,7 +4331,6 @@ def update_daily_stats(cursor, day_to_process):
   There can be thousands of CLs modified in a single day so throughput
   efficiency is important here, as it has only 10 minutes to complete.
   """
-  assert not cursor, cursor
   start = time.time()
   # Look at all messages sent in the day. The issues associated to these
   # messages are the issues we care about.
@@ -4441,7 +4443,7 @@ def update_rolling_stats(cursor, reference_day):
 
   Only do 1000 accounts at a time since there's a memory leak in the function.
   """
-  assert cursor is None or isinstance(cursor, basestring), cursor
+  assert isinstance(cursor, ndb.Cursor), cursor
   assert isinstance(reference_day, datetime.date), reference_day
   start = time.time()
   total = 0
@@ -4456,18 +4458,16 @@ def update_rolling_stats(cursor, reference_day):
     accounts = 0
     while True:
       query = models.Account.query()
-      if cursor:
-        query.with_cursor(start_cursor=cursor)
-      account_keys = query.fetch(100, keys_only=True)
+      account_keys, next_cursor, more = query.fetch_page(
+        100, keys_only=True, start_cursor=cursor)
       if not account_keys:
         # We're done, no more cursor.
-        cursor = ''
+        next_cursor = None
         break
 
       a_key = ''
       for a_key in account_keys:
         accounts += 1
-        a_key = ndb.Key.from_old_key(a_key)
         # TODO(maruel): If date of each issue was saved in the entity, this
         # would not be necessary, assuming the entity doesn't become itself
         # corrupted.
@@ -4504,7 +4504,7 @@ def update_rolling_stats(cursor, reference_day):
             total += chunk_size
             items = []
             futures = [f for f in futures if not f.done()]
-      cursor = query.cursor()
+
       if accounts == 1000 or (time.time() - start) > 300:
         # Limit memory usage.
         logging.info('%d accounts, last was %s', accounts, a_key.id()[1:-1])
@@ -4527,7 +4527,7 @@ def update_rolling_stats(cursor, reference_day):
     logging.info(out)
   else:
     logging.error(out)
-  return HttpTextResponse(out, status=result), cursor
+  return HttpTextResponse(out, status=result), next_cursor
 
 
 def update_monthly_stats(cursor, day_to_process):
@@ -4553,12 +4553,10 @@ def update_monthly_stats(cursor, day_to_process):
         default_options=ndb.QueryOptions(keys_only=True))
     months_to_regenerate = set()
     while True:
-      curs = datastore_query.Cursor(urlsafe=cursor or '')
-      day_stats_keys, next_curs, more = q.fetch_page(100, start_cursor=curs)
-      if not more:
-        cursor = ''
+      day_stats_keys, cursor, more = q.fetch_page(100, start_cursor=cursor)
+      if not day_stats_keys:
+        cursor = None
         break
-      cursor = next_curs.urlsafe() if next_curs else ''
       days_stats_fetched += len(day_stats_keys)
       if not (days_stats_fetched % 1000):
         logging.info('Scanned %d AccountStatsDay.', days_stats_fetched)
