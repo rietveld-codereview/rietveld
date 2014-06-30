@@ -81,6 +81,7 @@ class Issue(ndb.Model):
 
   _is_starred = None
   _has_updates_for_current_user = None
+  _original_subject = None
 
   @property
   def is_starred(self):
@@ -268,6 +269,8 @@ class Issue(ndb.Model):
     self.num_messages = 0
     old_messages = Message.query(Message.draft == False, ancestor=self.key)
     for msg in itertools.chain(old_messages, msgs):
+      if self._original_subject is None:
+        self._original_subject = msg.subject
       self.num_messages += 1
       if msg.sender == self.owner.email():
         updates_for_set.update(self.reviewers, self.cc,
@@ -300,6 +303,13 @@ class Issue(ndb.Model):
         return self.put_async()
       finally:
         self.__class__.modified.auto_now = True
+
+  def mail_subject(self):
+    if self._original_subject is None:
+      self.calculate_updates_for()
+    if self._original_subject is not None:
+      return self._original_subject
+    return '%s (issue %d by %s)' % (issue.subject, issue_id, issue.owner.email())
 
   def get_patchset_info(self, last_attempt, user, patchset_id):
     """Returns a list of patchsets for the issue, and calculates/caches data
