@@ -3626,8 +3626,16 @@ def _process_incoming_mail(raw_message, recipients):
   if 'X-Google-Appengine-App-Id' in incoming_msg.original:
     raise InvalidIncomingEmailError('Mail sent by App Engine')
 
+  # Use the subject to find the issue number.
+  # Originally the tag was (issueNNN).
+  # Then we changed it to be (issue NNN by WHO).
+  # We want to match either of these, and we need to deal with
+  # the fact that some mail readers will fold the long subject,
+  # turning a single space into "\r\n ".
+  # We use "issue\s*" to handle all these forms,
+  # and we omit the closing ) to accept both the original and the "by WHO" form.
   subject = incoming_msg.subject or ''
-  match = re.search(r'\(issue *(?P<id>\d+)', subject)
+  match = re.search(r'\(issue\s*(?P<id>\d+)', subject)
   if match is None:
     raise InvalidIncomingEmailError('No issue id found: %s', subject)
   issue_id = int(match.groupdict()['id'])
