@@ -309,7 +309,7 @@ class Issue(ndb.Model):
       self.calculate_updates_for()
     if self._original_subject is not None:
       return self._original_subject
-    return '%s (issue %d by %s)' % (issue.subject, issue_id, issue.owner.email())
+    return '%s (issue %d by %s)' % (self.subject, self.key.id(), self.owner.email())
 
   def get_patchset_info(self, last_attempt, user, patchset_id):
     """Returns a list of patchsets for the issue, and calculates/caches data
