@@ -86,10 +86,9 @@ def image_required(func):
   def image_wrapper(request, image_type, *args, **kwds):
     content = None
     if image_type == "0":
-      content_key = request.patch.content
+      content = request.patch.content_key.get()
     elif image_type == "1":
-      content_key = request.patch.patched_content
-    content = content_key.get() if content_key else None      
+      content = request.patch.patched_content_key.get()
     # Other values are erroneous so request.content won't be set.
     if not content or not content.data:
       return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
@@ -202,7 +201,7 @@ def patch_filename_required(func):
   @patchset_required
   def patch_wrapper(request, patch_filename, *args, **kwds):
     patch = models.Patch.query(
-        models.Patch.patchset == request.patchset.key,
+        models.Patch.patchset_key == request.patchset.key,
         models.Patch.filename == patch_filename).get()
     if patch is None and patch_filename.isdigit():
       # It could be an old URL which has a patch ID instead of a filename
@@ -215,7 +214,7 @@ def patch_filename_required(func):
                       'patch': None,
                       'patchsets': request.issue.patchsets,
                       'filename': patch_filename})
-    patch.patchset = request.patchset.key
+    patch.patchset_key = request.patchset.key
     request.patch = patch
     return func(request, *args, **kwds)
 
@@ -233,7 +232,7 @@ def patch_required(func):
           'No patch exists with that id (%s/%s)' %
           (request.patchset.key.id(), patch_id),
           status=404)
-    patch.patchset = request.patchset.key
+    patch.patchset_key = request.patchset.key
     request.patch = patch
     return func(request, *args, **kwds)
 
@@ -332,7 +331,7 @@ def patchset_required(func):
     if patchset is None:
       return HttpTextResponse(
           'No patch set exists with that id (%s)' % patchset_id, status=404)
-    patchset.issue = request.issue.key
+    patchset.issue_key = request.issue.key
     request.patchset = patchset
     return func(request, *args, **kwds)
 

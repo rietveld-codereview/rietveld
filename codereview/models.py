@@ -273,7 +273,7 @@ class Issue(ndb.Model):
     updates_for_set = set(self.updates_for)
     approval_dict = {r: None for r in self.reviewers}
     self.num_messages = 0
-    old_messages = Message.query(Message.draft == False, ancestor=self.key)
+    old_messages = Message.query(Message.draft == False, ancestor=self.key).order(Message.date)
     for msg in itertools.chain(old_messages, msgs):
       if self._original_subject is None:
         self._original_subject = msg.subject
@@ -344,7 +344,7 @@ class Issue(ndb.Model):
       # and it's additional magic.
       self.draft_count = len(drafts)
       for c in drafts:
-        c.ps_key = c.patch.get().patchset
+        c.ps_key = c.patch_key.get().patchset_key
       patchset_id_mapping = {}  # Maps from patchset id to its ordering number.
       for patchset in patchsets:
         patchset_id_mapping[patchset.key.id()] = len(patchset_id_mapping) + 1
@@ -357,14 +357,14 @@ class Issue(ndb.Model):
           patchset.patches_cache = list(patchset.patches)
           for patch in patchset.patches_cache:
             pkey = patch.key
-            patch._num_comments = sum(c.patch == pkey for c in comments)
+            patch._num_comments = sum(c.patch_key == pkey for c in comments)
             if user:
               patch._num_my_comments = sum(
-                  c.patch == pkey and c.author == user
+                  c.patch_key == pkey and c.author == user
                   for c in comments)
             else:
               patch._num_my_comments = 0
-            patch._num_drafts = sum(c.patch == pkey for c in drafts)
+            patch._num_drafts = sum(c.patch_key == pkey for c in drafts)
             if not patch.delta_calculated:
               if last_attempt:
                 # Too many patchsets or files and we're not able to generate the
@@ -471,7 +471,7 @@ def _calculate_delta(patch, patchset_id, patchsets):
       # we need to go to the datastore.  Use the index to see if there's a
       # patch against our current file in other.
       query = Patch.query(
-          Patch.filename == patch.filename, Patch.patchset == other.key)
+          Patch.filename == patch.filename, Patch.patchset_key == other.key)
       other_patches = query.fetch(100)
       if other_patches and len(other_patches) > 1:
         logging.info("Got %s patches with the same filename for a patchset",
@@ -555,8 +555,11 @@ class PatchSet(ndb.Model):
 
   This is a descendant of an Issue and has Patches as descendants.
   """
-
-  issue = ndb.KeyProperty(Issue)  # == parent
+  # name='issue' is needed for backward compatability with existing data.
+  # Note: we could write a mapreduce to rewrite data from the issue field
+  # to a new issue_key field, which would allow removal of name='issue',
+  # but it would require that migration step on every Rietveld instance.
+  issue_key = ndb.KeyProperty(name='issue', kind=Issue)  # == parent
   message = ndb.StringProperty()
   data = ndb.BlobProperty()
   url = ndb.StringProperty()
@@ -599,7 +602,7 @@ class PatchSet(ndb.Model):
       if patchsets is None:
         # patchsets is retrieved on first iteration because patchsets
         # isn't needed outside the loop at all.
-        patchsets = list(self.issue.get().patchsets)
+        patchsets = list(self.issue_key.get().patchsets)
       patch.delta = _calculate_delta(patch, patchset_id, patchsets)
       patch.delta_calculated = True
       patch.put()
@@ -651,7 +654,7 @@ class PatchSet(ndb.Model):
   def nuke(self):
     ps_id = self.key.id()
     patches = []
-    for patchset in self.issue.get().patchsets:
+    for patchset in self.issue_key.get().patchsets:
       if patchset.created <= self.created:
         continue
       patches.extend(
@@ -683,15 +686,15 @@ class Message(ndb.Model):
 
   This is a descendant of an Issue.
   """
-
-  issue = ndb.KeyProperty(Issue)  # == parent
+  # name='issue' is needed for backward compatability with existing data.
+  issue_key = ndb.KeyProperty(name='issue', kind=Issue)  # == parent
   subject = ndb.StringProperty()
   sender = ndb.StringProperty()
   recipients = ndb.StringProperty(repeated=True)
   date = ndb.DateTimeProperty(auto_now_add=True)
   text = ndb.TextProperty()
   draft = ndb.BooleanProperty(default=False)
-  in_reply_to = ndb.KeyProperty('Message')
+  in_reply_to_key = ndb.KeyProperty(name='in_reply_to', kind='Message')
   issue_was_closed = ndb.BooleanProperty(default=False)
   # If message came in through email, we might not count "lgtm"
   was_inbound_email = ndb.BooleanProperty(default=False)
@@ -706,7 +709,7 @@ class Message(ndb.Model):
     - Must contain |text| in a line that doesn't start with '>'.
     - Must not be commit-bot.
     """
-    issue = self.issue.get()
+    issue = self.issue_key.get()
     if not owner_allowed and issue.owner.email() == self.sender:
       return False
     if self.sender == 'commit-bot@chromium.org':
@@ -762,12 +765,12 @@ class Patch(ndb.Model):
   This is a descendant of a PatchSet.
   """
 
-  patchset = ndb.KeyProperty(PatchSet)  # == parent
+  patchset_key = ndb.KeyProperty(name='patchset', kind=PatchSet)  # == parent
   filename = ndb.StringProperty()
   status = ndb.StringProperty()  # 'A', 'A +', 'M', 'D' etc
   text = ndb.TextProperty()
-  content = ndb.KeyProperty(Content)
-  patched_content = ndb.KeyProperty(Content)
+  content_key = ndb.KeyProperty(name='content', kind=Content)
+  patched_content_key = ndb.KeyProperty(name='patched_content', kind=Content)
   is_binary = ndb.BooleanProperty(default=False)
   # Ids of patchsets that have a different version of this file.
   delta = ndb.IntegerProperty(repeated=True)
@@ -856,7 +859,7 @@ class Patch(ndb.Model):
     """
     if self._num_comments is None:
       self._num_comments = Comment.query(
-          Comment.patch == self.key, Comment.draft == False).count()
+          Comment.patch_key == self.key, Comment.draft == False).count()
     return self._num_comments
 
   _num_my_comments = None
@@ -872,7 +875,7 @@ class Patch(ndb.Model):
         self._num_my_comments = 0
       else:
         query = Comment.query(
-            Comment.patch == self.key, Comment.draft == False,
+            Comment.patch_key == self.key, Comment.draft == False,
             Comment.author == account.user)
         self._num_my_comments = query.count()
     return self._num_my_comments
@@ -891,7 +894,7 @@ class Patch(ndb.Model):
         self._num_drafts = 0
       else:
         query = Comment.query(
-            Comment.patch == self.key, Comment.draft == True,
+            Comment.patch_key == self.key, Comment.draft == True,
             Comment.author == account.user)
         self._num_drafts = query.count()
     return self._num_drafts
@@ -954,8 +957,8 @@ class Patch(ndb.Model):
       FetchError: If there was a problem fetching it.
     """
     try:
-      if self.content is not None:
-        content = self.content.get()
+      if self.content_key is not None:
+        content = self.content_key.get()
         if content.is_bad:
           msg = 'Bad content. Try to upload again.'
           logging.warn('Patch.get_content: %s', msg)
@@ -968,16 +971,16 @@ class Patch(ndb.Model):
           return content
     except db.Error:
       # This may happen when a Content entity was deleted behind our back.
-      self.content = None
+      self.content_key = None
 
     content = self.fetch_base()
     content.put()
-    self.content = content.key
+    self.content_key = content.key
     self.put()
     return content
 
   def get_patched_content(self):
-    """Get self.patched_content, computing it if necessary.
+    """Get this patch's patched_content, computing it if necessary.
 
     This is the content of the file after applying this patch.
 
@@ -988,11 +991,11 @@ class Patch(ndb.Model):
       FetchError: If there was a problem fetching the old content.
     """
     try:
-      if self.patched_content is not None:
-        return self.patched_content.get()
+      if self.patched_content_key is not None:
+        return self.patched_content_key.get()
     except db.Error:
       # This may happen when a Content entity was deleted behind our back.
-      self.patched_content = None
+      self.patched_content_key = None
 
     old_lines = self.get_content().text.splitlines(True)
     logging.info('Creating patched_content for %s', self.filename)
@@ -1003,14 +1006,14 @@ class Patch(ndb.Model):
     text = ''.join(new_lines)
     patched_content = Content(text=text, parent=self.key)
     patched_content.put()
-    self.patched_content = patched_content.key
+    self.patched_content_key = patched_content.key
     self.put()
     return patched_content
 
   @property
   def no_base_file(self):
     """Returns True iff the base file is not available."""
-    return self.content and self.content.get().file_too_large
+    return self.content_key and self.content_key.get().file_too_large
 
   def fetch_base(self):
     """Fetch base file for the patch.
@@ -1029,10 +1032,11 @@ class Patch(ndb.Model):
 
     # AppEngine can only fetch URLs that db.Link() thinks are OK,
     # so try converting to a db.Link() here.
+    issue = self.patchset.issue_key.get()
     try:
-      base = db.Link(self.patchset.issue.base)
+      base = db.Link(issue.base)
     except db.BadValueError:
-      msg = 'Invalid base URL for fetching: %s' % self.patchset.issue.base
+      msg = 'Invalid base URL for fetching: %s' % issue.base
       logging.warn(msg)
       raise FetchError(msg)
 
@@ -1059,7 +1063,7 @@ class Comment(ndb.Model):
   This is a descendant of a Patch.
   """
 
-  patch = ndb.KeyProperty(Patch)  # == parent
+  patch_key = ndb.KeyProperty(name='patch', kind=Patch)  # == parent
   message_id = ndb.StringProperty()  # == key_name
   author = auth_utils.AnyAuthUserProperty(auto_current_user_add=True)
   date = ndb.DateTimeProperty(auto_now=True)

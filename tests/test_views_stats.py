@@ -113,7 +113,7 @@ class TestDailyStats(TestCase):
     self.assertEqual(issue.key.get().created, date)
     self.assertEqual(issue.key.get().modified, date)
     ps = models.PatchSet(
-      parent=issue.key, issue=issue.key, created=date, modified=date)
+      parent=issue.key, issue_key=issue.key, created=date, modified=date)
     ps.data = utils.load_file('ps1.diff')
     ps.put()
     patches = engine.ParsePatchSet(ps)
@@ -125,7 +125,7 @@ class TestDailyStats(TestCase):
     date = datetime.datetime.strptime('2011-03-' + date, '%Y-%m-%d %H:%M')
     models.Message(
         parent=issue.key,
-        issue=issue.key,
+        issue_key=issue.key,
         subject='Your code is great',
         sender=sender.email,
         recipients=[r.email for r in recipients],
@@ -1305,7 +1305,7 @@ class TestProcessIssue(TestCase):
     """Adds a Message."""
     msg = models.Message(
         parent=self.issue.key,
-        issue=self.issue.key,
+        issue_key=self.issue.key,
         subject='Your code is great',
         sender=sender,
         recipients=[db.Email(r) for r in recipients],

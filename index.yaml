@@ -237,6 +237,12 @@ indexes:
   properties:
   - name: date
 
+- kind: Message
+  ancestor: yes
+  properties:
+  - name: draft
+  - name: date
+
 - kind: Patch
   properties:
   - name: patchset
