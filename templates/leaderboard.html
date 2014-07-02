@@ -1,0 +1,135 @@
+{%extends "base.html"%}
+{%block mainmenu%}
+  <a href="{%url codereview.views.index%}">Issues</a>
+  <a href="{%url codereview.views.leaderboard 30%}" class="active">Leaderboard</a>
+  <a href="{%url codereview.views.repos%}">Repositories</a>
+{%endblock%}
+
+{%block title1%}Leaderboard{%endblock%}
+
+{%block head%}
+  {{form.media}}
+  <link type="text/css" rel="stylesheet" href="{{media_url}}leaderboard.css" />
+{%endblock%}
+
+{%block body%}
+  <div class=leaderboard>
+  <h1>Top scores</h1>
+  {%if tops%}
+  <table class="issue">
+    <thead>
+      <td>
+        Rank
+      </td>
+      <td>
+        User
+      </td>
+      <td>
+        Score
+      </td>
+      <td>
+        Median Latency
+      </td>
+      <td>
+        Reviewed
+      </td>
+      <td>
+        LGTM'ed
+      </td>
+      <td>
+        Ignored
+      </td>
+    </thead>
+    <tbody>
+      {%for line in tops%}
+      <tr>
+        <td>
+          {{forloop.counter}}
+        </td>
+        <td>
+          <a href="{%url codereview.views.show_user_stats line.user when%}"
+            onMouseOver="M_showUserInfoPopup(this)">{{line.user_short}}</a>
+        </td>
+        <td>
+          <a href="{%url codereview.views.show_user_stats line.user when%}">{{line.score|floatformat:1}}</a>
+        </td>
+        <td title="{%for l in line.latencies%}{{l|format_duration}}, {%endfor%}">
+          {{line.median_latency|format_duration}}
+        </td>
+        <td>
+          {{line.nb_reviewed}}
+        </td>
+        <td>
+          {{line.nb_lgtmed}}
+        </td>
+        <td>
+          {{line.nb_ignored}}
+        </td>
+      </tr>
+      {%endfor%}
+    </tbody>
+  </table>
+  {%else%}
+  <h2>OMG THERE HAZ NO TOP SCORE TO SHOW.</h2>
+  {%endif%}
+
+  {%if shame%}
+  <p>
+  <p>
+  <hr>
+  <h2>These users are MIA</h2>
+  <table class="issue">
+    <thead>
+      <td>
+        User
+      </td>
+      <td>
+        Ignored
+      </td>
+    </thead>
+    <tbody>
+      {%for line in shame%}
+      <tr title="{{line.issues|join:", "}}">
+        <td>
+          <a href="{%url codereview.views.show_user_stats line.user when%}"
+            onMouseOver="M_showUserInfoPopup(this)">{{line.user_short}}</a>
+        </td>
+        <td>
+          <a href="{%url codereview.views.show_user_stats line.user when%}">{{line.nb_ignored}}</a>
+        </td>
+      </tr>
+      {%endfor%}
+    </tbody>
+  </table>
+  {%endif%}
+
+  <p>
+  <div class="legend">
+    Lower Score = Better.
+    <br>
+    <ul>
+      <li>
+        Review latency is calculated on the first email the reviewer received,
+        the request for review, up to the moment the reviewer replied. This take
+        in account when a reviewer is added mid-review.
+      </li>
+      <li>
+        The date of each review is the date of the first email the reviewer
+        received. So if an issue was requested for review by its author on
+        2011-05-01 but the reviewer replied on 2011-05-03, the statistic is be
+        associated to 2011-05-01.
+      </li>
+      <li>
+        The number of reviews done is the number of issue where the user
+        replied.
+      </li>
+      <li>
+      Score = median_latency / reviews_done / percent_reviewed<br>
+      Plus a 100 bonus points if they never LGTM'ed an issue.
+      </li>
+    </ul>
+  </div>
+  <p>
+  <a href="{{media_url}}startfont/LICENSE.txt">Font license</a>
+</div>
+{%endblock%}
