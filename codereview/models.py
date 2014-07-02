@@ -867,7 +867,7 @@ class Patch(ndb.Model):
 
     # AppEngine can only fetch URLs that db.Link() thinks are OK,
     # so try converting to a db.Link() here.
-    issue = self.patchset.issue_key.get()
+    issue = self.patchset_key.get().issue_key.get()
     try:
       base = db.Link(issue.base)
     except db.BadValueError:
