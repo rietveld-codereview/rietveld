@@ -41,13 +41,13 @@ class BaseFeed(Feed):
     if isinstance(item, models.PatchSet):
       if item.data is not None:
         return reverse('codereview.views.download',
-                       args=[item.issue.id(),item.key.id()])
+                       args=[item.issue_key.id(), item.key.id()])
       else:
         # Patch set is too large, only the splitted diffs are available.
         return reverse('codereview.views.show', args=[item.key.parent().id()])
     if isinstance(item, models.Message):
       return '%s#msg-%s' % (reverse('codereview.views.show',
-                                    args=[item.issue.id()]),
+                                    args=[item.issue_key.id()]),
                             item.key.id())
     return reverse('codereview.views.show', args=[item.key.id()])
 
@@ -58,7 +58,7 @@ class BaseFeed(Feed):
     if isinstance(item, models.Issue):
       return library.get_nickname(item.owner, True)
     if isinstance(item, models.PatchSet):
-      return library.get_nickname(item.issue.get().owner, True)
+      return library.get_nickname(item.issue_key.get().owner, True)
     if isinstance(item, models.Message):
       return library.get_nickname(item.sender, True)
     return 'Rietveld'

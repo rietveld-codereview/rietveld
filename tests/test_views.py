@@ -54,7 +54,7 @@ class TestPublish(TestCase):
         self.issue = models.Issue(subject='test')
         self.issue.local_base = False
         self.issue.put()
-        self.ps = models.PatchSet(parent=self.issue.key, issue=self.issue.key)
+        self.ps = models.PatchSet(parent=self.issue.key, issue_key=self.issue.key)
         self.ps.data = load_file('ps1.diff')
         self.ps.put()
         self.patches = engine.ParsePatchSet(self.ps)
@@ -64,7 +64,7 @@ class TestPublish(TestCase):
         request = MockRequest(User('foo@example.com'), issue=self.issue)
         # add a comment and render
         cmt1 = models.Comment(
-            patch=self.patches[0].key, parent=self.patches[0].key)
+            patch_key=self.patches[0].key, parent=self.patches[0].key)
         cmt1.text = 'test comment'
         cmt1.lineno = 1
         cmt1.left = False
@@ -73,7 +73,7 @@ class TestPublish(TestCase):
         cmt1.put()
         # Add a second comment
         cmt2 = models.Comment(
-            patch=self.patches[1].key, parent=self.patches[1].key)
+            patch_key=self.patches[1].key, parent=self.patches[1].key)
         cmt2.text = 'test comment 2'
         cmt2.lineno = 2
         cmt2.left = False
@@ -85,18 +85,18 @@ class TestPublish(TestCase):
         content1.put()
         content2 = models.Content(text="foo\nbar\nbaz\nline\n")
         content2.put()
-        cmt1_patch = cmt1.patch.get()
-        cmt1_patch.content = content1.key
+        cmt1_patch = cmt1.patch_key.get()
+        cmt1_patch.content_key = content1.key
         cmt1_patch.put()
-        cmt2_patch = cmt2.patch.get()
-        cmt2_patch.content = content2.key
+        cmt2_patch = cmt2.patch_key.get()
+        cmt2_patch.content_key = content2.key
         cmt2_patch.put()
         # Mock get content calls. The first fails with an FetchError,
         # the second succeeds (see issue384).
         def raise_err():
             raise models.FetchError()
-        cmt1.patch.get().get_content = raise_err
-        cmt2.patch.get().get_patched_content = lambda: content2
+        cmt1.patch_key.get().get_content = raise_err
+        cmt2.patch_key.get().get_patched_content = lambda: content2
         tbd, comments = views._get_draft_comments(request, self.issue)
         self.assertEqual(len(comments), 2)
         # Try to render draft details using the patched Comment
@@ -192,7 +192,7 @@ class TestModifierCount(TestCase):
         issue = models.Issue(subject="test with 1 line removed")
         issue.local_base = False
         issue.put()
-        ps = models.PatchSet(parent=issue.key, issue=issue.key)
+        ps = models.PatchSet(parent=issue.key, issue_key=issue.key)
         ps.data = self.makePatch(1, 0)
         ps.put()
         patches = engine.ParsePatchSet(ps)
@@ -205,7 +205,7 @@ class TestModifierCount(TestCase):
         issue = models.Issue(subject="test with 1 line removed")
         issue.local_base = False
         issue.put()
-        ps = models.PatchSet(parent=issue.key, issue=issue.key)
+        ps = models.PatchSet(parent=issue.key, issue_key=issue.key)
         ps.data = self.makePatch(0, 1)
         ps.put()
         patches = engine.ParsePatchSet(ps)
@@ -218,7 +218,7 @@ class TestModifierCount(TestCase):
         issue = models.Issue(subject="test with changes")
         issue.local_base = False
         issue.put()
-        ps = models.PatchSet(parent=issue.key, issue=issue.key)
+        ps = models.PatchSet(parent=issue.key, issue_key=issue.key)
         ps.data = self.makePatch(5, 7)
         ps.put()
         patches = engine.ParsePatchSet(ps)

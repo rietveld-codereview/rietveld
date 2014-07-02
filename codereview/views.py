@@ -1056,24 +1056,24 @@ def upload(request):
           last_patch_list = patchsets[-2].patches
           patchsets = None  # Reduce memory usage.
           for opatch in last_patch_list:
-            if opatch.content:
+            if opatch.content_key:
               existing_patches[opatch.filename] = opatch
         for patch in patches:
           # Check if the base file is already uploaded in another patchset.
           if (patch.filename in base_hashes and
               patch.filename in existing_patches and
               (base_hashes[patch.filename] ==
-               existing_patches[patch.filename].content.get().checksum)):
-            content = existing_patches[patch.filename].content
+               existing_patches[patch.filename].content_key.get().checksum)):
+            content_key = existing_patches[patch.filename].content_key
             patch.status = existing_patches[patch.filename].status
             patch.is_binary = existing_patches[patch.filename].is_binary
-            patch.content = content
+            patch.content_key = content_key
 
         existing_patches = None  # Reduce memory usage.
 
         for patch in patches:
           id_string = patch.key.id()
-          if patch.content is not None:
+          if patch.content_key is not None:
             # Base file not needed since we reused a previous upload.  Send its
             # patch id in case it's a binary file and the new content needs to
             # be uploaded.  We mark this by prepending 'nobase' to the id.
@@ -1082,6 +1082,7 @@ def upload(request):
 
         logging.info('upload response is:\n %s\n', msg)
         ndb.put_multi(patches)
+
   return HttpTextResponse(msg)
 
 
@@ -1110,10 +1111,10 @@ def upload_content(request):
   patch.is_binary = form.cleaned_data['is_binary']
 
   if form.cleaned_data['is_current']:
-    if patch.patched_content:
+    if patch.patched_content_key:
       return HttpTextResponse('ERROR: Already have current content.')
   else:
-    if patch.content:
+    if patch.content_key:
       return HttpTextResponse('ERROR: Already have base content.')
 
   content = models.Content(is_uploaded=True, parent=patch.key)
@@ -1135,9 +1136,9 @@ def upload_content(request):
     try:
       content.put()
       if form.cleaned_data['is_current']:
-        patch.patched_content = content.key
+        patch.patched_content_key = content.key
       else:
-        patch.content = content.key
+        patch.content_key = content.key
       patch.put()
       return HttpTextResponse('OK')
     except db.TransactionFailedError as err:
@@ -1176,7 +1177,7 @@ def upload_patch(request):
         'ERROR: Can\'t upload patches to patchset with data.')
   text = utils.to_dbtext(utils.unify_linebreaks(form.get_uploaded_patch()))
   patch = models.Patch(
-    patchset=patchset.key, text=text,
+    patchset_key=patchset.key, text=text,
     filename=form.cleaned_data['filename'], parent=patchset.key)
   patch.put()
 
@@ -1283,7 +1284,7 @@ def _make_new(request, form):
 
   first_ps_id, _ = models.PatchSet.allocate_ids(1, parent=issue.key)
   ps_key = ndb.Key(models.PatchSet, first_ps_id, parent=issue.key)
-  patchset = models.PatchSet(issue=issue.key, data=data, url=url, key=ps_key)
+  patchset = models.PatchSet(issue_key=issue.key, data=data, url=url, key=ps_key)
   patchset.put()
 
   if not separate_patches:
@@ -1378,7 +1379,7 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   first_id, _ = models.PatchSet.allocate_ids(1, parent=issue.key)
   ps_key = ndb.Key(models.PatchSet, first_id, parent=issue.key)
   patchset = models.PatchSet(
-    issue=issue.key, message=message, data=data, url=url, key=ps_key)
+    issue_key=issue.key, message=message, data=data, url=url, key=ps_key)
   patchset.put()
 
   if not separate_patches:
@@ -1642,26 +1643,26 @@ def _delete_cached_contents(patch_list):
   """Transactional helper for edit() to delete cached contents."""
   # TODO(guido): No need to do this in a transaction.
   patches = []
-  contents = []
+  content_keys = []
   for patch in patch_list:
     try:
-      content = patch.content
+      content_key = patch.content_key
     except db.Error:
-      content = None
+      content_key = None
     try:
-      patched_content = patch.patched_content
+      patched_content_key = patch.patched_content_key
     except db.Error:
-      patched_content = None
-    if content is not None:
-      contents.append(content)
-    if patched_content is not None:
-      contents.append(patched_content)
-    patch.content = None
-    patch.patched_content = None
+      patched_content_key = None
+    if content_key is not None:
+      content_keys.append(content_key)
+    if patched_content_key is not None:
+      content_keys.append(patched_content_key)
+    patch.content_key = None
+    patch.patched_content_key = None
     patches.append(patch)
-  if contents:
-    logging.info("Deleting %d contents", len(contents))
-    ndb.delete_multi(contents)
+  if content_keys:
+    logging.info("Deleting %d contents", len(content_keys))
+    ndb.delete_multi(content_keys)
   if patches:
     logging.info("Updating %d patches", len(patches))
     ndb.put_multi(patches)
@@ -1750,7 +1751,8 @@ def tarball(request):
   """/tarball/<issue>/<patchset>/[lr] - Returns a .tar.bz2 file
   containing a/ and b/ trees of the complete files for the entire patchset."""
 
-  patches = (models.Patch.query(models.Patch.patchset == request.patchset.key)
+  patches = (models.Patch
+             .query(models.Patch.patchset_key == request.patchset.key)
              .order(models.Patch.filename)
              .fetch(1000))
 
@@ -1949,7 +1951,7 @@ def _issue_as_dict(issue, messages, request=None):
 
 def _patchset_as_dict(patchset, comments, request):
   """Converts a patchset into a dict."""
-  issue = patchset.issue.get()
+  issue = patchset.issue_key.get()
   values = {
     'patchset': patchset.key.id(),
     'issue': issue.key.id(),
@@ -1962,7 +1964,7 @@ def _patchset_as_dict(patchset, comments, request):
     'num_comments': patchset.num_comments,
     'files': {},
   }
-  for patch in models.Patch.query(models.Patch.patchset == patchset.key):
+  for patch in models.Patch.query(models.Patch.patchset_key == patchset.key):
     # num_comments and num_drafts are left out for performance reason:
     # they cause a datastore query on first access. They could be added
     # optionally if the need ever arises.
@@ -1979,8 +1981,9 @@ def _patchset_as_dict(patchset, comments, request):
     if comments:
       visible_comments = []
       requester_email = request.user.email() if request.user else 'no email'
-      query = models.Comment.query(models.Comment.patch == patch.key).order(
-          models.Comment.date)
+      query = (models.Comment
+               .query(models.Comment.patch_key == patch.key)
+               .order(models.Comment.date))
       for c in query:
         if not c.draft or requester_email == c.author.email():
           visible_comments.append({
@@ -2121,7 +2124,7 @@ def _get_diff_table_rows(request, patch, context, column_width):
       content.put()
     else:
       content.key.delete()
-      request.patch.content = None
+      request.patch.content_key = None
       request.patch.put()
 
   return rows
@@ -2216,24 +2219,24 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if ps_left is None:
     return HttpTextResponse(
         'No patch set exists with that id (%s)' % ps_left_id, status=404)
-  ps_left.issue = request.issue.key
+  ps_left.issue_key = request.issue.key
   ps_right = models.PatchSet.get_by_id(
     int(ps_right_id), parent=request.issue.key)
   if ps_right is None:
     return HttpTextResponse(
         'No patch set exists with that id (%s)' % ps_right_id, status=404)
-  ps_right.issue = request.issue.key
+  ps_right.issue_key = request.issue.key
   if patch_id is not None:
     patch_right = models.Patch.get_by_id(int(patch_id), parent=ps_right.key)
   else:
     patch_right = None
   if patch_right is not None:
-    patch_right.patchset = ps_right.key
+    patch_right.patchset_key = ps_right.key
     if patch_filename is None:
       patch_filename = patch_right.filename
   # Now find the corresponding patch in ps_left
   patch_left = models.Patch.query(
-      models.Patch.patchset == ps_left.key,
+      models.Patch.patchset_key == ps_left.key,
       models.Patch.filename == patch_filename).get()
 
   if patch_left:
@@ -2283,7 +2286,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
 
   if ps_right:
     patch_right = models.Patch.query(
-        models.Patch.patchset == ps_right.key,
+        models.Patch.patchset_key == ps_right.key,
         models.Patch.filename == patch_filename).get()
 
   if patch_right:
@@ -2357,7 +2360,7 @@ def _get_comment_counts(account, patchset):
   comments_by_patch = {}
   drafts_by_patch = {}
   for c in comment_query:
-    pkey = c.patch
+    pkey = c.patch_key
     if not c.draft:
       comments_by_patch[pkey] = comments_by_patch.setdefault(pkey, 0) + 1
     elif account and c.author == account.user:
@@ -2473,7 +2476,7 @@ def _add_or_update_comment(user, issue, patch, lineno, left, text, message_id):
   else:
     if comment is None:
       comment = models.Comment(id=message_id, parent=patch.key)
-    comment.patch = patch.key
+    comment.patch_key = patch.key
     comment.lineno = lineno
     comment.left = left
     comment.text = text
@@ -2584,7 +2587,7 @@ def _inline_draft(request):
   issue_fut = issue.put_async()
 
   query = models.Comment.query(
-      models.Comment.patch == patch.key, models.Comment.lineno == lineno,
+      models.Comment.patch_key == patch.key, models.Comment.lineno == lineno,
       models.Comment.left == left).order(models.Comment.date)
   comments = list(c for c in query if not c.draft or c.author == request.user)
   if comment is not None and comment.author is None:
@@ -2672,7 +2675,7 @@ def publish(request):
   draft_message = None
   if not request.POST.get('message_only', None):
     query = models.Message.query(
-        models.Message.issue == issue.key,
+        models.Message.issue_key == issue.key,
         models.Message.sender == request.user.email(),
         models.Message.draft == True)
     draft_message = query.get()
@@ -2817,23 +2820,24 @@ def _get_draft_comments(request, issue, preview=False):
     if ps_comments:
       patches = dict((p.key, p) for p in patchset.patches)
       for p in patches.itervalues():
-        p.patchset = patchset.key
+        p.patchset_key = patchset.key
       for c in ps_comments:
         c.draft = False
         # Get the patch key value without loading the patch entity.
         # NOTE: Unlike the old version of this code, this is the
         # recommended and documented way to do this!
-        pkey = c.patch
+        pkey = c.patch_key
         if pkey in patches:
           patch = patches[pkey]
-          c.patch = patch.key
+          c.patch_key = patch.key
       if not preview:
         tbd.extend(ps_comments)
         patchset.update_comment_count(len(ps_comments))
         tbd.append(patchset)
-      ps_comments.sort(key=lambda c: (c.patch.get().filename, not c.left,
+      ps_comments.sort(key=lambda c: (c.patch_key.get().filename, not c.left,
                                       c.lineno, c.date))
       comments += ps_comments
+
   return tbd, comments
 
 
@@ -2855,16 +2859,16 @@ def _get_draft_details(request, comments):
   """Helper to display comments with context in the email message."""
   last_key = None
   output = []
-  linecache = {}  # Maps (c.patch.key, c.left) to mapping (lineno, line)
+  linecache = {}  # Maps (c.patch_key, c.left) to mapping (lineno, line)
   modified_patches = []
   fetch_base_failed = False
 
   for c in comments:
-    patch = c.patch.get()
+    patch = c.patch_key.get()
     if (patch.key, c.left) != last_key:
       url = request.build_absolute_uri(
         reverse(diff, args=[request.issue.key.id(),
-                            patch.patchset.id(),
+                            patch.patchset_key.id(),
                             patch.filename]))
       output.append('\n%s\nFile %s (%s):' % (url, patch.filename,
                                              c.left and "left" or "right"))
@@ -2887,7 +2891,7 @@ def _get_draft_details(request, comments):
     context = linecache[last_key].get(c.lineno, '').strip()
     url = request.build_absolute_uri(
       '%s#%scode%d' % (reverse(diff, args=[request.issue.key.id(),
-                                           patch.patchset.id(),
+                                           patch.patchset_key.id(),
                                            patch.filename]),
                        c.left and "old" or "new",
                        c.lineno))
@@ -2948,7 +2952,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   message = message.replace('\r\n', '\n')
   text = ((message.strip() + '\n\n' + details.strip())).strip()
   if draft is None:
-    msg = models.Message(issue=issue.key,
+    msg = models.Message(issue_key=issue.key,
                          subject=subject,
                          sender=my_email,
                          recipients=reply_to,
@@ -2969,12 +2973,12 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     try:
       replied_msg_id = int(in_reply_to)
       replied_msg = models.Message.get_by_id(replied_msg_id, parent=issue.key)
-      msg.in_reply_to = replied_msg.key
-      replied_issue_id = replied_msg.issue.id()
+      msg.in_reply_to_key = replied_msg.key
+      replied_issue_id = replied_msg.issue_key.id()
       if replied_issue_id != issue_id:
         logging.warn('In-reply-to Message is for a different issue: '
                      '%s instead of %s', replied_issue_id, issue_id)
-        msg.in_reply_to = None
+        msg.in_reply_to_key = None
     except (db.KindError, db.BadKeyError, ValueError):
       logging.warn('Invalid in-reply-to Message or key given: %s', in_reply_to)
 
@@ -3097,7 +3101,7 @@ def draft_message(request):
   others to view *is* XSRF-protected.
   """
   query = models.Message.query(
-      models.Message.issue == request.issue.key,
+      models.Message.issue_key == request.issue.key,
       models.Message.sender == request.user.email(),
       models.Message.draft == True)
   if query.count() == 0:
@@ -3135,8 +3139,9 @@ def _post_draft_message(request, draft):
     draft: A Message instance or None.
   """
   if draft is None:
-    draft = models.Message(issue=request.issue.key, parent=request.issue.key,
-                           sender=request.user.email(), draft=True)
+    draft = models.Message(
+      issue_key=request.issue.key, parent=request.issue.key,
+      sender=request.user.email(), draft=True)
   draft.text = request.POST.get('reviewmsg')
   draft.put()
   return HttpTextResponse(draft.text)
@@ -3295,7 +3300,7 @@ def repos(request):
     repo_map[repo.key] = repo
   branches = []
   for branch in models.Branch.query().fetch(2000, batch_size=100):
-    repo_key = branch.repo
+    repo_key = branch.repo_key
     if repo_key in repo_map:
       branch.repository = repo_map[repo_key]
       branches.append(branch)
@@ -3329,7 +3334,7 @@ def repo_new(request):
   if not branch_url.endswith('/'):
     branch_url += '/'
   branch_url += 'trunk/'
-  branch = models.Branch(repo=repo.key, repo_name=repo.name,
+  branch = models.Branch(repo_key=repo.key, repo_name=repo.name,
                          category='*trunk*', name='Trunk',
                          url=branch_url)
   branch.put()
@@ -3355,14 +3360,14 @@ def repo_init(_request):
     python.put()
     pybranches = []
   else:
-    pybranches = list(models.Branch.query(models.Branch.repo == python.key))
+    pybranches = list(models.Branch.query(models.Branch.repo_key == python.key))
   for category, name, url in BRANCHES:
     url = python.url + url
     for br in pybranches:
       if (br.category, br.name, br.url) == (category, name, url):
         break
     else:
-      br = models.Branch(repo=python.key, repo_name='Python',
+      br = models.Branch(repo_key=python.key, repo_name='Python',
                          category=category, name=name, url=url)
       br.put()
   return HttpResponseRedirect(reverse(repos))
@@ -3383,7 +3388,7 @@ def branch_new(request, repo_id):
   if not errors:
     try:
       branch = models.Branch(
-        repo=repo.key,
+        repo_key=repo.key,
         category=form.cleaned_data.get('category'),
         name=form.cleaned_data.get('name'),
         url=form.cleaned_data.get('url'),
@@ -3436,13 +3441,15 @@ def branch_delete(request, branch_id):
   branch = models.Branch.get_by_id(int(branch_id))
   if branch.owner != request.user:
     return HttpTextResponse('You do not own this branch', status=403)
-  repo = branch.repo
+
+  repo_key = branch.repo_key
   branch.key.delete()
-  num_branches = models.Branch.query(models.Branch.repo == repo.key).count()
+  num_branches = models.Branch.query(models.Branch.repo_key == repo_key).count()
   if not num_branches:
     # Even if we don't own the repository?  Yes, I think so!  Empty
     # repositories have no representation on screen.
-    repo.key.delete()
+    repo_key.delete()
+
   return HttpResponseRedirect(reverse(repos))
 
 
@@ -3673,7 +3680,7 @@ def _process_incoming_mail(raw_message, recipients):
 
   # If the subject is long, this might come wrapped into more than one line.
   subject = ' '.join([x.strip() for x in subject.splitlines()])
-  msg = models.Message(issue=issue.key, parent=issue.key,
+  msg = models.Message(issue_key=issue.key, parent=issue.key,
                        subject=subject,
                        sender=sender,
                        recipients=[x for x in recipients],

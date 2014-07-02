@@ -91,7 +91,7 @@ def ParsePatchSet(patchset):
   for filename, text in splitted:
     key = ndb.Key(models.Patch, ids.pop(0), parent=ps_key)
     patches.append(models.Patch(
-        patchset=patchset.key, text=utils.to_dbtext(text),
+        patchset_key=patchset.key, text=utils.to_dbtext(text),
         filename=filename, key=key))
   return patches
 
@@ -245,7 +245,7 @@ def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
   for patch, dct in [(old_patch, old_dict), (new_patch, new_dict)]:
     if patch:  # Skip if the patchset had no patch for this file.
       query = models.Comment.query(
-          models.Comment.patch == patch.key,
+          models.Comment.patch_key == patch.key,
           models.Comment.left == False).order(models.Comment.date)
       for comment in query:
         if comment.draft and comment.author != request.user:
@@ -289,7 +289,7 @@ def _GetComments(request):
   old_dict = {}
   new_dict = {}
   query = models.Comment.query(
-      models.Comment.patch == request.patch.key).order(models.Comment.date)
+      models.Comment.patch_key == request.patch.key).order(models.Comment.date)
   for comment in query:
     if comment.draft and comment.author != request.user:
       continue  # Only show your own drafts
@@ -587,8 +587,8 @@ def _RenderInlineComments(line_valid, lineno, data, user,
   if line_valid:
     comments.append('<td id="%s-line-%s">' % (prefix, lineno))
     if lineno in data:
-      patchset = patch.patchset.get()
-      issue = patchset.issue.get()
+      patchset = patch.patchset_key.get()
+      issue = patchset.issue_key.get()
       comments.append(
         _ExpandTemplate('inline_comment.html',
                         request,
