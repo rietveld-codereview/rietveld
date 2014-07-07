@@ -134,7 +134,7 @@
 
       {%if not issue.closed and not issue.private %}
         {%if user%}
-          {%if not patchset.issue.commit %}
+          {%if not patchset.issue_key.get.commit %}
             {%ifequal last_patchset.key.id patchset.key.id%}
               |
               <a id="tryjobchange-{{patchset.key.id}}" href="#"

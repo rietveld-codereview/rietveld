@@ -915,8 +915,8 @@ class Patch(ndb.Model):
 
     # Find the content and the patched content to use for inverse diffing.
     if self.is_binary:
-      original_content = self.content.get()
-      original_patched_content = self.patched_content.get()
+      original_content = self.content_key.get()
+      original_patched_content = self.patched_content_key.get()
     else:
       original_content = self.get_content()
       original_patched_content = self.get_patched_content()
@@ -939,7 +939,7 @@ class Patch(ndb.Model):
     first_patch_id, _ = Patch.allocate_ids(1, parent=patchset.key)
     patch_key = ndb.Key(Patch, first_patch_id, parent=patchset.key)
     return Patch(key=patch_key,
-                 patchset=patchset.key,
+                 patchset_key=patchset.key,
                  filename=self.filename,
                  status=invert_git_patches.inverted_patch_status,
                  text=inverted_patch_text,
@@ -1032,7 +1032,7 @@ class Patch(ndb.Model):
 
     # AppEngine can only fetch URLs that db.Link() thinks are OK,
     # so try converting to a db.Link() here.
-    issue = self.patchset.issue_key.get()
+    issue = self.patchset_key.get().issue_key.get()
     try:
       base = db.Link(issue.base)
     except db.BadValueError:
