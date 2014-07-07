@@ -36,13 +36,13 @@ def binary_required(func):
   @deco.patch_required
   def binary_wrapper(request, content_type, *args, **kwds):
     if content_type == "0":
-      content_key = request.patch.content
+      content_key = request.patch.content_key
     elif content_type == "1":
-      content_key = request.patch.patched_content
+      content_key = request.patch.patched_content_key
       if not content_key or not content_key.get().data:
         # The file was not modified. It was likely moved without modification.
         # Return the original file.
-        content_key = request.patch.content
+        content_key = request.patch.content_key
     else:
       # Other values are erroneous so request.content won't be set.
       return responses.HttpTextResponse(

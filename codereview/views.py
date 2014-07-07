@@ -1127,6 +1127,9 @@ def upload_content(request):
         patch.patched_content_key = content.key
       else:
         patch.content_key = content.key
+      # TODO(jrobbins): There is a race condition here.  Two requests to
+      # store the old and new versions of a file can happen concurrently
+      # and it may happen that one overwrites the other.
       patch.put()
       return HttpTextResponse('OK')
     except db.TransactionFailedError as err:

@@ -192,7 +192,7 @@ def revert_patchset(request):
   ps_id, _ = models.PatchSet.allocate_ids(1, parent=issue.key)
   ps_key = ndb.Key(models.PatchSet, ps_id, parent=issue.key)
   patchset = models.PatchSet(
-      issue=issue.key,
+      issue_key=issue.key,
       url=None,
       key=ps_key)
   pending_commits.append(patchset)
@@ -211,8 +211,8 @@ def revert_patchset(request):
 
     # Find the original content and patched content.
     if original_patch.is_binary:
-      original_content = original_patch.content.get()
-      original_patched_content = original_patch.patched_content.get()
+      original_content = original_patch.content_key.get()
+      original_patched_content = original_patch.patched_content_key.get()
     else:
       original_content = original_patch.get_content()
       original_patched_content = original_patch.get_patched_content()
@@ -224,7 +224,7 @@ def revert_patchset(request):
     patched_content_key = ndb.Key(
       models.Content, patched_content_id, parent=patch.key)
 
-    if original_patch.patched_content:
+    if original_patched_content:
       content = models.Content(
         key=content_key,
         text=original_patched_content.text,
@@ -270,8 +270,8 @@ def revert_patchset(request):
     pending_commits.append(content)
     pending_commits.append(patched_content)
 
-    patch.content = content.key
-    patch.patched_content = patched_content.key
+    patch.content_key = content.key
+    patch.patched_content_key = patched_content.key
     pending_commits.append(patch)
 
   # Commit the gathered revert Issue, PatchSet, Patches and Contents.
