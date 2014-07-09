@@ -57,7 +57,9 @@ class="{%if bucket.quoted%}comment-text-quoted{%else%}comment-text{%endif%}"
    href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}')"
 ><b>Reply</b></a>
 {%if c.backend%}<a href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Please fix.', true)"><b>Please fix</b></a>
-{%else%}<a name="comment-done" href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Done.', true)"><b>Done</b></a>{%endif%}
+{%else%}<a name="comment-done" href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Done.', true)"><b>Done</b></a>
+<a name="comment-ack" href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Acknowledged.', true)"><b>Ack</b></a>
+{%endif%}
 {%ifequal c.backend "bugbot"%} &nbsp; <a target="_blank" href="http://bugbotexp{{file.depot_path|escape}}"><b>&raquo; Suppress</b></a>{%endifequal%}
 {%endif%}
 {%endif%}
