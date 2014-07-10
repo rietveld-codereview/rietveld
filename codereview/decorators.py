@@ -84,11 +84,14 @@ def image_required(func):
 
   @patch_required
   def image_wrapper(request, image_type, *args, **kwds):
+    content_key = None
     content = None
     if image_type == "0":
-      content = request.patch.content_key.get()
+      content_key = request.patch.content_key
     elif image_type == "1":
-      content = request.patch.patched_content_key.get()
+      content_key = request.patch.patched_content_key
+    if content_key:
+      content = content_key.get()
     # Other values are erroneous so request.content won't be set.
     if not content or not content.data:
       return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
