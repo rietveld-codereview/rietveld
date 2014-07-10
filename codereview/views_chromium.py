@@ -21,6 +21,7 @@ import os
 import re
 
 from google.appengine.api import taskqueue
+from google.appengine.api import users
 from google.appengine.datastore import datastore_query
 from google.appengine.ext import db
 from google.appengine.ext import ndb
@@ -240,6 +241,11 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
   # Used only for logging.
   keyname = '%s-%s-%s-%s' % (issue_id, patchset_id, buildername, buildnumber)
 
+  if 'requester' in properties:
+    requester = users.User(properties['requester'])
+  else:
+    requester = None
+  
   def tx_try_job_result():
     if try_job_key:
       try_obj = ndb.Key(urlsafe=try_job_key).get()
@@ -269,6 +275,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
           slave=slavename,
           buildnumber=buildnumber,
           revision=revision,
+          requester=requester,
           project=project,
           clobber=bool(properties.get('clobber')),
           tests=properties.get('testfilter') or [])
