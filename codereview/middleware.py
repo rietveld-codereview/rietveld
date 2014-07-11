@@ -96,7 +96,8 @@ class PropagateExceptionMiddleware(object):
 class RedirectToHTTPSMiddleware(object):
   """Redirect HTTP requests to the equivalent HTTPS resource."""
   def process_request(self, request):
-    if settings.DEBUG or request.method == 'POST':
+    is_cron = request.META.get('HTTP_X_APPENGINE_CRON', '') == 'true'
+    if settings.DEBUG or request.method == 'POST' or is_cron:
       return
     if not request.is_secure():
       host = request.get_host().split(':')[0]
