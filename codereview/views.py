@@ -253,7 +253,13 @@ class EditLocalBaseForm(forms.Form):
                        max_length=MAX_CC,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
-  private = forms.BooleanField(required=False, initial=False)
+  private = forms.BooleanField(
+    required=False, initial=False, label='Protected',
+    help_text=(
+      'Only viewable by @chromium and @google accounts.'
+      '<div class="if_checked">'
+      'Please, avoid mailing lists in the CC and Reviewers fields.'
+      '</div>'))
   closed = forms.BooleanField(required=False)
 
   def get_base(self):

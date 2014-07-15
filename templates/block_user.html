@@ -11,7 +11,7 @@
 <h2>Blocking {{viewed_account.email}} ({{viewed_account.nickname}})</h2>
 
 <form action="{%url codereview.views.block_user viewed_account.email%}" method="post">
-<table>
+<table class="formtable">
 {{form}}
 <tr><td><input type="submit" value="Update"></td></tr>
 </table>

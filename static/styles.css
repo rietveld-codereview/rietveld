@@ -891,3 +891,24 @@ ul.errorlist li {
 #repoview table {
   margin-top: 0.5em;
 }
+
+.formtable th {
+  padding-top: 6px;
+  vertical-align: top;
+  text-align: right;
+}
+
+.formtable td {
+  padding: 4px;
+  vertical-align: top;
+}
+
+.if_checked {
+  display: none;
+}
+
+input:checked ~ span .if_checked {
+  display: block;
+  font-weight: bold;
+}
+  

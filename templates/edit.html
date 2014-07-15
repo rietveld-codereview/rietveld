@@ -5,7 +5,7 @@
 <form action="{%url codereview.views.edit issue.key.id%}"
       method="post" id="edit-form">
 <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
-<table>
+<table class="formtable">
 {{form}}
 <tr><td><input type="submit" value="Update Issue"></td></tr>
 </table>
