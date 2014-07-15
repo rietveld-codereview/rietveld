@@ -28,7 +28,7 @@
   <form action="{%url codereview.views.publish issue.key.id%}"
         method="post" id="publish-form">
   <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
-  <table>
+  <table class="formtable">
   {%ifnotequal user issue.owner%}
   <tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
   {%endifnotequal%}
