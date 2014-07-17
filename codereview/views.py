@@ -1092,6 +1092,19 @@ def upload(request):
   return HttpTextResponse(msg)
 
 
+@ndb.transactional()
+def _update_patch(patch_key, content_key, is_current, status, is_binary):
+  """Store content-related info in a Patch."""
+  patch = patch_key.get()
+  patch.status = status
+  patch.is_binary = is_binary
+  if is_current:
+    patch.patched_content_key = content_key
+  else:
+    patch.content_key = content_key
+  patch.put()
+
+
 @deco.require_methods('POST')
 @deco.patch_required
 @deco.upload_required
@@ -1113,8 +1126,6 @@ def upload_content(request):
     return HttpTextResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                             (request.user, request.issue.key.id()))
   patch = request.patch
-  patch.status = form.cleaned_data['status']
-  patch.is_binary = form.cleaned_data['is_binary']
 
   if form.cleaned_data['is_current']:
     if patch.patched_content_key:
@@ -1132,7 +1143,7 @@ def upload_content(request):
     checksum = md5.new(data).hexdigest()
     if checksum != request.POST.get('checksum'):
       return HttpTextResponse('ERROR: Checksum mismatch.')
-    if patch.is_binary:
+    if form.cleaned_data['is_binary']:
       content.data = data
     else:
       content.text = utils.to_dbtext(utils.unify_linebreaks(data))
@@ -1141,14 +1152,13 @@ def upload_content(request):
   for try_number in xrange(DB_WRITE_TRIES):
     try:
       content.put()
-      if form.cleaned_data['is_current']:
-        patch.patched_content_key = content.key
-      else:
-        patch.content_key = content.key
-      patch.put()
+      _update_patch(
+        patch.key, content.key, form.cleaned_data['is_current'],
+        form.cleaned_data['status'], form.cleaned_data['is_binary'])
       return HttpTextResponse('OK')
     except db.TransactionFailedError as err:
-      logging.exception(err)
+      if not err.message.endswith('Please try again.'):
+        logging.exception(err)
       # AppEngine datastore cannot write to the same entity group rapidly.
       time.sleep(DB_WRITE_PAUSE + try_number * random.random())
 
