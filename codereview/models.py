@@ -787,12 +787,12 @@ class Patch(ndb.Model):
     """
     if self._lines is not None:
       return self._lines
-    if not self.text:
-      lines = []
-    else:
-      lines = self.text.splitlines(True)
-    self._lines = lines
-    return lines
+
+    # Note that self.text has already had newlines normalized on upload.
+    # And, any ^L characters are explicitly not treated as breaks.
+    bare_lines = self.text.split('\n')
+    self._lines = [bare_line + '\n' for bare_line in bare_lines]
+    return self._lines
 
   _property_changes = None
 
