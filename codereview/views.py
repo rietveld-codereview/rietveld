@@ -16,6 +16,7 @@
 
 import binascii
 import calendar
+import cgi
 import datetime
 import email  # see incoming_mail()
 import email.utils
@@ -33,6 +34,7 @@ import urllib
 from cStringIO import StringIO
 from xml.etree import ElementTree
 
+from google.appengine.api import app_identity
 from google.appengine.api import mail
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
@@ -52,6 +54,8 @@ from django.shortcuts import render_to_response
 import django.template
 from django.template import RequestContext
 from django.utils import encoding
+from django.utils.html import strip_tags
+from django.utils.html import urlize
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
 from django.core.servers.basehttp import FileWrapper
@@ -70,6 +74,7 @@ from codereview import auth_utils
 from codereview import engine
 from codereview import library
 from codereview import models
+from codereview import models_chromium
 from codereview import notify_xmpp
 from codereview import patching
 from codereview import utils
@@ -152,39 +157,6 @@ class AccountInput(forms.TextInput):
     return output
 
 
-class IssueBaseForm(forms.Form):
-
-  subject = forms.CharField(max_length=MAX_SUBJECT,
-                            widget=forms.TextInput(attrs={'size': 60}))
-  description = forms.CharField(required=False,
-                                max_length=MAX_DESCRIPTION,
-                                widget=forms.Textarea(attrs={'cols': 60}))
-  branch = forms.ChoiceField(required=False, label='Base URL')
-  base = forms.CharField(required=False,
-                         max_length=MAX_URL,
-                         widget=forms.TextInput(attrs={'size': 60}))
-  reviewers = forms.CharField(required=False,
-                              max_length=MAX_REVIEWERS,
-                              widget=AccountInput(attrs={'size': 60}))
-  cc = forms.CharField(required=False,
-                       max_length=MAX_CC,
-                       label = 'CC',
-                       widget=AccountInput(attrs={'size': 60}))
-  private = forms.BooleanField(required=False, initial=False)
-
-  def get_base(self):
-    base = self.cleaned_data.get('base')
-    if not base:
-      key = self.cleaned_data['branch']
-      if key:
-        branch = models.Branch.get_by_id(key)
-        if branch is not None:
-          base = branch.url
-    if not base:
-      self.errors['base'] = ['You must specify a base']
-    return base or None
-
-
 class UploadForm(forms.Form):
 
   subject = forms.CharField(max_length=MAX_SUBJECT)
@@ -200,6 +172,7 @@ class UploadForm(forms.Form):
   private = forms.BooleanField(required=False, initial=False)
   send_mail = forms.BooleanField(required=False)
   base_hashes = forms.CharField(required=False)
+  commit = forms.BooleanField(required=False)
   repo_guid = forms.CharField(required=False, max_length=MAX_URL)
 
   def clean_base(self):
@@ -240,6 +213,32 @@ class UploadPatchForm(forms.Form):
     return self.files['data'].read()
 
 
+class UploadBuildResult(forms.Form):
+  platform_id = forms.CharField(max_length=255)
+  # Not specifying a status removes this build result
+  status = forms.CharField(max_length=255, required=False)
+  details_url = forms.URLField(max_length=2083, required=False)
+
+  SEPARATOR = '|'
+  _VALID_STATUS = ['failure', 'pending', 'success', '']
+
+  def is_valid(self):
+    if not super(UploadBuildResult, self).is_valid():
+      return False
+    if self.cleaned_data['status'] not in UploadBuildResult._VALID_STATUS:
+      self.errors['status'] = ['"%s" is not a valid build result status' %
+                               self.cleaned_data['status']]
+      return False
+    return True
+
+  def __str__(self):
+    return '%s%s%s%s%s' % (strip_tags(self.cleaned_data['platform_id']),
+                           UploadBuildResult.SEPARATOR,
+                           strip_tags(self.cleaned_data['status']),
+                           UploadBuildResult.SEPARATOR,
+                           strip_tags(self.cleaned_data['details_url']))
+
+
 class EditLocalBaseForm(forms.Form):
   subject = forms.CharField(max_length=MAX_SUBJECT,
                             widget=forms.TextInput(attrs={'size': 60}))
@@ -266,20 +265,6 @@ class EditLocalBaseForm(forms.Form):
     return None
 
 
-class RepoForm(forms.Form):
-  name = forms.CharField()
-  url = forms.URLField()
-  guid = forms.CharField(required=False)
-
-
-class BranchForm(forms.Form):
-  category = forms.CharField(
-    widget=forms.Select(choices=[(ch, ch)
-                                 for ch in models.BRANCH_CATEGORY_CHOICES]))
-  name = forms.CharField()
-  url = forms.URLField()
-
-
 class PublishForm(forms.Form):
 
   subject = forms.CharField(max_length=MAX_SUBJECT,
@@ -292,6 +277,7 @@ class PublishForm(forms.Form):
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
+  add_as_reviewer = forms.BooleanField(required=False, initial=True)
   message = forms.CharField(required=False,
                             max_length=MAX_MESSAGE,
                             widget=forms.Textarea(attrs={'cols': 60}))
@@ -299,6 +285,7 @@ class PublishForm(forms.Form):
                                     widget=forms.HiddenInput())
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
+  commit = forms.BooleanField(required=False, widget=forms.HiddenInput())
   in_reply_to = forms.CharField(required=False,
                                 max_length=MAX_DB_KEY_LENGTH,
                                 widget=forms.HiddenInput())
@@ -317,6 +304,7 @@ class MiniPublishForm(forms.Form):
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
   send_mail = forms.BooleanField(required=False)
+  add_as_reviewer = forms.BooleanField(required=False, initial=True)
   message = forms.CharField(required=False,
                             max_length=MAX_MESSAGE,
                             widget=forms.Textarea(attrs={'cols': 60}))
@@ -324,6 +312,7 @@ class MiniPublishForm(forms.Form):
                                     widget=forms.HiddenInput())
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
+  commit = forms.BooleanField(required=False, widget=forms.HiddenInput())
   automated = forms.BooleanField(required=False, widget=forms.HiddenInput(),
                                  initial=True)
   verbose = forms.BooleanField(required=False, widget=forms.HiddenInput())
@@ -463,6 +452,7 @@ class SearchForm(forms.Form):
                               label="Repository ID")
   base = forms.CharField(required=False, max_length=MAX_URL)
   private = forms.NullBooleanField(required=False)
+  commit = forms.NullBooleanField(required=False)
   created_before = forms.DateTimeField(required=False, label='Created before')
   created_after = forms.DateTimeField(
       required=False, label='Created on or after')
@@ -1012,12 +1002,9 @@ def upload(request):
         form.errors['issue'] = ['Base files upload required for that issue.']
         issue = None
       else:
-        if not issue.edit_allowed:
+        if not issue.upload_allowed:
           form.errors['user'] = ['You (%s) don\'t own this issue (%s)' %
                                  (request.user, issue_id)]
-          issue = None
-        elif issue.closed:
-          form.errors['issue'] = ['This issue is closed (%s)' % (issue_id)]
           issue = None
         else:
           patchset = _add_patchset_from_form(request, issue, form, 'subject',
@@ -1040,6 +1027,7 @@ def upload(request):
       msg +="\n%d" % patchset.key.id()
       if form.cleaned_data.get('content_upload'):
         # Extend the response: additional lines are the expected filenames.
+        issue.commit = form.cleaned_data.get('commit', False)
         issue.put()
 
         base_hashes = {}
@@ -1122,7 +1110,7 @@ def upload_content(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if not request.issue.edit_allowed:
+  if not request.issue.upload_allowed:
     return HttpTextResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                             (request.user, request.issue.key.id()))
   patch = request.patch
@@ -1179,7 +1167,7 @@ def upload_patch(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if not request.issue.edit_allowed:
+  if not request.issue.upload_allowed:
     return HttpTextResponse(
         'ERROR: You (%s) don\'t own this issue (%s).' %
         (request.user, request.issue.key.id()))
@@ -1202,7 +1190,7 @@ def upload_patch(request):
 
 
 @deco.require_methods('POST')
-@deco.issue_editor_required
+@deco.issue_uploader_required
 @deco.upload_required
 def upload_complete(request, patchset_id=None):
   """/<issue>/upload_complete/<patchset> - Patchset upload is complete.
@@ -1243,8 +1231,8 @@ def upload_complete(request, patchset_id=None):
 
   # Create (and send) a message if needed.
   if request.POST.get('send_mail') == 'yes' or request.POST.get('message'):
-    msg = _make_message(request, request.issue, request.POST.get('message', ''),
-                        send_mail=(request.POST.get('send_mail', '') == 'yes'))
+    msg = make_message(request, request.issue, request.POST.get('message', ''),
+                       send_mail=(request.POST.get('send_mail', '') == 'yes'))
     request.issue.put()
     msg.put()
     notify_xmpp.notify_issue(request, request.issue, 'Mailed')
@@ -1322,7 +1310,7 @@ def _make_new(request, form):
     ndb.put_multi(patches)
 
   if form.cleaned_data.get('send_mail'):
-    msg = _make_message(request, issue, '', '', True)
+    msg = make_message(request, issue, '', '', True)
     issue.put()
     msg.put()
     notify_xmpp.notify_issue(request, issue, 'Created')
@@ -1361,7 +1349,7 @@ def _get_data_url(form):
     return None
 
   if data is not None:
-    data = db.Blob(utils.unify_linebreaks(data.read()))
+    data = utils.unify_linebreaks(data.read())
     url = None
   elif url:
     try:
@@ -1372,7 +1360,7 @@ def _get_data_url(form):
     if fetch_result.status_code != 200:
       form.errors['url'] = ['HTTP status code %s' % fetch_result.status_code]
       return None
-    data = db.Blob(utils.unify_linebreaks(fetch_result.content))
+    data = utils.unify_linebreaks(fetch_result.content)
 
   return data, url, separate_patches
 
@@ -1424,11 +1412,12 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   else:
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
+  issue.commit = False
   issue.calculate_updates_for()
   issue.put()
 
   if form.cleaned_data.get('send_mail'):
-    msg = _make_message(request, issue, message, '', True)
+    msg = make_message(request, issue, message, '', True)
     issue.put()
     msg.put()
     notify_xmpp.notify_issue(request, issue, 'Updated')
@@ -1513,6 +1502,50 @@ def _get_patchset_info(request, patchset_id):
   return issue, patchsets, response
 
 
+def replace_bug(message):
+  bugs = re.split(r"[\s,]+", message.group(1))
+  base_tracker_url = 'http://code.google.com/p/%s/issues/detail?id=%s'
+  valid_trackers = ('chromium', 'chromium-os', 'chrome-os-partner', 'gyp',
+                    'skia', 'v8', 'webrtc')
+  urls = []
+  for bug in bugs:
+    if not bug:
+      continue
+    tracker = 'chromium'
+    if ':' in bug:
+      tracker, bug_id = bug.split(':', 1)
+      if tracker not in valid_trackers:
+        urls.append(bug)
+        continue
+    else:
+      bug_id = bug
+    url = '<a href="' + base_tracker_url % (tracker, bug_id) + '">'
+    urls.append(url + bug + '</a>')
+
+  return ", ".join(urls) + "\n"
+
+
+def _map_base_url(base):
+  """Check if Base URL can be converted into a source code viewer URL."""
+  for rule in models_chromium.UrlMap.query().order(
+      models_chromium.UrlMap.base_url_template):
+    base_template = r'^%s$' % rule.base_url_template
+    match = re.match(base_template, base)
+    if not match:
+      continue
+    try:
+      src_url = re.sub(base_template,
+                       rule.source_code_url_template,
+                       base)
+    except re.error, err:
+      logging.error('err: %s base: "%s" rule: "%s" => "%s"',
+                    err, base, rule.base_url_template,
+                    rule.source_code_url_template)
+      return None
+    return src_url
+  return None
+
+
 @deco.issue_required
 def show(request):
   """/<issue> - Show an issue."""
@@ -1532,7 +1565,32 @@ def show(request):
     elif msg.draft and request.user and msg.sender == request.user.email():
       has_draft_message = True
   num_patchsets = len(patchsets)
+
+  issue.description = cgi.escape(issue.description)
+  issue.description = urlize(issue.description)
+  re_string = r"(?<=BUG=)"
+  re_string += "(\s*(?:[a-z0-9-]+:)?\d+\s*(?:,\s*(?:[a-z0-9-]+:)?\d+\s*)*)"
+  expression = re.compile(re_string, re.IGNORECASE)
+  issue.description = re.sub(expression, replace_bug, issue.description)
+  issue.description = issue.description.replace('\n', '<br/>')
+  src_url = _map_base_url(issue.base)
+
+  # Generate the set of possible parents for every builder name, if a
+  # builder could have 2 different parents, then append the parent name to
+  # the builder to differentiate them.
+  builds_to_parents = {}
+  for try_job in last_patchset.try_job_results:
+    if try_job.parent_name:
+      builds_to_parents.setdefault(try_job.builder,
+                                   set()).add(try_job.parent_name)
+
+  for try_job in last_patchset.try_job_results:
+    if try_job.parent_name and len(builds_to_parents[try_job.builder]) > 1:
+      try_job.builder = try_job.parent_name + ':' + try_job.builder
+
   return respond(request, 'issue.html', {
+    'default_builders':
+      models_chromium.TryserverBuilders.get_builders(),
     'first_patch': first_patch,
     'has_draft_message': has_draft_message,
     'is_editor': issue.edit_allowed,
@@ -1541,6 +1599,9 @@ def show(request):
     'messages': messages,
     'num_patchsets': num_patchsets,
     'patchsets': patchsets,
+    'src_url': src_url,
+    'trybot_documentation_link':
+      models_chromium.DefaultBuilderList.get_doc_link(issue.base),
   })
 
 
@@ -1641,6 +1702,8 @@ def edit(request):
   issue.subject = cleaned_data['subject']
   issue.description = cleaned_data['description']
   issue.closed = cleaned_data['closed']
+  if issue.closed:
+    issue.commit = False
   issue.private = cleaned_data.get('private', False)
   base_changed = (issue.base != base)
   issue.base = base
@@ -1692,7 +1755,7 @@ def delete(request):
   issue = request.issue
   tbd = [issue]
   for cls in [models.PatchSet, models.Patch, models.Comment,
-              models.Message, models.Content]:
+              models.Message, models.Content, models.TryJobResult]:
     tbd += cls.query(ancestor=issue.key)
   ndb.delete_multi(entity.key for entity in tbd)
   return HttpResponseRedirect(reverse(mine))
@@ -1717,6 +1780,7 @@ def close(request):
   """/<issue>/close - Close an issue."""
   issue = request.issue
   issue.closed = True
+  issue.commit = False
   if request.method == 'POST':
     new_description = request.POST.get('description')
     if new_description:
@@ -1738,7 +1802,7 @@ def mailissue(request):
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
   issue = request.issue
-  msg = _make_message(request, issue, '', '', True)
+  msg = make_message(request, issue, '', '', True)
   issue.put()
   msg.put()
   notify_xmpp.notify_issue(request, issue, 'Mailed')
@@ -1916,7 +1980,7 @@ def patch_helper(request, nav_type='patch'):
 @deco.access_control_allow_origin_star
 @deco.image_required
 def image(request):
-  """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
+  """/<issue>/image/<patchset>/<patch>/<content> - Return patch's content."""
   response = HttpResponse(request.content.data, content_type=request.mime_type)
   filename = re.sub(
       r'[^\w\.]', '_', request.patch.filename.encode('ascii', 'replace'))
@@ -1949,6 +2013,7 @@ def _issue_as_dict(issue, messages, request=None):
     'issue': issue.key.id(),
     'base_url': issue.base,
     'private': issue.private,
+    'commit': issue.commit,
   }
   if messages:
     values['messages'] = sorted(
@@ -1978,6 +2043,7 @@ def _patchset_as_dict(patchset, comments, request):
     'created': str(patchset.created),
     'modified': str(patchset.modified),
     'num_comments': patchset.num_comments,
+    'try_job_results': [t.to_dict() for t in patchset.try_job_results],
     'files': {},
   }
   for patch in models.Patch.query(models.Patch.patchset_key == patchset.key):
@@ -2037,6 +2103,14 @@ def api_patchset(request):
   """
   comments = request.GET.get('comments', 'false').lower() == 'true'
   values = _patchset_as_dict(request.patchset, comments, request)
+
+  # Add the current datetime as seen by AppEngine (it should always be UTC).
+  # This makes it possible to reliably compare try job timestamps (also based
+  # on AppEngine time) and the current time, e.g. to determine how old the job
+  # is.
+  assert 'current_datetime' not in values
+  values['current_datetime'] = str(datetime.datetime.now())
+
   return values
 
 
@@ -2090,6 +2164,8 @@ def diff(request):
 
   context = _get_context_for_user(request)
   column_width = _get_column_width_for_user(request)
+  if patch.filename.startswith('webkit/api'):
+    column_width = django_settings.MAX_COLUMN_WIDTH
   if patch.is_binary:
     rows = None
   else:
@@ -2099,6 +2175,9 @@ def diff(request):
       return HttpTextResponse(str(err), status=404)
 
   _add_next_prev(patchset, patch)
+  src_url = _map_base_url(request.issue.base)
+  if src_url and not src_url.endswith('/'):
+    src_url = src_url + '/'
   return respond(request, 'diff.html',
                  {'issue': request.issue,
                   'patchset': patchset,
@@ -2109,6 +2188,7 @@ def diff(request):
                   'context_values': models.CONTEXT_CHOICES,
                   'column_width': column_width,
                   'patchsets': patchsets,
+                  'src_url': src_url,
                   })
 
 
@@ -2698,12 +2778,6 @@ def publish(request):
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
     cc = issue.cc[:]
-    if (request.user != issue.owner and
-        request.user.email() not in issue.reviewers and
-        not issue.is_collaborator(request.user)):
-      reviewers.append(request.user.email())
-      if request.user.email() in cc:
-        cc.remove(request.user.email())
     reviewers = [models.Account.get_nickname_for_email(reviewer,
                                                        default=reviewer)
                  for reviewer in reviewers]
@@ -2744,10 +2818,12 @@ def publish(request):
     reviewers = _get_emails(form, 'reviewers')
   else:
     reviewers = issue.reviewers
-    if (request.user != issue.owner and
-        request.user.email() not in reviewers and
-        not issue.is_collaborator(request.user)):
-      reviewers.append(db.Email(request.user.email()))
+  if (form.is_valid() and form.cleaned_data.get('add_as_reviewer', True) and
+      request.user != issue.owner and
+      request.user.email() not in reviewers and
+      not issue.is_collaborator(request.user)):
+    reviewers.append(request.user.email())
+
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
   else:
@@ -2759,6 +2835,8 @@ def publish(request):
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
   issue.reviewers = reviewers
   issue.cc = cc
+  if form.cleaned_data['commit'] and not issue.closed:
+    issue.commit = True
   if not form.cleaned_data.get('message_only', False):
     tbd, comments = _get_draft_comments(request, issue)
   else:
@@ -2769,12 +2847,12 @@ def publish(request):
 
   if comments:
     logging.warn('Publishing %d comments', len(comments))
-  msg = _make_message(request, issue,
-                      form.cleaned_data['message'],
-                      comments,
-                      form.cleaned_data['send_mail'],
-                      draft=draft_message,
-                      in_reply_to=form.cleaned_data.get('in_reply_to'))
+  msg = make_message(request, issue,
+                     form.cleaned_data['message'],
+                     comments,
+                     form.cleaned_data['send_mail'],
+                     draft=draft_message,
+                     in_reply_to=form.cleaned_data.get('in_reply_to'))
   tbd.append(msg)
 
   for obj in tbd:
@@ -2933,19 +3011,20 @@ def _get_modified_counts(issue):
   return modified_added_count, modified_removed_count
 
 
-def _make_message(request, issue, message, comments=None, send_mail=False,
+def make_message(request, issue, message, comments=None, send_mail=False,
                   draft=None, in_reply_to=None):
   """Helper to create a Message instance and optionally send an email."""
   attach_patch = request.POST.get("attach_patch") == "yes"
   template, context = _get_mail_template(request, issue, full_diff=attach_patch)
   # Decide who should receive mail
-  my_email = db.Email(request.user.email())
-  to = ([db.Email(issue.owner.email())] +
-        issue.reviewers +
-        [db.Email(email) for email in issue.collaborator_emails()])
+  my_email = request.user.email()
+  to = [issue.owner.email()] + issue.reviewers + issue.collaborator_emails()
   cc = issue.cc[:]
-  if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
-    cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
+  # Chromium's instance adds reply@chromiumcodereview.appspotmail.com to the
+  # Google Group which is CCd on all reviews.
+  #cc.append(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS)
+  #if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
+  #  cc.append(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS)
   reply_to = to + cc
   if my_email in to and len(to) > 1:  # send_mail() wants a non-empty to list
     to.remove(my_email)
@@ -3176,6 +3255,7 @@ def _delete_draft_message(draft):
   return HttpTextResponse('OK')
 
 
+@deco.access_control_allow_origin_star
 @deco.json_response
 def search(request):
   """/search - Search for issues or patchset.
@@ -3226,6 +3306,8 @@ def search(request):
     q = q.filter(models.Issue.cc == form.cleaned_data['cc'])
   if form.cleaned_data['private'] is not None:
     q = q.filter(models.Issue.private == form.cleaned_data['private'])
+  if form.cleaned_data['commit'] is not None:
+    q = q.filter(models.Issue.commit == form.cleaned_data['commit'])
   if form.cleaned_data['repo_guid']:
     q = q.filter(models.Issue.repo_guid == form.cleaned_data['repo_guid'])
   if form.cleaned_data['base']:
@@ -3299,174 +3381,6 @@ def search(request):
     data['results'] = [_issue_as_dict(i, with_messages, request)
                       for i in filtered_results]
   return data
-
-
-### Repositories and Branches ###
-
-
-def repos(request):
-  """/repos - Show the list of known Subversion repositories."""
-  # Clean up garbage created by buggy edits
-  bad_branch_keys = models.Branch.query(models.Branch.owner == None).fetch(
-      100, keys_only=True)
-  if bad_branch_keys:
-    ndb.delete_multi(bad_branch_keys)
-  repo_map = {}
-  for repo in models.Repository.query().fetch(1000, batch_size=100):
-    repo_map[repo.key] = repo
-  branches = []
-  for branch in models.Branch.query().fetch(2000, batch_size=100):
-    repo_key = branch.repo_key
-    if repo_key in repo_map:
-      branch.repository = repo_map[repo_key]
-      branches.append(branch)
-  branches.sort(key=lambda b: map(
-    unicode.lower, (b.repository.name, b.category, b.name)))
-  return respond(request, 'repos.html', {'branches': branches})
-
-
-@deco.login_required
-@deco.xsrf_required
-def repo_new(request):
-  """/repo_new - Create a new Subversion repository record."""
-  if request.method != 'POST':
-    form = RepoForm()
-    return respond(request, 'repo_new.html', {'form': form})
-  form = RepoForm(request.POST)
-  errors = form.errors
-  if not errors:
-    try:
-      repo = models.Repository(
-        name=form.cleaned_data.get('name'),
-        url=form.cleaned_data.get('url'),
-        guid=form.cleaned_data.get('guid'),
-        )
-    except (db.BadValueError, ValueError), err:
-      errors['__all__'] = unicode(err)
-  if errors:
-    return respond(request, 'repo_new.html', {'form': form})
-  repo.put()
-  branch_url = repo.url
-  if not branch_url.endswith('/'):
-    branch_url += '/'
-  branch_url += 'trunk/'
-  branch = models.Branch(repo_key=repo.key, repo_name=repo.name,
-                         category='*trunk*', name='Trunk',
-                         url=branch_url)
-  branch.put()
-  return HttpResponseRedirect(reverse(repos))
-
-
-SVN_ROOT = 'http://svn.python.org/view/*checkout*/python/'
-BRANCHES = [
-    # category, name, url suffix
-    ('*trunk*', 'Trunk', 'trunk/'),
-    ('branch', '2.5', 'branches/release25-maint/'),
-    ('branch', 'py3k', 'branches/py3k/'),
-    ]
-
-
-# TODO: Make this a POST request to avoid XSRF attacks.
-@deco.admin_required
-def repo_init(_request):
-  """/repo_init - Initialze the list of known Subversion repositories."""
-  python = models.Repository.query(models.Repository.name == 'Python').get()
-  if python is None:
-    python = models.Repository(name='Python', url=SVN_ROOT)
-    python.put()
-    pybranches = []
-  else:
-    pybranches = list(models.Branch.query(models.Branch.repo_key == python.key))
-  for category, name, url in BRANCHES:
-    url = python.url + url
-    for br in pybranches:
-      if (br.category, br.name, br.url) == (category, name, url):
-        break
-    else:
-      br = models.Branch(repo_key=python.key, repo_name='Python',
-                         category=category, name=name, url=url)
-      br.put()
-  return HttpResponseRedirect(reverse(repos))
-
-
-@deco.login_required
-@deco.xsrf_required
-def branch_new(request, repo_id):
-  """/branch_new/<repo> - Add a new Branch to a Repository record."""
-  repo = models.Repository.get_by_id(int(repo_id))
-  if request.method != 'POST':
-    form = BranchForm(initial={'url': repo.url,
-                               'category': 'branch',
-                               })
-    return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
-  form = BranchForm(request.POST)
-  errors = form.errors
-  if not errors:
-    try:
-      branch = models.Branch(
-        repo_key=repo.key,
-        category=form.cleaned_data.get('category'),
-        name=form.cleaned_data.get('name'),
-        url=form.cleaned_data.get('url'),
-        )
-    except (db.BadValueError, ValueError), err:
-      errors['__all__'] = unicode(err)
-  if errors:
-    return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
-  branch.repo_name = repo.name
-  branch.put()
-  return HttpResponseRedirect(reverse(repos))
-
-
-@deco.login_required
-@deco.xsrf_required
-def branch_edit(request, branch_id):
-  """/branch_edit/<branch> - Edit a Branch record."""
-  branch = models.Branch.get_by_id(int(branch_id))
-  if branch.owner != request.user:
-    return HttpTextResponse('You do not own this branch', status=403)
-  if request.method != 'POST':
-    form = BranchForm(initial={'category': branch.category,
-                               'name': branch.name,
-                               'url': branch.url,
-                               })
-    return respond(request, 'branch_edit.html',
-                   {'branch': branch, 'form': form})
-
-  form = BranchForm(request.POST)
-  errors = form.errors
-  if not errors:
-    try:
-      branch.category = form.cleaned_data.get('category')
-      branch.name = form.cleaned_data.get('name')
-      branch.url = form.cleaned_data.get('url')
-    except (db.BadValueError, ValueError), err:
-      errors['__all__'] = unicode(err)
-  if errors:
-    return respond(request, 'branch_edit.html',
-                   {'branch': branch, 'form': form})
-  branch.put()
-  return HttpResponseRedirect(reverse(repos))
-
-
-@deco.require_methods('POST')
-@deco.login_required
-@deco.xsrf_required
-def branch_delete(request, branch_id):
-  """/branch_delete/<branch> - Delete a Branch record."""
-  branch = models.Branch.get_by_id(int(branch_id))
-  if branch.owner != request.user:
-    return HttpTextResponse('You do not own this branch', status=403)
-
-  repo_key = branch.repo_key
-  branch.key.delete()
-  num_branches = models.Branch.query(models.Branch.repo_key == repo_key).count()
-  if not num_branches:
-    # Even if we don't own the repository?  Yes, I think so!  Empty
-    # repositories have no representation on screen.
-    repo_key.delete()
-
-  return HttpResponseRedirect(reverse(repos))
 
 
 ### User Profiles ###
@@ -3703,6 +3617,11 @@ def _process_incoming_mail(raw_message, recipients):
                        date=datetime.datetime.now(),
                        text=body,
                        draft=False)
+  if msg.approval:
+    publish_url = _absolute_url_in_preferred_domain(
+        publish, args=[issue.key.id()])
+    _send_lgtm_reminder(sender, subject, publish_url)
+  msg.was_inbound_email = True
 
   # Add sender to reviewers if needed.
   all_emails = [str(x).lower()
@@ -3716,12 +3635,35 @@ def _process_incoming_mail(raw_message, recipients):
     if account is not None:
       issue.reviewers.append(account.email)  # e.g. account.email is CamelCase
     else:
-      issue.reviewers.append(db.Email(sender))
+      issue.reviewers.append(sender)
 
   issue.calculate_updates_for(msg)
   issue.put()
   msg.put()
 
+
+def _absolute_url_in_preferred_domain(handler, args=None):
+  """Return a URL for the given handler via our preferred domain name, if possible."""
+  handler_url_path = reverse(handler, args=args)
+  app_id = app_identity.get_application_id()
+  canonical_host = '%s.appspot.com' % app_id
+  host = django_settings.PREFERRED_DOMAIN_NAMES.get(app_id, canonical_host)
+  return 'https://%s%s' % (host, handler_url_path)
+
+
+LGTM_REMINDER_BODY = """
+REMINDER: If this change looks good, please use the LGTM button at
+%s
+"""
+
+def _send_lgtm_reminder(addr, subject, publish_url):
+  """Remind a user to LGTM through the web UI, not email."""
+  logging.info('reminding %r to use web %r for %r', addr, publish_url, subject)
+  mail.send_mail(
+    sender=django_settings.RIETVELD_INCOMING_MAIL_ADDRESS,
+    to=addr,
+    subject=_encode_safely(subject),
+    body=LGTM_REMINDER_BODY % publish_url)
 
 @deco.login_required
 def xsrf_token(request):

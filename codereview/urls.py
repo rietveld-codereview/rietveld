@@ -73,12 +73,6 @@ urlpatterns = patterns(
     (r'^tarball/(\d+)/(\d+)$', 'tarball'),
     (r'^user/([^/]+)$', 'show_user'),
     (r'^inline_draft$', 'inline_draft'),
-    (r'^repos$', 'repos'),
-    (r'^repo_new$', 'repo_new'),
-    (r'^repo_init$', 'repo_init'),
-    (r'^branch_new/(\d+)$', 'branch_new'),
-    (r'^branch_edit/(\d+)$', 'branch_edit'),
-    (r'^branch_delete/(\d+)$', 'branch_delete'),
     (r'^settings$', 'settings'),
     (r'^account_delete$', 'account_delete'),
     (r'^migrate_entities$', 'migrate_entities'),
@@ -116,6 +110,13 @@ urlpatterns += patterns(
 )
 
 
+### Revert patchset support
+urlpatterns += patterns(
+  'codereview.revert_patchset',
+  (r'^api/(\d+)/(\d+)/revert$', 'revert_patchset'),
+)
+
+
 ### RSS Feed support
 urlpatterns += patterns(
     '',
@@ -125,3 +126,21 @@ urlpatterns += patterns(
     url(r'^rss/closd/(.*)$', feeds.ClosedFeed(), name='rss_closed'),
     url(r'^rss/issue/(.*)$', feeds.OneIssueFeed(), name='rss_issue'),
 )
+
+# Chromium urls
+urlpatterns += patterns(
+    'codereview.views_chromium',
+    (r'^(\d+)/edit_flags$', 'edit_flags'),
+    (r'^(\d+)/binary/(\d+)/(\d+)/(\d+)$', 'download_binary'),
+    (r'^(\d+)/try/(\d+)/?$', 'try_patchset'),
+    (r'^conversions$', 'conversions'),
+    (r'^lint/issue(\d+)_(\d+)$', 'lint'),
+    (r'^lint_patch/issue(\d+)_(\d+)_(\d+)$', 'lint_patch'),
+    (r'^status_listener$', 'status_listener'),
+    (r'^get_pending_try_patchsets$', 'get_pending_try_patchsets'),
+    (r'^restricted/update_default_builders$', 'update_default_builders'),
+    (r'^restricted/update_tryservers$', 'update_tryservers'),
+    (r'^restricted/delete_old_pending_jobs$', 'delete_old_pending_jobs'),
+    (r'^restricted/delete_old_pending_jobs_task$',
+      'delete_old_pending_jobs_task'),
+    )
