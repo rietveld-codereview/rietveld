@@ -1,0 +1,30 @@
+{%extends "issue_base.html"%}
+{%block title1%}Create Issue -{%endblock%}
+{%block head%}{{form.media}}{%endblock%}
+{%block body%}
+
+{%if form.errors%}
+<h2>There Were Errors!</h2>
+{%else%}
+<h2>Create New Issue</h2>
+{%endif%}
+
+<p>Download <a href="{%url codereview.views.customized_upload_py%}">upload.py</a>, a simple tool for
+uploading diffs from a version control system to the codereview app.</p>
+
+<form action="{%url codereview.views.new%}"
+      method="post" enctype="multipart/form-data" id="create-form">
+<input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+<table>
+{{form}}
+<tr><td><input type="submit" value="Create Issue"></td></tr>
+</table>
+</form>
+
+<a id="resizer" style="display:none;cursor:pointer">
+<img src="{{media_url}}zippyplus.gif"></a>
+<script language="JavaScript" type="text/javascript"><!--
+M_addTextResizer_(document.getElementById("create-form"));
+--></script>
+
+{%endblock%}
