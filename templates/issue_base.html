@@ -109,6 +109,11 @@
             {%endif%}
           </div>
           {%endif%}
+          {%if issue.project%}
+          <div><b>Project:</b><br/>
+            {{issue.project}}
+          </div>
+          {%endif%}
           <div><b>Visibility:</b><br/>
             {%if issue.private%}
                 Private/Protected. Only viewable by @chromium and @google accounts.
