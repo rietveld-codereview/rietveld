@@ -46,6 +46,11 @@ from codereview import responses
 from codereview import views
 
 
+# This is the number of patches to lint in each task run.  It has 10 minutes 
+# to run.  Linting on large files can take ~10s per file.
+LINT_BATCH_SIZE = 50
+
+
 ### Forms ###
 
 
@@ -523,15 +528,39 @@ def conversions(request):
 @deco.patchset_required
 def lint(request):
   """/lint/<issue>_<patchset> - Lint a patch set."""
+  # TODO(jrobbins): it might be better to always lint every patchset without
+  # requiring the client to request it.  That would take some refactoring.
+  # In fact, it might be better to make the linter external and use an API.
   patches = list(request.patchset.patches)
+  while patches:
+    patch_batch = patches[:LINT_BATCH_SIZE]
+    patches = patches[LINT_BATCH_SIZE:]
+    taskqueue.add(
+      url=reverse(task_lint_patch_batch),
+      params={
+        'patch_keys': ','.join([p.key.urlsafe() for p in patch_batch]),
+      },
+      queue_name='lint-patch-batch')
+
+  return HttpResponse('Done', content_type='text/plain')
+
+
+def task_lint_patch_batch(request):
+  """Precalculate lint messages for a batch of patches."""
+  patch_keys_str = request.POST.get('patch_keys')
+  patch_keys = [ndb.Key(urlsafe=key_str)
+                for key_str in patch_keys_str.split(',')]
+  patches = ndb.get_multi(patch_keys)
+  logging.info('Linting %d patches', len(patches))
+
   for patch in patches:
     if not _lint_patch(patch):
       continue
 
     for line in patch.lint_errors:
       patch.lint_error_count += len(patch.lint_errors[line])
-  ndb.put_multi(patches)
 
+  ndb.put_multi(patches)
   return HttpResponse('Done', content_type='text/plain')
 
 

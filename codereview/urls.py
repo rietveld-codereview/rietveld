@@ -136,6 +136,7 @@ urlpatterns += patterns(
     (r'^conversions$', 'conversions'),
     (r'^lint/issue(\d+)_(\d+)$', 'lint'),
     (r'^lint_patch/issue(\d+)_(\d+)_(\d+)$', 'lint_patch'),
+    (r'^restricted/tasks/lint_patch_batch$', 'task_lint_patch_batch'),
     (r'^status_listener$', 'status_listener'),
     (r'^get_pending_try_patchsets$', 'get_pending_try_patchsets'),
     (r'^restricted/update_default_builders$', 'update_default_builders'),
