@@ -1,0 +1,62 @@
+mapreduce:
+- name: MAINT Delete unused accounts
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: admin_tasks.delete_unused_accounts
+    params:
+    - name: entity_kind
+      default: codereview.models.Account
+    - name: queue_name
+      default: mapreduce
+- name: MAINT Update schema of all Accounts
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: admin_tasks.update_account_schema
+    params:
+    - name: entity_kind
+      default: codereview.models.Account
+    - name: queue_name
+      default: mapreduce
+
+
+# Chromium-only jobs
+
+
+- name: Fix issues with account modified today
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: chromium_admin_tasks.FixIssue
+    params:
+    - name: entity_kind
+      default: codereview.models.Issue
+    - name: queue_name
+      default: mapreduce
+- name: Delete unused accounts
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: chromium_admin_tasks.DeleteUnusedAccounts
+    params:
+    - name: entity_kind
+      default: codereview.models.Account
+    - name: queue_name
+      default: mapreduce
+- name: Convert the old build_results member of PatchSet to TryJobResults
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: chromium_admin_tasks.UpgradeBuildResults
+    params:
+    - name: entity_kind
+      default: codereview.models.PatchSet
+    - name: queue_name
+      default: mapreduce
+- name: Remove n_messages_sent key to cause Issue cache data to be re-evaluated
+  mapper:
+    input_reader: mapreduce.input_readers.DatastoreInputReader
+    handler: chromium_admin_tasks.RemoveNMessagesSentFromIssues
+    params:
+    - name: queue_name
+      default: "delete-n-sent-messages"
+    - name: entity_kind
+      default: codereview.models.Issue
+    - name: filters
+      default: '[["n_messages_sent", ">=", 0], ["n_messages_sent", "<", 81]]'

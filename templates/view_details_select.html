@@ -1,0 +1,17 @@
+<form method="GET" action="">
+  <label for="id_context">Context:</label>
+  <select id="id_context" name="context" onchange="this.form.submit()">
+    {%for val in context_values%}
+      <option value="{{val}}"
+      {%ifequal val context%} selected="selected"{%endifequal%}>
+      {{val}} lines</option>
+    {%endfor%}
+    <option value=""
+	    {%if not context %} selected="selected"{%endif%}>
+      Whole file</option>
+  </select>
+  <label for="id_column_width">Column Width:</label>
+  <input type="text" value="{{column_width}}" id="id_column_width"
+	 name="column_width" size="2">
+  <input type="submit" value="Adjust View" />
+</form>

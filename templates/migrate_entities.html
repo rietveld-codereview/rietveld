@@ -1,0 +1,23 @@
+{%extends "settings_base.html"%}
+{%block title1%}Settings -{%endblock%}
+{%block body%}
+<h2>Migrate issues and repositories</h2>
+
+{%if msg%}
+  <p>{{msg}}</p>
+{%else%}
+  <p>
+    In case you've changed your email address you're using for login,
+    enter your previous email address below to migrate issues,
+    repositories and branches you own to your current account.
+  </p>
+  <form action="{%url codereview.views.migrate_entities%}" method="post">
+    <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+    <table>
+      {{form}}
+      <tr><td><input type="submit" value="Start migration" name="migrate"></td></tr>
+    </table>
+  </form>
+{%endif%}
+<p>Back to your <a href="{%url codereview.views.settings%}">settings</a>.</p>
+{%endblock%}
