@@ -1,0 +1,216 @@
+{%extends "issue_base.html"%}
+{%block title1%}Stats for {{viewed_account.nickname}} -{%endblock%}
+{%block body%}
+
+<h2>Stats for {{viewed_account.nickname}}</h2>
+<table class="issue-list">
+  <tbody>
+    <tr>
+      <td>
+        Reviewed
+      </td>
+      <td>
+        {{stats.nb_reviewed}} issues
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Ignored
+      </td>
+      <td>
+        {{stats.nb_ignored}} issues
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Sent to user
+      </td>
+      <td>
+        {{stats.nb_issues}} issues
+      </td>
+    </tr>
+    <tr>
+      <td>
+        LGTM'ed
+      </td>
+      <td>
+        {{stats.nb_lgtmed}} issues
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Drove by
+      </td>
+      <td>
+        {{stats.nb_drive_by}} issues
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Not requested by issue author
+      </td>
+      <td>
+        {{stats.nb_not_requested}} issues
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Sent by user
+      </td>
+      <td>
+        {{stats.nb_outgoing}} issues
+      </td>
+    </tr>
+    <tr>
+      <td>
+        LGTM on his own issues
+      </td>
+      <td>
+        {{stats.self_love}} issues
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Median latency
+      </td>
+      <td>
+        {{stats.median_latency|format_duration}}
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Average latency
+      </td>
+      <td>
+        {{stats.average_latency|format_duration}}
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Percent reviewed
+      </td>
+      <td>
+        {{stats.percent_reviewed|floatformat:1}} %
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Percent LGTM'ed
+      </td>
+      <td>
+        {{stats.percent_lgtm|floatformat:1}} %
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Days covered by these stats
+      </td>
+      <td>
+        {{stats.days}} days
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Review request received per day
+      </td>
+      <td>
+        {{stats.per_day_reviews_received|floatformat:2}} r/day
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Review request done per day
+      </td>
+      <td>
+        {{stats.per_day_reviews_done|floatformat:2}} r/day
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+{%if incoming%}
+<h2>Incoming Issues</h2>
+<p>
+<table class="issue-list">
+  <thead>
+    <td>
+      Issue
+    </td>
+    <td>
+      Latency
+    </td>
+    <td>
+      Review type
+    </td>
+    <td>
+      LGTMs
+    </td>
+  </thead>
+  <tbody>
+    {%for line in incoming%}
+    <tr>
+      <td>
+        <a href="{%url codereview.views.show line.issue%}">{{line.issue}}</a>
+      </td>
+      <td>
+        {{line.latency|format_duration}}
+      </td>
+      <td>
+        {{line.review_type}}
+      </td>
+      <td>
+        {{line.lgtms}}
+      </td>
+    </tr>
+    {%endfor%}
+  </tbody>
+</table>
+{%endif%}
+
+{%if outgoing%}
+<p>
+<h2>Outgoing Issues</h2>
+<table class="issue-list">
+  <thead>
+    <td>
+      Issue
+    </td>
+    <td>
+      LGTMs (but it is weird to lgtm yourself)
+    </td>
+  </thead>
+  <tbody>
+    {%for line in outgoing%}
+    <tr>
+      <td>
+        <a href="{%url codereview.views.show line.issue%}">{{line.issue}}</a>
+      </td>
+      <td>
+        {{line.lgtms}}
+      </td>
+    </tr>
+    {%endfor%}
+  </tbody>
+</table>
+{%endif%}
+
+<h2>Notes:</h2>
+<ul>
+  <li>
+    Use 'stats/30' for summary of the last 30 days.
+  </li>
+  <li>
+    Use 'stats/YYYY-MM' for a month's summary, like 'stats/2013-04'.
+  </li>
+  <li>
+    Use 'stats/YYYY-QX' for a quarter summary, i.e. 3 months, like
+    'stats/2013-q2' for the summary of 2013-04, 2013-05 and 2013-06 combined.
+  </li>
+  <li>
+    Use 'stats/YYYY-MM-DD' for a day summary, like 'stats/2013-04-20'.
+  </li>
+  <li>
+    Replace 'stats' with 'stats_json' in the url to get the raw data in json.
+  </li>
+</ul>
+{%endblock%}

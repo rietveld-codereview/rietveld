@@ -1,0 +1,105 @@
+@font-face {
+  font-family: press_start;
+  src: local(press_start), url('startfont/PressStart2P.ttf') format('opentype');
+}
+
+.leaderboard {
+  height: 100%;
+  width: 100%;
+  /*margin: 0px 0px 10px 10px;*/
+  font-family: press_start;
+  background: black;
+  color: #888888;
+  font-size: 10px;
+}
+
+.leaderboard > h1 {
+  text-align: center;
+  font-size: 80px;
+  color: white;
+}
+
+.leaderboard > h2 {
+  text-align: center;
+  font-size: 40px;
+  color: white;
+}
+
+.leaderboard > a:hover, a:visited, a:link, a:active {
+  color: inherit;
+  text-decoration: none;
+}
+
+table.issue {
+  table-layout: fixed;
+  width: 100%;
+  letter-spacing: 2px;
+  font-size: 15px;
+  margin-top: 10px;
+  margin-left: 0px;
+  margin-right: 0px;
+  margin-bottom: 20px;
+  border-spacing: 10px;
+}
+
+table.issue > * > tr > td:not(:first-child) {
+  text-align: right;
+}
+
+table.issue > tbody > tr:first-child {
+  color: yellow;
+}
+
+table.issue > tbody > tr:nth-child(2) {
+  color: white;
+}
+
+table.issue > tbody > tr:nth-child(3) {
+  color: orange;
+}
+
+table.issue > tbody > tr:nth-child(4) {
+  color: #888888;
+}
+
+table.issue > tbody > tr:nth-child(5) {
+  color: #888888;
+}
+
+table.issue > tbody > tr:nth-child(6) {
+  color: #888888;
+}
+
+table.issue > tbody > tr:nth-child(7) {
+  color: #888888;
+}
+
+table.issue > tbody > tr:nth-child(8) {
+  color: #888888;
+}
+
+table.issue > tbody > tr:nth-child(9) {
+  color: #888888;
+}
+
+table.issue > tbody > tr:nth-child(10) {
+  color: #888888;
+}
+
+table.issue > tbody > tr {
+  color: #555555;
+}
+
+table.issue td:first-child {
+  width: 75px;
+}
+
+table.issue td:nth-child(2) {
+  width: 250px;
+}
+
+.legend {
+  color: white;
+  letter-spacing: 2px;
+  line-height: 150%;
+}
