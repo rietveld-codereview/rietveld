@@ -1220,6 +1220,7 @@ def upload_complete(request, patchset_id=None):
       return HttpTextResponse(
           'No patch set exists with that id (%s)' % patchset_id, status=403)
     # Add delta calculation task.
+    # TODO(jrobbins): If this task has transient failures, consider using cron.
     taskqueue.add(url=reverse(task_calculate_delta),
                   params={'key': patchset.key.urlsafe()},
                   queue_name='deltacalculation')
@@ -1476,49 +1477,10 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
   return emails
 
 
-def _get_patchset_info(request, patchset_id):
-  """Returns a list of patchsets for the issue.
-
-  Args:
-    patchset_id: The id of the patchset that the caller is interested in.
-      This is the one that we generate delta links to if they're not
-      available.  We can't generate for all patchsets because it would take
-      too long on issues with many patchsets.  Passing in None is equivalent
-      to doing it for the last patchset.
-
-  Returns:
-    A 3-tuple of (issue, patchsets, HttpResponse).
-    If HttpResponse is not None, further processing should stop and it should
-    be returned.
-  """
-  issue = request.issue
-  patchsets = None
-  response = None
-  attempt = _clean_int(request.GET.get('attempt'), 0, 0)
-  if attempt < 0:
-    response = HttpTextResponse('Invalid parameter', status=404)
-  else:
-    last_attempt = attempt > 2
-    try:
-      patchsets = issue.get_patchset_info(last_attempt, request.user,
-                                          patchset_id)
-    except DeadlineExceededError:
-      logging.exception('DeadlineExceededError in _get_patchset_info')
-      if last_attempt:
-        response = HttpTextResponse(
-          'DeadlineExceededError - create a new issue.')
-      else:
-        response =  HttpResponseRedirect('%s?attempt=%d' %
-                                        (request.path, attempt + 1))
-  return issue, patchsets, response
-
-
 @deco.issue_required
 def show(request):
   """/<issue> - Show an issue."""
-  issue, patchsets, response = _get_patchset_info(request, None)
-  if response:
-    return response
+  patchsets = request.issue.get_patchset_info(request.user, None)
   last_patchset = first_patch = None
   if patchsets:
     last_patchset = patchsets[-1]
@@ -1526,7 +1488,7 @@ def show(request):
       first_patch = last_patchset.patches[0]
   messages = []
   has_draft_message = False
-  for msg in issue.messages:
+  for msg in request.issue.messages:
     if not msg.draft:
       messages.append(msg)
     elif msg.draft and request.user and msg.sender == request.user.email():
@@ -1535,8 +1497,8 @@ def show(request):
   return respond(request, 'issue.html', {
     'first_patch': first_patch,
     'has_draft_message': has_draft_message,
-    'is_editor': issue.edit_allowed,
-    'issue': issue,
+    'is_editor': request.issue.edit_allowed,
+    'issue': request.issue,
     'last_patchset': last_patchset,
     'messages': messages,
     'num_patchsets': num_patchsets,
@@ -1547,18 +1509,16 @@ def show(request):
 @deco.patchset_required
 def patchset(request):
   """/patchset/<key> - Returns patchset information."""
-  patchset = request.patchset
-  issue, patchsets, response = _get_patchset_info(request, patchset.key.id())
-  if response:
-    return response
+  patchsets = request.issue.get_patchset_info(
+    request.user, request.patchset.key.id())
   for ps in patchsets:
-    if ps.key.id() == patchset.key.id():
+    if ps.key.id() == request.patchset.key.id():
       patchset = ps
   return respond(request, 'patchset.html',
-                 {'issue': issue,
-                  'patchset': patchset,
+                 {'issue': request.issue,
+                  'patchset': request.patchset,
                   'patchsets': patchsets,
-                  'is_editor': issue.edit_allowed,
+                  'is_editor': request.issue.edit_allowed,
                   })
 
 
@@ -3779,9 +3739,6 @@ def task_calculate_delta(request):
   scenes. Returning a HttpResponse with any 2xx status means that the
   task was finished successfully. Raising an exception means that the
   taskqueue will retry to run the task.
-
-  This code is similar to the code in _get_patchset_info() which is
-  run when a patchset should be displayed in the UI.
   """
   ps_key = request.POST.get('key')
   if not ps_key:

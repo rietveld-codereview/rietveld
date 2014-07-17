@@ -311,14 +311,11 @@ class Issue(ndb.Model):
       return self._original_subject
     return '%s (issue %d by %s)' % (self.subject, self.key.id(), self.owner.email())
 
-  def get_patchset_info(self, last_attempt, user, patchset_id):
+  def get_patchset_info(self, user, patchset_id):
     """Returns a list of patchsets for the issue, and calculates/caches data
     into the |patchset_id|'th one with a variety of non-standard attributes.
 
     Args:
-      last_attempt (bool) - If this is the last attempt we're making at getting
-        patchset_info (due to DeadlineExceededErrors), this should be True,
-        otherwise False.
       user (User) - The user to include drafts for.
       patchset_id (int) - The ID of the PatchSet to calculated info for.
         If this is None, it defaults to the newest PatchSet for this Issue.
@@ -359,28 +356,6 @@ class Issue(ndb.Model):
             else:
               patch._num_my_comments = 0
             patch._num_drafts = sum(c.patch_key == pkey for c in drafts)
-            if not patch.delta_calculated:
-              if last_attempt:
-                # Too many patchsets or files and we're not able to generate the
-                # delta links.  Instead of giving a 500, try to render the page
-                # without them.
-                patch.delta = []
-              else:
-                # Compare each patch to the same file in earlier patchsets to
-                # see if they differ, so that we can generate the delta patch
-                # urls.  We do this once and cache it after.  It's specifically
-                # not done on upload because we're already doing too much
-                # processing there.  NOTE: this function will clear out
-                # patchset.data to reduce memory so don't ever call
-                # patchset.put() after calling it.
-                patch.delta = _calculate_delta(patch, patchset_id, patchsets)
-                patch.delta_calculated = True
-                # A multi-entity put would be quicker, but it fails when the
-                # patches have content that is large.  App Engine throws
-                # RequestTooLarge.  This way, although not as efficient, allows
-                # multiple refreshes on an issue to get things done, as opposed
-                # to an all-or-nothing approach.
-                patch.put()
             # Reduce memory usage: if this patchset has lots of added/removed
             # files (i.e. > 100) then we'll get MemoryError when rendering the
             # response.  Each Patch entity is using a lot of memory if the
