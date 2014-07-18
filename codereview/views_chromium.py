@@ -679,7 +679,8 @@ def delete_old_pending_jobs(_request):
 
   Trigger task to delete old pending jobs.
   """
-  cutoff_date = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+  # Skip jobs older than 5 days regardless of whether they are still valid.
+  cutoff_date = datetime.datetime.utcnow() - datetime.timedelta(days=5)
   cutoff_date_str = cutoff_date.strftime("DATETIME(%Y-%m-%d %H:%M:%S)")
   cursor = ''
   limit = 100
@@ -738,11 +739,10 @@ def delete_old_pending_jobs_task(request):
 
   count = 0
   for job in items:
-    if not _is_job_valid(job):
-      if job.timestamp <= cutoff_date:
-        job.result = models.TryJobResult.SKIPPED
-        job.put()
-        count += 1
+    if job.timestamp <= cutoff_date or not _is_job_valid(job):
+      job.result = models.TryJobResult.SKIPPED
+      job.put()
+      count += 1
   msg = '%d pending jobs purged out of %d' % (count, len(items))
   logging.info(msg)
   return HttpResponse(msg, content_type='text/plain')
