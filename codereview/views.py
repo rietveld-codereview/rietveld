@@ -451,6 +451,7 @@ class SearchForm(forms.Form):
   repo_guid = forms.CharField(required=False, max_length=MAX_URL,
                               label="Repository ID")
   base = forms.CharField(required=False, max_length=MAX_URL)
+  project = forms.CharField(required=False, max_length=MAX_URL)
   private = forms.NullBooleanField(required=False)
   commit = forms.NullBooleanField(required=False)
   created_before = forms.DateTimeField(required=False, label='Created before')
@@ -3273,6 +3274,8 @@ def search(request):
     q = q.filter(models.Issue.repo_guid == form.cleaned_data['repo_guid'])
   if form.cleaned_data['base']:
     q = q.filter(models.Issue.base == form.cleaned_data['base'])
+  if form.cleaned_data['project']:
+    q = q.filter(models.Issue.project == form.cleaned_data['project'])
 
   # Calculate a default value depending on the query parameter.
   # Prefer sorting by modified date over created date and showing
