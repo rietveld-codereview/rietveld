@@ -114,6 +114,56 @@ indexes:
 
 - kind: Issue
   properties:
+  - name: base
+  - name: cc
+  - name: closed
+  - name: owner
+  - name: private
+  - name: reviewers
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: base
+  - name: cc
+  - name: owner
+
+- kind: Issue
+  properties:
+  - name: base
+  - name: cc
+  - name: private
+  - name: owner
+
+- kind: Issue
+  properties:
+  - name: base
+  - name: closed
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: base
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
+  - name: base
+  - name: private
+  - name: reviewers
+  - name: owner
+
+- kind: Issue
+  properties:
+  - name: base
+  - name: reviewers
+  - name: owner
+
+- kind: Issue
+  properties:
   - name: cc
   - name: closed
   - name: modified
