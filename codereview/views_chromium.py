@@ -246,10 +246,12 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
   # Used only for logging.
   keyname = '%s-%s-%s-%s' % (issue_id, patchset_id, buildername, buildnumber)
 
-  if 'requester' in properties:
-    requester = users.User(properties['requester'])
-  else:
-    requester = None
+  requester = None
+  if properties.get('requester'):
+    try:
+      requester = users.User(properties['requester'])
+    except users.UserNotFoundError:
+      pass
   
   def tx_try_job_result():
     if try_job_key:
