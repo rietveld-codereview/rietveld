@@ -1536,7 +1536,6 @@ def show(request):
   re_string += "(\s*(?:[a-z0-9-]+:)?\d+\s*(?:,\s*(?:[a-z0-9-]+:)?\d+\s*)*)"
   expression = re.compile(re_string, re.IGNORECASE)
   issue.description = re.sub(expression, replace_bug, issue.description)
-  issue.description = issue.description.replace('\n', '<br/>')
   src_url = _map_base_url(issue.base)
 
   # Generate the set of possible parents for every builder name, if a
