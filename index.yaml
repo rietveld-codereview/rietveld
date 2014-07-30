@@ -24,6 +24,12 @@ indexes:
 
 - kind: Issue
   properties:
+  - name: project
+  - name: modified
+    direction: desc
+
+- kind: Issue
+  properties:
   - name: closed
   - name: commit
   - name: project
