@@ -3184,7 +3184,6 @@ def _get_draft_message(draft):
   return HttpTextResponse(draft.text if draft else '')
 
 
-@deco.issue_required
 def _post_draft_message(request, draft):
   """Handles POST requests to /<issue>/draft_message.
 
