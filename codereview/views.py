@@ -1367,7 +1367,7 @@ def _get_data_url(form):
   elif url:
     try:
       fetch_result = urlfetch.fetch(url)
-    except Exception, err:
+    except Exception as err:
       form.errors['url'] = [str(err)]
       return None
     if fetch_result.status_code != 200:
@@ -1461,7 +1461,7 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
           if '.' not in tail:
             raise db.BadValueError('Invalid email address: %s' % email)
           db_email = email.lower()
-      except db.BadValueError, err:
+      except db.BadValueError as err:
         if form:
           form.errors[label] = [unicode(err)]
         return None
@@ -2055,7 +2055,7 @@ def diff(request):
   else:
     try:
       rows = _get_diff_table_rows(request, patch, context, column_width)
-    except FetchError, err:
+    except FetchError as err:
       return HttpTextResponse(str(err), status=404)
 
   _add_next_prev(patchset, patch)
@@ -2128,7 +2128,7 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
 
   try:
     rows = _get_diff_table_rows(request, patch, None, column_width)
-  except FetchError, err:
+  except FetchError as err:
     return HttpTextResponse('Error: %s; please report!' % err, status=500)
   return _get_skipped_lines_response(rows, id_before, id_after, where, context)
 
@@ -2218,7 +2218,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if patch_left:
     try:
       new_content_left = patch_left.get_patched_content()
-    except FetchError, err:
+    except FetchError as err:
       return HttpTextResponse(str(err), status=404)
     lines_left = new_content_left.lines
   elif patch_right:
@@ -2229,7 +2229,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if patch_right:
     try:
       new_content_right = patch_right.get_patched_content()
-    except FetchError, err:
+    except FetchError as err:
       return HttpTextResponse(str(err), status=404)
     lines_right = new_content_right.lines
   elif patch_left:
@@ -2502,7 +2502,7 @@ def api_draft_comments(request):
       {message_id: _add_or_update_comment(**comment).message_id}
       for comment in map(sanitize, json.load(request.data))
     ]
-  except Exception, err:
+  except Exception as err:
     return HttpTextResponse('An error occurred.', status=500)
 
 
@@ -2520,7 +2520,7 @@ def inline_draft(request):
   """
   try:
     return _inline_draft(request)
-  except Exception, err:
+  except Exception as err:
     logging.exception('Exception in inline_draft processing:')
     # TODO(guido): return some kind of error instead?
     # Return HttpResponse for now because the JS part expects
@@ -3301,7 +3301,7 @@ def repo_new(request):
         url=form.cleaned_data.get('url'),
         guid=form.cleaned_data.get('guid'),
         )
-    except (db.BadValueError, ValueError), err:
+    except (db.BadValueError, ValueError) as err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'repo_new.html', {'form': form})
@@ -3369,7 +3369,7 @@ def branch_new(request, repo_id):
         name=form.cleaned_data.get('name'),
         url=form.cleaned_data.get('url'),
         )
-    except (db.BadValueError, ValueError), err:
+    except (db.BadValueError, ValueError) as err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
@@ -3400,7 +3400,7 @@ def branch_edit(request, branch_id):
       branch.category = form.cleaned_data.get('category')
       branch.name = form.cleaned_data.get('name')
       branch.url = form.cleaned_data.get('url')
-    except (db.BadValueError, ValueError), err:
+    except (db.BadValueError, ValueError) as err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'branch_edit.html',
@@ -3555,7 +3555,7 @@ def user_popup(request):
   """/user_popup - Pop up to show the user info."""
   try:
     return _user_popup(request)
-  except Exception, err:
+  except Exception as err:
     logging.exception('Exception in user_popup processing:')
     # Return HttpResponse because the JS part expects a 200 status code.
     return HttpHtmlResponse(
@@ -3595,7 +3595,7 @@ def incoming_mail(request, recipients):
   """
   try:
     _process_incoming_mail(request.raw_post_data, recipients)
-  except InvalidIncomingEmailError, err:
+  except InvalidIncomingEmailError as err:
     logging.debug(str(err))
   return HttpTextResponse('')
 
@@ -3746,11 +3746,11 @@ def task_calculate_delta(request):
     return HttpResponse()
   try:
     patchset = ndb.Key(urlsafe=ps_key).get()
-  except (db.KindError, db.BadKeyError), err:
+  except (db.KindError, db.BadKeyError) as err:
     logging.error('Invalid PatchSet key %r: %s' % (ps_key, err))
     return HttpResponse()
   if patchset is None:  # e.g. PatchSet was deleted inbetween
-    logging.error('Missing PatchSet key %r: %s' % (ps_key, err))
+    logging.error('Missing PatchSet key %r' % ps_key)
     return HttpResponse()
   patchset.calculate_deltas()
   return HttpResponse()
