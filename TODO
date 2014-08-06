@@ -68,4 +68,4 @@ Software Engineering
 
 Unittests
 Move library.py to codereview/templatetags/codereview.py to match the default
-Django project layout.
+Django project layout.Wed Aug  6 13:26:15 PDT 2014
