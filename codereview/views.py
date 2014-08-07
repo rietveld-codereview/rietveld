@@ -454,7 +454,9 @@ class SearchForm(forms.Form):
   project = forms.CharField(required=False, max_length=MAX_URL)
   private = forms.NullBooleanField(required=False)
   commit = forms.NullBooleanField(required=False)
-  created_before = forms.DateTimeField(required=False, label='Created before')
+  created_before = forms.DateTimeField(
+    required=False, label='Created before',
+    help_text='Format: YYYY-MM-DD and optional: hh:mm:ss')
   created_after = forms.DateTimeField(
       required=False, label='Created on or after')
   modified_before = forms.DateTimeField(required=False, label='Modified before')
