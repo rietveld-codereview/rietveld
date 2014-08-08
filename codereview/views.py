@@ -451,9 +451,12 @@ class SearchForm(forms.Form):
   repo_guid = forms.CharField(required=False, max_length=MAX_URL,
                               label="Repository ID")
   base = forms.CharField(required=False, max_length=MAX_URL)
+  project = forms.CharField(required=False, max_length=MAX_URL)
   private = forms.NullBooleanField(required=False)
   commit = forms.NullBooleanField(required=False)
-  created_before = forms.DateTimeField(required=False, label='Created before')
+  created_before = forms.DateTimeField(
+    required=False, label='Created before',
+    help_text='Format: YYYY-MM-DD and optional: hh:mm:ss')
   created_after = forms.DateTimeField(
       required=False, label='Created on or after')
   modified_before = forms.DateTimeField(required=False, label='Modified before')
@@ -1080,6 +1083,19 @@ def upload(request):
   return HttpTextResponse(msg)
 
 
+@ndb.transactional()
+def _update_patch(patch_key, content_key, is_current, status, is_binary):
+  """Store content-related info in a Patch."""
+  patch = patch_key.get()
+  patch.status = status
+  patch.is_binary = is_binary
+  if is_current:
+    patch.patched_content_key = content_key
+  else:
+    patch.content_key = content_key
+  patch.put()
+
+
 @deco.require_methods('POST')
 @deco.patch_required
 @deco.upload_required
@@ -1101,8 +1117,6 @@ def upload_content(request):
     return HttpTextResponse('ERROR: You (%s) don\'t own this issue (%s).' %
                             (request.user, request.issue.key.id()))
   patch = request.patch
-  patch.status = form.cleaned_data['status']
-  patch.is_binary = form.cleaned_data['is_binary']
 
   if form.cleaned_data['is_current']:
     if patch.patched_content_key:
@@ -1120,7 +1134,7 @@ def upload_content(request):
     checksum = md5.new(data).hexdigest()
     if checksum != request.POST.get('checksum'):
       return HttpTextResponse('ERROR: Checksum mismatch.')
-    if patch.is_binary:
+    if form.cleaned_data['is_binary']:
       content.data = data
     else:
       content.text = utils.to_dbtext(utils.unify_linebreaks(data))
@@ -1129,17 +1143,13 @@ def upload_content(request):
   for try_number in xrange(DB_WRITE_TRIES):
     try:
       content.put()
-      if form.cleaned_data['is_current']:
-        patch.patched_content_key = content.key
-      else:
-        patch.content_key = content.key
-      # TODO(jrobbins): There is a race condition here.  Two requests to
-      # store the old and new versions of a file can happen concurrently
-      # and it may happen that one overwrites the other.
-      patch.put()
+      _update_patch(
+        patch.key, content.key, form.cleaned_data['is_current'],
+        form.cleaned_data['status'], form.cleaned_data['is_binary'])
       return HttpTextResponse('OK')
     except db.TransactionFailedError as err:
-      logging.exception(err)
+      if not err.message.endswith('Please try again.'):
+        logging.exception(err)
       # AppEngine datastore cannot write to the same entity group rapidly.
       time.sleep(DB_WRITE_PAUSE + try_number * random.random())
 
@@ -1201,6 +1211,7 @@ def upload_complete(request, patchset_id=None):
       return HttpTextResponse(
           'No patch set exists with that id (%s)' % patchset_id, status=403)
     # Add delta calculation task.
+    # TODO(jrobbins): If this task has transient failures, consider using cron.
     taskqueue.add(url=reverse(task_calculate_delta),
                   params={'key': patchset.key.urlsafe()},
                   queue_name='deltacalculation')
@@ -1347,7 +1358,7 @@ def _get_data_url(form):
   elif url:
     try:
       fetch_result = urlfetch.fetch(url)
-    except Exception, err:
+    except Exception as err:
       form.errors['url'] = [str(err)]
       return None
     if fetch_result.status_code != 200:
@@ -1442,7 +1453,7 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
           if '.' not in tail:
             raise db.BadValueError('Invalid email address: %s' % email)
           db_email = email.lower()
-      except db.BadValueError, err:
+      except db.BadValueError as err:
         if form:
           form.errors[label] = [unicode(err)]
         return None
@@ -1456,43 +1467,6 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
       except IndexError:
         pass
   return emails
-
-
-def _get_patchset_info(request, patchset_id):
-  """Returns a list of patchsets for the issue.
-
-  Args:
-    patchset_id: The id of the patchset that the caller is interested in.
-      This is the one that we generate delta links to if they're not
-      available.  We can't generate for all patchsets because it would take
-      too long on issues with many patchsets.  Passing in None is equivalent
-      to doing it for the last patchset.
-
-  Returns:
-    A 3-tuple of (issue, patchsets, HttpResponse).
-    If HttpResponse is not None, further processing should stop and it should
-    be returned.
-  """
-  issue = request.issue
-  patchsets = None
-  response = None
-  attempt = _clean_int(request.GET.get('attempt'), 0, 0)
-  if attempt < 0:
-    response = HttpTextResponse('Invalid parameter', status=404)
-  else:
-    last_attempt = attempt > 2
-    try:
-      patchsets = issue.get_patchset_info(last_attempt, request.user,
-                                          patchset_id)
-    except DeadlineExceededError:
-      logging.exception('DeadlineExceededError in _get_patchset_info')
-      if last_attempt:
-        response = HttpTextResponse(
-          'DeadlineExceededError - create a new issue.')
-      else:
-        response =  HttpResponseRedirect('%s?attempt=%d' %
-                                        (request.path, attempt + 1))
-  return issue, patchsets, response
 
 
 def replace_bug(message):
@@ -1542,9 +1516,7 @@ def _map_base_url(base):
 @deco.issue_required
 def show(request):
   """/<issue> - Show an issue."""
-  issue, patchsets, response = _get_patchset_info(request, None)
-  if response:
-    return response
+  patchsets = request.issue.get_patchset_info(request.user, None)
   last_patchset = first_patch = None
   if patchsets:
     last_patchset = patchsets[-1]
@@ -1552,20 +1524,20 @@ def show(request):
       first_patch = last_patchset.patches[0]
   messages = []
   has_draft_message = False
-  for msg in issue.messages:
+  for msg in request.issue.messages:
     if not msg.draft:
       messages.append(msg)
     elif msg.draft and request.user and msg.sender == request.user.email():
       has_draft_message = True
   num_patchsets = len(patchsets)
 
+  issue = request.issue
   issue.description = cgi.escape(issue.description)
   issue.description = urlize(issue.description)
   re_string = r"(?<=BUG=)"
   re_string += "(\s*(?:[a-z0-9-]+:)?\d+\s*(?:,\s*(?:[a-z0-9-]+:)?\d+\s*)*)"
   expression = re.compile(re_string, re.IGNORECASE)
   issue.description = re.sub(expression, replace_bug, issue.description)
-  issue.description = issue.description.replace('\n', '<br/>')
   src_url = _map_base_url(issue.base)
 
   # Generate the set of possible parents for every builder name, if a
@@ -1586,8 +1558,8 @@ def show(request):
       models_chromium.TryserverBuilders.get_builders(),
     'first_patch': first_patch,
     'has_draft_message': has_draft_message,
-    'is_editor': issue.edit_allowed,
-    'issue': issue,
+    'is_editor': request.issue.edit_allowed,
+    'issue': request.issue,
     'last_patchset': last_patchset,
     'messages': messages,
     'num_patchsets': num_patchsets,
@@ -1601,18 +1573,16 @@ def show(request):
 @deco.patchset_required
 def patchset(request):
   """/patchset/<key> - Returns patchset information."""
-  patchset = request.patchset
-  issue, patchsets, response = _get_patchset_info(request, patchset.key.id())
-  if response:
-    return response
+  patchsets = request.issue.get_patchset_info(
+    request.user, request.patchset.key.id())
   for ps in patchsets:
-    if ps.key.id() == patchset.key.id():
+    if ps.key.id() == request.patchset.key.id():
       patchset = ps
   return respond(request, 'patchset.html',
-                 {'issue': issue,
-                  'patchset': patchset,
+                 {'issue': request.issue,
+                  'patchset': request.patchset,
                   'patchsets': patchsets,
-                  'is_editor': issue.edit_allowed,
+                  'is_editor': request.issue.edit_allowed,
                   })
 
 
@@ -2164,7 +2134,7 @@ def diff(request):
   else:
     try:
       rows = _get_diff_table_rows(request, patch, context, column_width)
-    except FetchError, err:
+    except FetchError as err:
       return HttpTextResponse(str(err), status=404)
 
   _add_next_prev(patchset, patch)
@@ -2241,7 +2211,7 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
 
   try:
     rows = _get_diff_table_rows(request, patch, None, column_width)
-  except FetchError, err:
+  except FetchError as err:
     return HttpTextResponse('Error: %s; please report!' % err, status=500)
   return _get_skipped_lines_response(rows, id_before, id_after, where, context)
 
@@ -2331,7 +2301,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if patch_left:
     try:
       new_content_left = patch_left.get_patched_content()
-    except FetchError, err:
+    except FetchError as err:
       return HttpTextResponse(str(err), status=404)
     lines_left = new_content_left.lines
   elif patch_right:
@@ -2342,7 +2312,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if patch_right:
     try:
       new_content_right = patch_right.get_patched_content()
-    except FetchError, err:
+    except FetchError as err:
       return HttpTextResponse(str(err), status=404)
     lines_right = new_content_right.lines
   elif patch_left:
@@ -2615,7 +2585,7 @@ def api_draft_comments(request):
       {message_id: _add_or_update_comment(**comment).message_id}
       for comment in map(sanitize, json.load(request.data))
     ]
-  except Exception, err:
+  except Exception as err:
     return HttpTextResponse('An error occurred.', status=500)
 
 
@@ -2633,7 +2603,7 @@ def inline_draft(request):
   """
   try:
     return _inline_draft(request)
-  except Exception, err:
+  except Exception as err:
     logging.exception('Exception in inline_draft processing:')
     # TODO(guido): return some kind of error instead?
     # Return HttpResponse for now because the JS part expects
@@ -3219,7 +3189,6 @@ def _get_draft_message(draft):
   return HttpTextResponse(draft.text if draft else '')
 
 
-@deco.issue_required
 def _post_draft_message(request, draft):
   """Handles POST requests to /<issue>/draft_message.
 
@@ -3308,6 +3277,8 @@ def search(request):
     q = q.filter(models.Issue.repo_guid == form.cleaned_data['repo_guid'])
   if form.cleaned_data['base']:
     q = q.filter(models.Issue.base == form.cleaned_data['base'])
+  if form.cleaned_data['project']:
+    q = q.filter(models.Issue.project == form.cleaned_data['project'])
 
   # Calculate a default value depending on the query parameter.
   # Prefer sorting by modified date over created date and showing
@@ -3505,7 +3476,7 @@ def user_popup(request):
   """/user_popup - Pop up to show the user info."""
   try:
     return _user_popup(request)
-  except Exception, err:
+  except Exception as err:
     logging.exception('Exception in user_popup processing:')
     # Return HttpResponse because the JS part expects a 200 status code.
     return HttpHtmlResponse(
@@ -3545,7 +3516,7 @@ def incoming_mail(request, recipients):
   """
   try:
     _process_incoming_mail(request.raw_post_data, recipients)
-  except InvalidIncomingEmailError, err:
+  except InvalidIncomingEmailError as err:
     logging.debug(str(err))
   return HttpTextResponse('')
 
@@ -3717,9 +3688,6 @@ def task_calculate_delta(request):
   scenes. Returning a HttpResponse with any 2xx status means that the
   task was finished successfully. Raising an exception means that the
   taskqueue will retry to run the task.
-
-  This code is similar to the code in _get_patchset_info() which is
-  run when a patchset should be displayed in the UI.
   """
   ps_key = request.POST.get('key')
   if not ps_key:
@@ -3727,11 +3695,11 @@ def task_calculate_delta(request):
     return HttpResponse()
   try:
     patchset = ndb.Key(urlsafe=ps_key).get()
-  except (db.KindError, db.BadKeyError), err:
+  except (db.KindError, db.BadKeyError) as err:
     logging.error('Invalid PatchSet key %r: %s' % (ps_key, err))
     return HttpResponse()
   if patchset is None:  # e.g. PatchSet was deleted inbetween
-    logging.error('Missing PatchSet key %r: %s' % (ps_key, err))
+    logging.error('Missing PatchSet key %r' % ps_key)
     return HttpResponse()
   patchset.calculate_deltas()
   return HttpResponse()

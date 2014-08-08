@@ -46,6 +46,11 @@ from codereview import responses
 from codereview import views
 
 
+# This is the number of patches to lint in each task run.  It has 10 minutes 
+# to run.  Linting on large files can take ~10s per file.
+LINT_BATCH_SIZE = 50
+
+
 ### Forms ###
 
 
@@ -241,10 +246,12 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
   # Used only for logging.
   keyname = '%s-%s-%s-%s' % (issue_id, patchset_id, buildername, buildnumber)
 
-  if 'requester' in properties:
-    requester = users.User(properties['requester'])
-  else:
-    requester = None
+  requester = None
+  if properties.get('requester'):
+    try:
+      requester = users.User(properties['requester'])
+    except users.UserNotFoundError:
+      pass
   
   def tx_try_job_result():
     if try_job_key:
@@ -523,15 +530,39 @@ def conversions(request):
 @deco.patchset_required
 def lint(request):
   """/lint/<issue>_<patchset> - Lint a patch set."""
+  # TODO(jrobbins): it might be better to always lint every patchset without
+  # requiring the client to request it.  That would take some refactoring.
+  # In fact, it might be better to make the linter external and use an API.
   patches = list(request.patchset.patches)
+  while patches:
+    patch_batch = patches[:LINT_BATCH_SIZE]
+    patches = patches[LINT_BATCH_SIZE:]
+    taskqueue.add(
+      url=reverse(task_lint_patch_batch),
+      params={
+        'patch_keys': ','.join([p.key.urlsafe() for p in patch_batch]),
+      },
+      queue_name='lint-patch-batch')
+
+  return HttpResponse('Done', content_type='text/plain')
+
+
+def task_lint_patch_batch(request):
+  """Precalculate lint messages for a batch of patches."""
+  patch_keys_str = request.POST.get('patch_keys')
+  patch_keys = [ndb.Key(urlsafe=key_str)
+                for key_str in patch_keys_str.split(',')]
+  patches = ndb.get_multi(patch_keys)
+  logging.info('Linting %d patches', len(patches))
+
   for patch in patches:
     if not _lint_patch(patch):
       continue
 
     for line in patch.lint_errors:
       patch.lint_error_count += len(patch.lint_errors[line])
-  ndb.put_multi(patches)
 
+  ndb.put_multi(patches)
   return HttpResponse('Done', content_type='text/plain')
 
 
@@ -650,7 +681,8 @@ def delete_old_pending_jobs(_request):
 
   Trigger task to delete old pending jobs.
   """
-  cutoff_date = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+  # Skip jobs older than 5 days regardless of whether they are still valid.
+  cutoff_date = datetime.datetime.utcnow() - datetime.timedelta(days=5)
   cutoff_date_str = cutoff_date.strftime("DATETIME(%Y-%m-%d %H:%M:%S)")
   cursor = ''
   limit = 100
@@ -709,11 +741,10 @@ def delete_old_pending_jobs_task(request):
 
   count = 0
   for job in items:
-    if not _is_job_valid(job):
-      if job.timestamp <= cutoff_date:
-        job.result = models.TryJobResult.SKIPPED
-        job.put()
-        count += 1
+    if job.timestamp <= cutoff_date or not _is_job_valid(job):
+      job.result = models.TryJobResult.SKIPPED
+      job.put()
+      count += 1
   msg = '%d pending jobs purged out of %d' % (count, len(items))
   logging.info(msg)
   return HttpResponse(msg, content_type='text/plain')
