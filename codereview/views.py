@@ -2830,6 +2830,9 @@ def publish(request):
   issue.cc = cc
   if form.cleaned_data['commit'] and not issue.closed:
     issue.commit = True
+    commit_checked_msg = 'The CQ bit was checked by %s' % (
+        request.user.email().lower())
+    make_message(request, issue, commit_checked_msg, send_mail=False).put()
   if not form.cleaned_data.get('message_only', False):
     tbd, comments = _get_draft_comments(request, issue)
   else:
