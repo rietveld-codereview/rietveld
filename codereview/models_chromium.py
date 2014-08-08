@@ -73,8 +73,14 @@ class TryserverBuilders(ndb.Model):
     'tryserver.blink': [
       'http://build.chromium.org/p/tryserver.blink/json/builders'
     ],
-    'tryserver.chromium': [
-      'http://build.chromium.org/p/tryserver.chromium/json/builders'
+    'tryserver.chromium.mac': [
+      'http://build.chromium.org/p/tryserver.chromium.mac/json/builders'
+    ],
+    'tryserver.chromium.linux': [
+      'http://build.chromium.org/p/tryserver.chromium.linux/json/builders'
+    ],
+    'tryserver.chromium.win': [
+      'http://build.chromium.org/p/tryserver.chromium.win/json/builders'
     ],
     'tryserver.chromium.gpu': [
       'http://build.chromium.org/p/tryserver.chromium.gpu/json/builders'

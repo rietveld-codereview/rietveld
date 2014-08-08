@@ -116,7 +116,7 @@
            href="{{try_job.url}}"
            title="{{try_job.status}} {{try_job.buildnumber}}"
         {%else%}
-           title="{{try_job.status}}"
+           title="{{try_job.status}} on {{try_job.master}}"
         {%endif%}
            status="{{try_job.status}}"
         {%ifequal last_patchset.key.id patchset.key.id%}

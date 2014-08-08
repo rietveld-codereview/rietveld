@@ -1662,7 +1662,8 @@ class GitVCS(VersionControlSystem):
       if filename not in self.hashes:
         # If a rename doesn't change the content, we never get a hash.
         base_content = RunShell(
-            ["git", "show", "HEAD:" + filename], silent_ok=True)
+            ["git", "show", "HEAD:" + filename], silent_ok=True,
+            universal_newlines=False)
     elif not hash_before:
       status = "A"
       base_content = ""

@@ -749,6 +749,8 @@ span.visualtab {
 
 .issue_details_sidebar div {
   margin-top: .8em;
+  max-width: 25em;
+  word-wrap: break-word;
 }
 
 
