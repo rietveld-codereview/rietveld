@@ -46,14 +46,15 @@ ERROR_MSG_POSTPEND = ' Please revert manually.\nSorry for the inconvenience.'
 MAX_TBR_AGE_SECS = 60 * 60 * 24 * 14
 
 
-def _get_revert_description(request, revert_reason, reviewers, original_issue):
+def _get_revert_description(request, revert_reason, reviewers, original_issue,
+                            original_patch_num):
   """Creates and returns a description for the revert CL."""
   revert_description = []
   # Contain link to original CL.
   original_issue_link = request.build_absolute_uri(
       reverse('codereview.views.show', args=[original_issue.key.id()]))
-  revert_description.append('Revert of %s (%s)' % (original_issue.subject,
-                                                   original_issue_link))
+  revert_description.append('Revert of %s (patchset #%s of %s)' % (
+      original_issue.subject, original_patch_num, original_issue_link))
   # Display the reason for reverting.
   revert_description.append('')  # Extra new line to separate sections.
   revert_description.append('Reason for revert:')
@@ -137,6 +138,7 @@ def revert_patchset(request):
 
   # Find the patches of the issue we want to revert.
   original_issue = request.issue
+  original_patch_num = len(list(original_issue.patchsets))
   original_patchset = request.patchset
   original_patches = original_patchset.patches
 
@@ -174,7 +176,7 @@ def revert_patchset(request):
   revert_reason = request.POST['revert_reason']
   revert_cq = request.POST['revert_cq'] == '1'
   description = _get_revert_description(
-      request, revert_reason, reviewers, original_issue)
+      request, revert_reason, reviewers, original_issue, original_patch_num)
   issue = models.Issue(subject=subject,
                        description=description,
                        project=original_issue.project,
@@ -281,9 +283,10 @@ def revert_patchset(request):
   revert_issue_link = request.build_absolute_uri(
       reverse('codereview.views.show', args=[issue.key.id()]))
   revert_message = (
-      'A revert of this CL has been created in %s by %s.\n\nThe reason for '
-      'reverting is: %s.' % (revert_issue_link, request.user.email(),
-                             revert_reason))
+      'A revert of this CL (patchset #%s) has been created in %s by %s.\n\n'
+      'The reason for reverting is: %s.' % (
+          original_patch_num, revert_issue_link, request.user.email(),
+          revert_reason))
   views.make_message(request, original_issue, revert_message,
                      send_mail=True).put()
   # Notify the revert issue recipients.
