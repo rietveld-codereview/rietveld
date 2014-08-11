@@ -96,6 +96,9 @@ class TryserverBuilders(ndb.Model):
       'http://skia-tree-status-staging.appspot.com/redirect/' +
           'fyi-buildbots/json/trybots',
     ],
+    'client.skia': [
+      'http://build.chromium.org/p/client.skia/json/trybots'
+    ],
     'tryserver.v8': [
       'http://build.chromium.org/p/tryserver.v8/json/builders'
     ],
