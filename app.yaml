@@ -26,10 +26,10 @@ handlers:
   script: main.application
 #  secure: always
 
+# These are fetched with the rietveld version number in the URL.
 - url: /static/(script.js|styles.css)
   static_files: static/\1
   upload: static/(script.js|styles.css)
-  expiration: 1h  # Shorter expiration, these change often
 #  secure: always
 
 - url: /static
