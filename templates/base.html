@@ -16,9 +16,11 @@
     Code Review
   </title>
   <link rel="icon" href="{{media_url}}favicon.ico" />
-  <link type="text/css" rel="stylesheet" href="{{media_url}}styles.css" />
+  <link type="text/css" rel="stylesheet"
+	href="{{media_url}}styles.css?v={{rietveld_revision}}" />
   <script type="text/javascript" src="{{media_url}}autocomplete/lib/jquery.js"></script>
-  <script type="text/javascript" src="{{media_url}}script.js"></script>
+  <script type="text/javascript"
+	  src="{{media_url}}script.js?v={{rietveld_revision}}"></script>
   <link rel="alternate" type="application/atom+xml"
    	title="Recent Issues"
    	href="{%url rss_all %}" />
