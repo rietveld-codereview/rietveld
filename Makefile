@@ -48,7 +48,7 @@ help:
 
 run: serve
 
-serve: update_revision
+serve: update_revision mapreduce
 	@echo "---[Starting SDK AppEngine Server]---"
 	$(DEV_APPSERVER) $(DEV_APPSERVER_FLAGS) .
 
