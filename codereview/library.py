@@ -283,9 +283,9 @@ class CategoriesNode(django.template.Node):
         # This is the first time encountering this top level category create its
         # anchor and div.
         triangle_anchor_attrib = {
-            'id': '%s-builders-pointer' % top_level_category,
-            'href': "javascript:M_toggleSection('%s-builders')" % (
-                top_level_category),
+            'id': '%s-%s-builders-pointer' % (tryserver, top_level_category),
+            'href': "javascript:M_toggleSection('%s-%s-builders')" % (
+                tryserver, top_level_category),
             'class': 'toggled-section closedtriangle'
         }
         triangle_anchor_elem = SubElement(
@@ -297,7 +297,7 @@ class CategoriesNode(django.template.Node):
         top_level_cat_div_elem = SubElement(
             parent=root_elem,
             tag='div',
-            id='%s-builders' % top_level_category,
+            id='%s-%s-builders' % (tryserver, top_level_category),
             style='display:none')
         SubElement(parent=root_elem, tag='br')
 
@@ -308,8 +308,9 @@ class CategoriesNode(django.template.Node):
             tag='a',
             style='padding-left:2em')
         triangle_anchor_attrib = {
-            'id': '%s-builders-pointer' % full_category,
-            'href': "javascript:M_toggleSection('%s-builders')" % full_category,
+            'id': '%s-%s-builders-pointer' % (tryserver, full_category),
+            'href': "javascript:M_toggleSection('%s-%s-builders')" % (
+                tryserver, full_category),
             'class': 'toggled-section closedtriangle',
         }
         triangle_anchor_elem = SubElement(
@@ -321,7 +322,7 @@ class CategoriesNode(django.template.Node):
         sub_cat_div_elem = SubElement(
             parent=indent_anchor_elem,
             tag='div',
-            id='%s-builders' % full_category,
+            id='%s-%s-builders' % (tryserver, full_category),
             style='display:none')
 
       for builder in builders:
@@ -332,7 +333,7 @@ class CategoriesNode(django.template.Node):
         if sub_category:
           parent = sub_cat_div_elem
         else:
-          parent = top_level_cat_div_elem 
+          parent = top_level_cat_div_elem
         builder_div_elem = SubElement(
             parent=parent,
             tag='div',
