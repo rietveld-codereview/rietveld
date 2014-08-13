@@ -185,6 +185,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
   try:
     properties = dict((name, value) for name, value, _ in properties)
     revision = str(properties['revision'])
+    mastername = properties.get('mastername')
     buildername = properties['buildername']
     buildnumber = int(properties['buildnumber'])
     slavename = properties['slavename']
@@ -203,8 +204,6 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
         properties.get('parent_buildnumber')):
       parent_buildnumber = int(properties['parent_buildnumber'])
       parent_buildername = properties['parent_buildername']
-      logging.info(
-          'Dereferencing from %s/%d' % (parent_buildername, parent_buildnumber))
     project = packet['project']
   except (KeyError, TypeError, ValueError), e:
     logging.warn(
@@ -216,6 +215,8 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
   # reliable, as build numbers are not unique, and is not super
   # efficient since this adds yet another datastore request.
   if not (issue_id and patchset_id) and parent_buildername:
+    logging.info(
+        'Dereferencing from %s/%d' % (parent_buildername, parent_buildnumber))
     parent_build_key = models.TryJobResult.query(
       models.TryJobResult.builder == parent_buildername,
       models.TryJobResult.buildnumber == parent_buildnumber).get(keys_only=True)
@@ -277,6 +278,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
           reason=reason,
           url=url,
           result=result,
+          master=mastername,
           builder=buildername,
           parent_name=parent_buildername,
           slave=slavename,
