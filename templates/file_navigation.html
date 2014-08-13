@@ -1,0 +1,25 @@
+{%if patch.prev_with_comment%}
+<a id="prevFileWithComment"
+   href="{%ifequal view_style 'patch'%}{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev_with_comment.key.id%}{%else%}{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev_with_comment.filename%}{%endifequal%}{%urlappend_view_settings%}">
+&laquo; {{patch.prev_with_comment.filename}}</a> ('K'){%else%}
+<span class="disabled">&laquo; no previous file with comments</span>{%endif%}
+|
+{%if patch.prev%}
+<a id="prevFile"
+   href="{%ifequal view_style 'patch'%}{%url codereview.views.patch issue.key.id,patchset.key.id,patch.prev.key.id%}{%else%}{%url codereview.views.diff issue.key.id,patchset.key.id,patch.prev.filename%}{%endifequal%}{%urlappend_view_settings%}">
+&laquo; {{patch.prev.filename}}</a> ('k'){%else%}
+<span class="disabled">&laquo; no previous file</span>{%endif%}
+|
+{%if patch.next%}
+<link rel="prerender"
+   href="{%ifequal view_style 'patch'%}{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}{%else%}{%url codereview.views.diff issue.key.id,patchset.key.id,patch.next.filename%}{%endifequal%}{%urlappend_view_settings%}"></link>
+<a id="nextFile"
+   href="{%ifequal view_style 'patch'%}{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next.key.id%}{%else%}{%url codereview.views.diff issue.key.id,patchset.key.id,patch.next.filename%}{%endifequal%}{%urlappend_view_settings%}">
+{{patch.next.filename}} &raquo;</a> ('j'){%else%}
+<span class="disabled">no next file &raquo;</span>{%endif%}
+|
+{%if patch.next_with_comment%}
+<a id="nextFileWithComment"
+   href="{%ifequal view_style 'patch'%}{%url codereview.views.patch issue.key.id,patchset.key.id,patch.next_with_comment.key.id%}{%else%}{%url codereview.views.diff issue.key.id,patchset.key.id,patch.next_with_comment.filename%}{%endifequal%}{%urlappend_view_settings%}">
+{{patch.next_with_comment.filename}} &raquo;</a> ('J'){%else%}
+<span class="disabled">no next file with comments &raquo;</span>{%endif%}

@@ -1,0 +1,64 @@
+{%extends "issue_base.html"%}
+{%block body%}
+
+<script language="JavaScript" type="text/javascript"><!--
+document.onkeydown = M_keyDown;
+{%if user%}
+logged_in = true;
+{%else%}
+logged_in = false;
+login_warned = false;
+{%endif%}
+// -->
+</script>
+
+<div style="float: left;">
+  <h2 style="margin-bottom: 0em; margin-top: 0em;">Side by Side diff: {{ filename }}</h2>
+  <div style="margin-top: .2em;">{%include "issue_star.html"%}
+    <b>Issue <a href="{%url codereview.views.show issue.key.id%}" onmouseover="M_showPopUp(this, 'popup-issue');" id="upCL">{{issue.key.id}}</a>:</b>
+  {{issue.subject}} {%if issue.closed %} (Closed) {%endif%}
+  {%if issue.base%}<span class="extra">Base URL: {{issue.base}}</span>{%endif%}</div>
+  <div style="margin-top: .4em;">
+    <b>Patch Set: {%if patchset.message%}{{patchset.message}}{%endif%}</b>
+    <span class="extra">
+    Created {{patchset.created|timesince}} ago
+    {%if patchset.url%},
+    Downloaded from: <a href="{{patchset.url}}">{{patchset.url}}</a>
+    {%endif%}
+    </span>
+  </div>
+  <div style="margin-top: .4em">
+    <table>
+      <tr>
+        <td>Left:</td>
+        <td>
+          <select name="left" id="left">
+            <option value="-1">Base</option>
+            {%for p in patchsets%}
+            <option value="{{p.key.id}}">Patch Set {{forloop.counter}}: {{p.message}}</option>
+            {%endfor%}
+          </select>
+        </td>
+        <td rowspan="2"><input type="button" value="Go" onclick="M_navigateDiff({{issue.key.id}}, '{{filename|escapejs}}')"></td>
+      </tr>
+      <tr>
+        <td>Right:</td>
+        <td>
+          <select name="right" id="right">
+            {%for p in patchsets%}
+            <option value="{{p.key.id}}" {%ifequal patchset.key.id p.key.id%}selected="selected"{%endifequal%}>Patch Set {{forloop.counter}}: {{p.message}}</option>
+            {%endfor%}
+          </select>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+<div style="clear: both;"></div>
+<div class="error">
+  <p>The selected patch doesn't exist in the selected patchset.</p>
+  <p>Use the patchset chooser above or go back to the
+    <a href="{%url codereview.views.show issue.key.id%}">issue page</a>.
+  </p>
+</div>
+{%endblock%}

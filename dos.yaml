@@ -1,0 +1,5 @@
+blacklist:
+- subnet: 50.17.104.147
+  description: Annoying EC2 instance harvesting our server for security holes.
+- subnet: 115.240.120.235
+  description: A dude in Mumbai harvesting /all?limit=100&closed=1&offset=<too large number>, killing our instance.
