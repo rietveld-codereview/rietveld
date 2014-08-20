@@ -561,31 +561,34 @@ class Message(ndb.Model):
   _approval = None
   _disapproval = None
 
-  def find(self, text, owner_allowed=False):
-    """Returns True when the message says |text|.
+  LGTM_RE = re.compile(r'\blgtm\b')
+  NOT_LGTM_RE = re.compile(r'\bnot lgtm\b')
+
+  def find(self, regex, owner_allowed=False):
+    """Returns True when the message has a string matching regex in it.
 
     - Must not be written by the issue owner.
-    - Must contain |text| in a line that doesn't start with '>'.
+    - Must contain regex in a line that doesn't start with '>'.
     """
     issue = self.issue_key.get()
     if not owner_allowed and issue.owner.email() == self.sender:
       return False
     return any(
         True for line in self.text.lower().splitlines()
-        if not line.strip().startswith('>') and text in line)
+        if not line.strip().startswith('>') and regex.search(line))
 
   @property
   def approval(self):
     """Is True when the message represents an approval of the review."""
     if self._approval is None:
-      self._approval = self.find('lgtm') and not self.disapproval
+      self._approval = self.find(self.LGTM_RE) and not self.disapproval
     return self._approval
 
   @property
   def disapproval(self):
     """Is True when the message represents a disapproval of the review."""
     if self._disapproval is None:
-      self._disapproval = self.find('not lgtm')
+      self._disapproval = self.find(self.NOT_LGTM_RE)
     return self._disapproval
 
 
