@@ -16,7 +16,6 @@
 
 import hashlib
 import re
-import time
 
 from codereview import decorators as deco
 from codereview import exceptions
@@ -39,12 +38,6 @@ MAX_LARGE_PATCHES_REVERSIBLE = 5
 
 ERROR_MSG_POSTPEND = ' Please revert manually.\nSorry for the inconvenience.'
 
-# We make it easier to revert recent CLs by adding a TBR= line.  We don't do
-# that for older CLs because they are less likely to be urgent and more
-# likely to require careful review of the revert itself.
-# It would be great if we could know that the signed-in user was a sheriff.
-MAX_TBR_AGE_SECS = 60 * 60 * 24 * 14
-
 
 def _get_revert_description(request, revert_reason, reviewers, original_issue,
                             original_patch_num):
@@ -66,22 +59,20 @@ def _get_revert_description(request, revert_reason, reviewers, original_issue,
   for line in original_issue.description.split('\n'):
     revert_description.append('> %s' % line)
 
-  age = int(time.time()) - time.mktime(original_issue.created.timetuple())
-  if age < MAX_TBR_AGE_SECS:
-    # TBR original author + reviewers.
-    revert_description.append('')  # Extra new line to separate sections.
-    revert_description.append('TBR=%s' % ','.join(
-        [str(reviewer) for reviewer in reviewers]))
-    # Skip tree status checks.
-    revert_description.append('NOTREECHECKS=true')
-    # Do not run trybots on the revert CL.
-    revert_description.append('NOTRY=true')
-    # Check to see if the original description contains "BUG=" if it does then
-    # use it in the revert description.
-    match_bugline = re.search(
-      r'^\s*(BUG=.*)$', original_issue.description or '', re.M | re.I)
-    if match_bugline:
-      revert_description.append('%s' % match_bugline.groups(0))
+  # TBR original author + reviewers.
+  revert_description.append('')  # Extra new line to separate sections.
+  revert_description.append('TBR=%s' % ','.join(
+      [str(reviewer) for reviewer in reviewers]))
+  # Skip tree status checks.
+  revert_description.append('NOTREECHECKS=true')
+  # Do not run trybots on the revert CL.
+  revert_description.append('NOTRY=true')
+  # Check to see if the original description contains "BUG=" if it does then
+  # use it in the revert description.
+  match_bugline = re.search(
+    r'^\s*(BUG=.*)$', original_issue.description or '', re.M | re.I)
+  if match_bugline:
+    revert_description.append('%s' % match_bugline.groups(0))
 
   return '\n'.join(revert_description)
 
