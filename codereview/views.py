@@ -4129,8 +4129,8 @@ def process_issue(
 
   lgtms = sum(
       m.sender == user and
-      m.find('lgtm', owner_allowed=True) and
-      not m.find('no lgtm', owner_allowed=True)
+      m.find(models.Message.LGTM_RE, owner_allowed=True) and
+      not m.find(models.Message.NOT_LGTM_RE, owner_allowed=True)
       for m in messages)
 
   # TODO(maruel): Check for the base username part, e.g.:
