@@ -974,4 +974,10 @@ input:checked ~ span .if_checked {
   display: block;
   font-weight: bold;
 }
-  
+
+#issue-description {
+  font-family: monospace;
+  font-size: 12px;
+  margin-left: 15px;
+  white-space: pre-wrap;
+}
