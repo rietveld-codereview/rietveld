@@ -1667,7 +1667,12 @@ def edit(request):
                              'closed': issue.closed,
                              'private': issue.private,
                              })
-    return respond(request, 'edit.html', {'issue': issue, 'form': form})
+    return respond(request, 'edit.html', {
+        'issue': issue,
+        'form': form,
+        'offer_delete': (issue.owner == request.user
+                         or auth_utils.is_current_user_admin())
+        })
 
   form = EditLocalBaseForm(request.POST)
 
