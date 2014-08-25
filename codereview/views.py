@@ -1627,12 +1627,12 @@ def account(request):
 
 
 def _log_reviewers_if_changed(request, orig_reviewers, new_reviewers):
-  """Adds a comment to the Rietveld issue if the reviewers have changed."""
+  """Returns a Message describing how the reviewers have changed, or None."""
   orig_reviewers_set = set(orig_reviewers)
   new_reviewers_set = set(new_reviewers)
   if orig_reviewers_set == new_reviewers_set:
     # Reviewers have not changed, do not add comment.
-    return
+    return None
 
   # The list of reviewers have changed, log what changed and who changed it.
   additions_set = new_reviewers_set - orig_reviewers_set
@@ -1643,7 +1643,8 @@ def _log_reviewers_if_changed(request, orig_reviewers, new_reviewers):
     reviewers_msg += '+ %s\n' % ', '.join(sorted(additions_set))
   if removals_set:
     reviewers_msg += '- %s\n' % ', '.join(sorted(removals_set))
-  make_message(request, request.issue, reviewers_msg, send_mail=False).put()
+  msg = make_message(request, request.issue, reviewers_msg, send_mail=False)
+  return msg
 
 
 @deco.issue_editor_required
@@ -1696,8 +1697,11 @@ def edit(request):
   base_changed = (issue.base != base)
   issue.base = base
 
-  _log_reviewers_if_changed(request=request, orig_reviewers=issue.reviewers,
-                            new_reviewers=reviewers)
+  log_msg = _log_reviewers_if_changed(
+    request=request, orig_reviewers=issue.reviewers, new_reviewers=reviewers)
+  if log_msg:
+    log_msg.put()
+
   issue.reviewers = reviewers
   issue.cc = cc
   if base_changed:
@@ -2835,8 +2839,8 @@ def publish(request):
   if not form.is_valid():
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
 
-  _log_reviewers_if_changed(request=request, orig_reviewers=issue.reviewers,
-                            new_reviewers=reviewers)
+  log_msg = _log_reviewers_if_changed(
+    request=request, orig_reviewers=issue.reviewers, new_reviewers=reviewers)
   issue.reviewers = reviewers
   issue.cc = cc
   if form.cleaned_data['commit'] and not issue.closed:
@@ -2860,6 +2864,8 @@ def publish(request):
                      form.cleaned_data['send_mail'],
                      draft=draft_message,
                      in_reply_to=form.cleaned_data.get('in_reply_to'))
+  if log_msg:
+    tbd.append(log_msg)
   tbd.append(msg)
 
   for obj in tbd:
