@@ -21,44 +21,12 @@ import setup
 setup.process_args()
 
 
-from codereview.models import Issue
+from codereview import models
 
 from utils import TestCase
 
 
-class TestCollaboratorEmailsFromDescription(TestCase):
-  """Test the Issue._collaborator_emails_from_description function."""
-
-  def test_no_collaborator(self):
-    description = 'Hello!\n\nBUG=12345'
-    self.assertEqual(
-        [], Issue._collaborator_emails_from_description(description))
-
-  def test_not_an_email_address(self):
-    descriptions = [
-        'Howdie!\n\nCOLLABORATOR=joi\nBUG=12345',
-        'Howdie!\n\nCOLLABORATOR=joi@google\nBUG=12345',
-    ]
-    for description in descriptions:
-      self.assertEqual(
-        [], Issue._collaborator_emails_from_description(description))
-
-  def test_one_valid_collaborator(self):
-    descriptions = [
-        'Howdie!\n\nCOLLABORATOR=joi@chromium.org\nBUG=12345',
-        'Howdie!\n\nCOLLABORATOR=joi@chromium.org \nBUG=12345',
-        'Howdie!\n\n COLLABORATOR =\tjoi@chromium.org \nBUG=12345',
-        'Howdie!\nCOLLABORATOR = joi@chromium.org \nCOLLABORATOR=smurf',
-    ]
-    for description in descriptions:
-      self.assertEqual(
-          ['joi@chromium.org'],
-          Issue._collaborator_emails_from_description(description))
-
-  def test_multiple_collaborators(self):
-    collaborators = Issue._collaborator_emails_from_description(
-        'Hello world!\nCOLLABORATOR=one@one.com\nCOLLABORATOR=two@two.com')
-    self.assertEqual(['one@one.com', 'two@two.com'], collaborators)
+# TODO(jrobbins): write tests for the model classes.
 
 
 if __name__ == '__main__':
