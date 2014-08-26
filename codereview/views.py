@@ -2839,8 +2839,7 @@ def publish(request):
   if not form.is_valid():
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
 
-  log_msg = _log_reviewers_if_changed(
-    request=request, orig_reviewers=issue.reviewers, new_reviewers=reviewers)
+  orig_reviewers = issue.reviewers
   issue.reviewers = reviewers
   issue.cc = cc
   if form.cleaned_data['commit'] and not issue.closed:
@@ -2864,6 +2863,10 @@ def publish(request):
                      form.cleaned_data['send_mail'],
                      draft=draft_message,
                      in_reply_to=form.cleaned_data.get('in_reply_to'))
+  # Do this step last so that the zeroth message can be treated specially,
+  # but put() it before put()ing the user's message.
+  log_msg = _log_reviewers_if_changed(
+    request=request, orig_reviewers=orig_reviewers, new_reviewers=reviewers)
   if log_msg:
     tbd.append(log_msg)
   tbd.append(msg)
