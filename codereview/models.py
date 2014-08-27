@@ -673,6 +673,9 @@ class Message(ndb.Model):
   issue_was_closed = ndb.BooleanProperty(default=False)
   # If message came in through email, we might not count "lgtm"
   was_inbound_email = ndb.BooleanProperty(default=False)
+  # Whether this Message was auto generated in response to an action the system
+  # would like to log. Eg: Checking CQ checkbox or changing reviewers.
+  auto_generated = ndb.BooleanProperty(default=False)
 
   _approval = None
   _disapproval = None

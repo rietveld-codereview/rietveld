@@ -46,7 +46,7 @@ from codereview import responses
 from codereview import views
 
 
-# This is the number of patches to lint in each task run.  It has 10 minutes 
+# This is the number of patches to lint in each task run.  It has 10 minutes
 # to run.  Linting on large files can take ~10s per file.
 LINT_BATCH_SIZE = 50
 
@@ -253,7 +253,7 @@ def inner_handle(reason, base_url, timestamp, packet, result, properties):
       requester = users.User(properties['requester'])
     except users.UserNotFoundError:
       pass
-  
+
   def tx_try_job_result():
     if try_job_key:
       try_obj = ndb.Key(urlsafe=try_job_key).get()
@@ -439,7 +439,7 @@ def edit_flags(request):
     action = 'checked' if request.issue.commit else 'unchecked'
     commit_checked_msg = 'The CQ bit was %s by %s' % (action, user_email)
     views.make_message(request, request.issue, commit_checked_msg,
-                       send_mail=False).put()
+                       send_mail=False, auto_generated=True).put()
     request.issue.put()
 
   if 'builders' in request.POST:

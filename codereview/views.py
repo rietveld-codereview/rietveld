@@ -1643,7 +1643,8 @@ def _log_reviewers_if_changed(request, orig_reviewers, new_reviewers):
     reviewers_msg += '+ %s\n' % ', '.join(sorted(additions_set))
   if removals_set:
     reviewers_msg += '- %s\n' % ', '.join(sorted(removals_set))
-  msg = make_message(request, request.issue, reviewers_msg, send_mail=False)
+  msg = make_message(request, request.issue, reviewers_msg, send_mail=False,
+                     auto_generated=True)
   return msg
 
 
@@ -1764,16 +1765,6 @@ def delete_patchset(request):
 
   There is no way back.
   """
-  # Log patchset deletion.
-  patchset_num = 0
-  for patchset in list(request.issue.patchsets):
-    patchset_num += 1
-    if patchset.key.id() == request.patchset.key.id():
-      break
-  delete_msg = 'Patchset #%s (id:%s) has been deleted' % (
-      patchset_num, request.patchset.key.id())
-  make_message(request, request.issue, delete_msg, send_mail=False).put()
-  # Delete the patchset.
   request.patchset.nuke()
   return HttpResponseRedirect(reverse(show, args=[request.issue.key.id()]))
 
@@ -2846,7 +2837,8 @@ def publish(request):
     issue.commit = True
     commit_checked_msg = 'The CQ bit was checked by %s' % (
         request.user.email().lower())
-    make_message(request, issue, commit_checked_msg, send_mail=False).put()
+    make_message(request, issue, commit_checked_msg, send_mail=False,
+                 auto_generated=True).put()
   if not form.cleaned_data.get('message_only', False):
     tbd, comments = _get_draft_comments(request, issue)
   else:
@@ -3028,7 +3020,7 @@ def _get_modified_counts(issue):
 
 
 def make_message(request, issue, message, comments=None, send_mail=False,
-                  draft=None, in_reply_to=None):
+                  draft=None, in_reply_to=None, auto_generated=False):
   """Helper to create a Message instance and optionally send an email."""
   attach_patch = request.POST.get("attach_patch") == "yes"
   template, context = _get_mail_template(request, issue, full_diff=attach_patch)
@@ -3069,7 +3061,8 @@ def make_message(request, issue, message, comments=None, send_mail=False,
                          recipients=reply_to,
                          text=text,
                          parent=issue.key,
-                         issue_was_closed=issue.closed)
+                         issue_was_closed=issue.closed,
+                         auto_generated=auto_generated)
   else:
     msg = draft
     msg.subject = subject
@@ -3078,6 +3071,7 @@ def make_message(request, issue, message, comments=None, send_mail=False,
     msg.draft = False
     msg.date = datetime.datetime.now()
     msg.issue_was_closed = issue.closed
+    msg.auto_generated = auto_generated
   issue.calculate_updates_for(msg)
 
   if in_reply_to:
