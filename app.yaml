@@ -1,0 +1,75 @@
+application: chromiumcodereview-hr
+version: use-version-arg
+runtime: python27
+api_version: 1
+threadsafe: false
+
+includes:
+- mapreduce/include.yaml
+
+default_expiration: 7d  # This is good for images, which never change
+
+# The commented "secure: always" handler can't be enabled for appspot.com
+# applications with a custom domain, since GAE doesn't support HTTPS on custom
+# domains at the moment.
+handlers:
+
+- url: /(robots.txt|favicon.ico)
+  static_files: static/\1
+  upload: static/(robots.txt|favicon.ico)
+
+- url: /google7db36eb2cc527940.html
+  static_files: static/robots.txt
+  upload: static/robots.txt
+
+- url: /static/upload.py
+  script: main.application
+#  secure: always
+
+# These are fetched with the rietveld version number in the URL.
+- url: /static/(script.js|styles.css)
+  static_files: static/\1
+  upload: static/(script.js|styles.css)
+#  secure: always
+
+- url: /static
+  static_dir: static
+#  secure: always
+
+# Admin-only URLs like tasks or cron jobs. See cron.yaml and queue.yaml.
+- url: /restricted/.*
+  script: main.application
+  login: admin
+
+# These seem to be hit over http and cannot deal with a 302 to https.
+- url: /_ah/(start|stop)
+  script: backends.app
+  login: admin
+
+- url: /.*
+  script: main.application
+#  secure: always
+
+admin_console:
+  pages:
+  - name: Client ID and Secret Settings
+    url: /restricted/set-client-id-and-secret
+
+inbound_services:
+- mail
+- xmpp_message
+- warmup
+
+builtins:
+# To reenable appstats, do not forget to update appengine_config.py too.
+#- appstats: on
+- remote_api: on
+
+libraries:
+- name: django
+  version: 1.4
+- name: webapp2
+  version: 2.5.2
+
+env_variables:
+  DJANGO_SETTINGS_MODULE: 'settings'

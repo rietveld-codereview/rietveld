@@ -1,0 +1,92 @@
+{%extends "issue_base.html"%}
+{%block title1%}Publish+Mail -{%endblock%}
+{%block head%}{{form.media}}{%endblock%}
+{%block issue_body%}
+<script><!--
+  function discard(btn) {
+    draftMessage.discard();
+    btn.disabled = "disabled";
+    document.getElementById("id_message").value = "";
+    return false;
+  }
+  draftMessage = new M_draftMessage({{issue.key.id}}, true);
+
+  function quick_lgtm(do_cq) {
+    var form = document.forms['publish-form'];
+    form.message.value = "lgtm\n\n" + form.message.value;
+    if (do_cq) {
+      form.commit.value = 1;
+    }
+    form.submit();
+    return false;
+  }
+  // -->
+</script>
+<h2>Publish + Mail Draft Comments</h2>
+
+<div>
+  <form action="{%url codereview.views.publish issue.key.id%}"
+        method="post" id="publish-form">
+  <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+  <table class="formtable">
+  {%ifnotequal user issue.owner%}
+  <tr><th>Subject:</th><td>{{issue.subject}}</td></tr>
+  {%endifnotequal%}
+  {{form}}
+  <tr>
+    <td></td>
+    <td><i>The message will be included in the email sent (if any).</i></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td>
+      <table style="width:100%">
+        <tr>
+          <td>
+            <input type="submit" value="Publish all my drafts" />
+            {%if draft_message%}
+            <input type="button" onclick="return discard(this);"
+                  value="Discard Message" />
+            {%endif%}
+          </td><td>
+            {% if issue.owner != request.user %}
+              <input type="submit" value="Quick LGTM"
+                    onclick="return quick_lgtm(false);" />
+              {% if not issue.closed and not issue.private and not issue.commit %}
+                </td><td>
+                  <input type="submit" value="Quick LGTM & CQ"
+                        onclick="return quick_lgtm(true);" />
+              {% endif %}
+            {% endif %}
+          </td><td>
+            <a href="http://www.chromium.org/developers/testing/commit-queue">CQ FAQ</a>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  </table>
+  </form>
+
+  <a id="resizer" style="display:none;cursor:pointer">
+  <img src="{{media_url}}zippyplus.gif"></a>
+  <script language="JavaScript" type="text/javascript"><!--
+  M_addTextResizer_(document.getElementById("publish-form"));
+  document.getElementById("id_message").focus();
+  --></script>
+
+</div>
+{%if preview%}
+<div style="margin-top: 3em;">
+  <h3>Unpublished Drafts:</h3>
+  <pre class="description">{{preview|wordwrap:"80"|urlizetrunc:80}}</pre>
+</div>
+<form method="post" action="{% url codereview.views.delete_drafts issue.key.id %}"
+      onsubmit="return confirm('Are you sure? All your drafts for this issue will be deleted.');">
+  <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+  <button type="submit">Delete all my drafts</button> There's no undo!
+</form>
+{%endif%}
+<div style="clear:both"></div>
+
+{%endblock%}

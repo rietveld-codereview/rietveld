@@ -1,0 +1,4 @@
+backends:
+- name: mapreduce-backend
+  instances: 10
+  options: dynamic
