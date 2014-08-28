@@ -1627,12 +1627,12 @@ def account(request):
 
 
 def _log_reviewers_if_changed(request, orig_reviewers, new_reviewers):
-  """Returns a Message describing how the reviewers have changed, or None."""
+  """Adds a comment to the Rietveld issue if the reviewers have changed."""
   orig_reviewers_set = set(orig_reviewers)
   new_reviewers_set = set(new_reviewers)
   if orig_reviewers_set == new_reviewers_set:
     # Reviewers have not changed, do not add comment.
-    return None
+    return
 
   # The list of reviewers have changed, log what changed and who changed it.
   additions_set = new_reviewers_set - orig_reviewers_set
@@ -1643,9 +1643,8 @@ def _log_reviewers_if_changed(request, orig_reviewers, new_reviewers):
     reviewers_msg += '+ %s\n' % ', '.join(sorted(additions_set))
   if removals_set:
     reviewers_msg += '- %s\n' % ', '.join(sorted(removals_set))
-  msg = make_message(request, request.issue, reviewers_msg, send_mail=False,
-                     auto_generated=True)
-  return msg
+  make_message(request, request.issue, reviewers_msg, send_mail=False,
+               auto_generated=True).put()
 
 
 @deco.issue_editor_required
@@ -1698,11 +1697,8 @@ def edit(request):
   base_changed = (issue.base != base)
   issue.base = base
 
-  log_msg = _log_reviewers_if_changed(
-    request=request, orig_reviewers=issue.reviewers, new_reviewers=reviewers)
-  if log_msg:
-    log_msg.put()
-
+  _log_reviewers_if_changed(request=request, orig_reviewers=issue.reviewers,
+                            new_reviewers=reviewers)
   issue.reviewers = reviewers
   issue.cc = cc
   if base_changed:
@@ -2746,7 +2742,9 @@ def _get_mail_template(request, issue, full_diff=False):
   template = 'mails/comment.txt'
   if request.user == issue.owner:
     query = models.Message.query(
-        models.Message.sender == request.user.email(), ancestor=issue.key)
+        models.Message.sender == request.user.email(),
+        models.Message.auto_generated == False,
+        ancestor=issue.key)
     if query.count(1) == 0:
       template = 'mails/review.txt'
       files, patch = _get_affected_files(issue, full_diff)
@@ -2830,7 +2828,8 @@ def publish(request):
   if not form.is_valid():
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
 
-  orig_reviewers = issue.reviewers
+  _log_reviewers_if_changed(request=request, orig_reviewers=issue.reviewers,
+      new_reviewers=reviewers)
   issue.reviewers = reviewers
   issue.cc = cc
   if form.cleaned_data['commit'] and not issue.closed:
@@ -2855,12 +2854,6 @@ def publish(request):
                      form.cleaned_data['send_mail'],
                      draft=draft_message,
                      in_reply_to=form.cleaned_data.get('in_reply_to'))
-  # Do this step last so that the zeroth message can be treated specially,
-  # but put() it before put()ing the user's message.
-  log_msg = _log_reviewers_if_changed(
-    request=request, orig_reviewers=orig_reviewers, new_reviewers=reviewers)
-  if log_msg:
-    tbd.append(log_msg)
   tbd.append(msg)
 
   for obj in tbd:
@@ -3072,7 +3065,8 @@ def make_message(request, issue, message, comments=None, send_mail=False,
     msg.date = datetime.datetime.now()
     msg.issue_was_closed = issue.closed
     msg.auto_generated = auto_generated
-  issue.calculate_updates_for(msg)
+  if not auto_generated:
+    issue.calculate_updates_for(msg)
 
   if in_reply_to:
     try:
