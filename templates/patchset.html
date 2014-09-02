@@ -1,0 +1,180 @@
+{%if patchset.url%}
+  <div>
+    Downloaded from: <a href="{{patchset.url}}">{{patchset.url}}</a>
+  </div>
+{%endif%}
+<div class="issue-list">
+
+  <div class="pagination">
+    <div style="float: left;">
+      <i>Created:</i> {{patchset.created|timesince}} ago
+    </div>
+    <div style="float: right;">
+      {%if patchset.data%}
+        Download
+          <a href="{%url codereview.views.download issue.key.id,patchset.key.id%}"
+            title="Patchset in text format">[raw]</a>
+          <a href="{%url codereview.views.tarball issue.key.id,patchset.key.id%}"
+            title="Tarball containing the original and patched files">[tar.bz2]</a>
+      {% else %}
+        <span class="disabled">(Patch set is too large to download)</span>
+      {% endif %}
+      {%ifnotequal 1 num_patchsets%}
+        {%if is_editor %}
+        <form method="post" action="{%url codereview.views.delete_patchset issue.key.id patchset.key.id %}">
+          <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+          <input type="hidden" name="_method" value="delete" />
+          |
+          <input onclick="return confirm('Are you sure?');"
+                 type="submit" value="Delete" class="link-to"/>
+        </form>
+        {%endif%}
+      {%endifnotequal%}
+    </div>
+    <div style="clear:both;"></div>
+  </div>
+
+  <table id="queues" style="clear:both;">
+    <tr align="left">
+      <th colspan="2"></th>
+      <th>Unified diffs</th>
+      <th>Side-by-side diffs</th>
+      <th>Delta from patch set</th>
+      <th colspan="3">Stats <font style='font-weight: normal'>(<i>+{{patchset.total_added}} line{{patchset.total_added|pluralize}}, -{{patchset.total_removed}} line{{patchset.total_removed|pluralize}}</i>)</font></th>
+      <th>Lint</th>
+      <th>Patch</th>
+    </tr>
+
+    {%for patch in patchset.patches_cache%}
+      <tr name="patch">
+        <td class="first" width="14"><img src="{{media_url}}closedtriangle.gif"
+    style="visibility: hidden;" width="12" height="9" /></td>
+        <td style="white-space: nowrap">{%if patch.status%}{{patch.status}}{%endif%}</td>
+        <td>
+          <a class="noul"
+             href="{%url codereview.views.patch issue.key.id,patchset.key.id,patch.key.id%}">
+            {{patch.filename}}
+          </a>
+        </td>
+        <td>
+          <a class="noul"
+             href="{%url codereview.views.diff issue.key.id,patchset.key.id,patch.filename%}">
+            View
+          </a>
+        </td>
+        <td style="white-space: nowrap">
+        {%for delta in patch.parsed_deltas%}
+          <a href="{%url codereview.views.diff2 issue.key.id,delta.1,patchset.key.id,patch.filename%}"
+             title="Delta from patch set {{delta.0}}">{{delta.0}}</a>
+        {%endfor%}
+        </td>
+        {%if patch.is_binary%}
+          <td style="white-space: nowrap" colspan="2"><i>Binary file</i></td>
+        {%else%}
+          <td style="white-space: nowrap">{{patch.num_chunks}} chunk{{patch.num_chunks|pluralize}}</td>
+          <td style="white-space: nowrap">+{{patch.num_added}} line{{patch.num_added|pluralize}}, -{{patch.num_removed}} line{{patch.num_removed|pluralize}}</td>
+        {%endif%}
+        <td style="white-space: nowrap">
+          {%if patch.num_comments or patch.num_drafts%}<b>{%endif%}
+            {{patch.num_comments}} comment{{patch.num_comments|pluralize}}
+            {%if patch.num_my_comments%}
+              ({{patch.num_my_comments}} by me)
+            {%endif%}
+            {%if patch.num_drafts%}
+            <span style="color:red">+
+              {{patch.num_drafts}} draft{{patch.num_drafts|pluralize}}
+            </span>
+            {%endif%}
+          {%if patch.num_comments or patch.num_drafts%}</b>{%endif%}
+        </td>
+        <td style="white-space: nowrap">
+        {%ifequal patch.lint_error_count 0%}
+        0 errors
+        {%else%}
+        <a href="{%url codereview.views_chromium.lint_patch issue.key.id,patchset.key.id,patch.key.id%}"
+           title="Lint results for {{patch.filename}}">
+          {%ifequal patch.lint_error_count -1%}?{%else%}{{patch.lint_error_count}}{%endifequal%} errors
+        </a>
+        {%endifequal%}
+        </td>
+        <td>
+          <a href="{%url codereview.views.download_patch issue.key.id,patchset.key.id,patch.key.id%}"
+             title="Download patch for {{patch.filename}}">
+            Download
+          </a>
+        </td>
+      </tr>
+    {%endfor%}
+
+  </table>
+  <div id="tryjobdiv-{{patchset.key.id}}"
+         style="background: transparent; margin: 4px 0px">
+      <span><i>Trybot&nbsp;results:</i></span>
+      {%for try_job in patchset.try_job_results%}
+        <a class="build-result build-status-color-{{try_job.status}}"
+        {%if try_job.url %}
+           href="{{try_job.url}}"
+           title="{{try_job.status}} {{try_job.buildnumber}}"
+        {%else%}
+           title="{{try_job.status}} on {{try_job.master}}"
+        {%endif%}
+           status="{{try_job.status}}"
+        {%ifequal last_patchset.key.id patchset.key.id%}
+           style="display:none;"
+        {%endifequal%}
+           target="_blank">
+           &nbsp;{{try_job.builder}}&nbsp;</a>
+      {%endfor%}
+      <a id="tryjobdiv-{{patchset.key.id}}-morelink" style="display: none;"
+         href="#" onclick="M_showTryJobResult('tryjobdiv-{{patchset.key.id}}', true); return false">
+         More&gt;&gt;&gt;</a>
+      <a id="tryjobdiv-{{patchset.key.id}}-lesslink" style="display: none;"
+         href="#" onclick="M_showTryJobResult('tryjobdiv-{{patchset.key.id}}', false); return false">
+         &lt;&lt;&lt;Less</a>
+
+      {%if not issue.closed and not issue.private %}
+        {%if user%}
+          {%if not patchset.issue_key.get.commit %}
+            {%ifequal last_patchset.key.id patchset.key.id%}
+              |
+              <a id="tryjobchange-{{patchset.key.id}}" href="#"
+                  onclick="M_editPendingTryJobs('{{patchset.key.id}}'); return false">Try more bots</a>
+            {%endifequal%}
+          {%endif%}
+        {%else%}
+          <a href="{{sign_in}}">Sign in</a> to try more bots
+        {%endif%}
+      {%endif%}
+  </div>
+
+  {%ifequal last_patchset.key.id patchset.key.id%}
+    <form id="commitform" name="commitform" method="post">
+      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+      <input type="hidden" name="last_patchset" value="{{last_patchset.key.id}}">
+      Commit: <input type="checkbox" id="commit" name="commit"
+        {%if issue.commit%}checked{%endif%}
+        {%if not request.user or issue.closed or issue.private%}disabled{%endif%}
+        onchange="M_editFlags('{{issue.key.id}}')" />
+    </form>
+
+    {%if is_editor %}
+      <br/>
+      <form action="{%url codereview.revert_patchset.revert_patchset issue.key.id,patchset.key.id%}"
+            method="post" enctype="multipart/form-data" id="revert-form"
+            onsubmit="return M_createRevertPatchset(); return false;" >
+        <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
+        <input type="hidden" name="revert_reason" value="">
+        <input type="hidden" name="revert_cq" value="">
+        <input type="button" value="Revert Patchset" onclick="M_toggleRevertReasonPopup(true);" {%if issue.closed %}>{%else%}disabled> Issue must be closed to Revert{%endif%}
+        <div id="revert-reason-popup-div" style="background: transparent; margin: 4px 0px; display: none;">
+          Enter the reason for reverting this patchset (Please be descriptive, include what broke and what needs to be done to reland):<br/>
+          <textarea rows="10" cols="50" id="revert_reason_textarea"></textarea><br/>
+          Automatically send Revert CL to CQ: <input type="checkbox" id="check_cq" name="check_cq" checked/><br/>
+          <input type="button" value="Cancel" onclick="M_toggleRevertReasonPopup(false);"/>
+          <input type="submit" value="Submit">
+        </div>
+      </form>
+    {%endif%}
+
+  {%endifequal%}
+</div>
