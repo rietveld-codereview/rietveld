@@ -1765,6 +1765,17 @@ def delete_patchset(request):
 
   There is no way back.
   """
+  # Log patchset deletion.
+  patchset_num = 0
+  for patchset in list(request.issue.patchsets):
+    patchset_num += 1
+    if patchset.key.id() == request.patchset.key.id():
+      break
+  delete_msg = 'Patchset #%s (id:%s) has been deleted' % (
+      patchset_num, request.patchset.key.id())
+  make_message(request, request.issue, delete_msg, send_mail=False,
+               auto_generated=True).put()
+  # Delete the patchset.
   request.patchset.nuke()
   return HttpResponseRedirect(reverse(show, args=[request.issue.key.id()]))
 
