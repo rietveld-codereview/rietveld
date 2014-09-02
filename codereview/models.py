@@ -513,6 +513,8 @@ class TryJobResult(ndb.Model):
       return 'success'
     if self.result == self.SKIPPED:
       return 'skipped'
+    elif self.result == self.EXCEPTION:
+      return 'exception'
     elif self.result in self.FAIL:
       return 'failure'
     elif self.result == self.TRYPENDING:

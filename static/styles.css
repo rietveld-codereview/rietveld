@@ -900,6 +900,10 @@ ul.errorlist li {
   padding: 1px 0;
 }
 
+.build-status-color-exception {
+  background-color: rgb(224, 176, 255);
+}
+
 .build-status-color-failure {
   background-color: rgb(233, 128, 128);
 }
