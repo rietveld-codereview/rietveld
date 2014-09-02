@@ -1523,8 +1523,11 @@ def show(request):
     if last_patchset.patches:
       first_patch = last_patchset.patches[0]
   messages = []
+  generated_messages = []
   has_draft_message = False
   for msg in request.issue.messages:
+    if msg.auto_generated:
+      generated_messages.append(msg)
     if not msg.draft:
       messages.append(msg)
     elif msg.draft and request.user and msg.sender == request.user.email():
@@ -1562,6 +1565,7 @@ def show(request):
     'issue': request.issue,
     'last_patchset': last_patchset,
     'messages': messages,
+    'generated_messages': generated_messages,
     'num_patchsets': num_patchsets,
     'patchsets': patchsets,
     'src_url': src_url,
@@ -2020,6 +2024,7 @@ def _issue_as_dict(issue, messages, request=None):
         'text': m.text,
         'approval': m.approval,
         'disapproval': m.disapproval,
+        'auto_generated': m.auto_generated,
       }
       for m in models.Message.query(ancestor=issue.key)),
       key=lambda x: x['date'])

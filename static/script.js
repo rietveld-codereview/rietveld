@@ -768,12 +768,13 @@ function M_switchInlineComment(cid, lineno, side) {
 }
 
 /**
- * Used to expand all comments, hiding the preview and showing the comment.
+ * Used to expand all visible comments, hiding the preview and showing the
+ * comment.
  * @param {String} prefix The level of the comment -- one of
  *                        ('cl', 'file', 'inline')
  * @param {Integer} num_comments The number of comments to show
  */
-function M_showAllComments(prefix, num_comments) {
+function M_expandAllVisibleComments(prefix, num_comments) {
   for (var i = 0; i < num_comments; i++) {
     M_hideElement(prefix + "-preview-" + i);
     M_showElement(prefix + "-comment-" + i);
@@ -781,15 +782,38 @@ function M_showAllComments(prefix, num_comments) {
 }
 
 /**
- * Used to collpase all comments, showing the preview and hiding the comment.
+ * Used to collapse all visible comments, showing the preview and hiding the
+ * comment.
  * @param {String} prefix The level of the comment -- one of
  *                        ('cl', 'file', 'inline')
  * @param {Integer} num_comments The number of comments to hide
  */
-function M_hideAllComments(prefix, num_comments) {
+function M_collapseAllVisibleComments(prefix, num_comments) {
   for (var i = 0; i < num_comments; i++) {
     M_showElement(prefix + "-preview-" + i);
     M_hideElement(prefix + "-comment-" + i);
+  }
+}
+
+/**
+ * Used to show all auto_generated comments.
+ * @param {Integer} num_comments The total number of comments to loop through
+ */
+function M_showGeneratedComments(num_comments) {
+  for (var i = 0; i < num_comments; i++) {
+    // The top level msg div starts at index 1.
+    M_showElement("generated-msg" + (i+1));
+  }
+}
+
+/**
+ * Used to hide all auto_generated comments.
+ * @param {Integer} num_comments The total number of comments to loop through
+ */
+function M_hideGeneratedComments(num_comments) {
+  for (var i = 0; i < num_comments; i++) {
+    // The top level msg div starts at index 1.
+    M_hideElement("generated-msg" + (i+1));
   }
 }
 
