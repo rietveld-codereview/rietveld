@@ -799,6 +799,12 @@ span.visualtab {
   margin-bottom: .8em;
 }
 
+/* auto-generated messages have a light grey background and the default
+   border */
+.message.generated .header {
+  background-color: #EEE;
+}
+
 /* Approval messages have light green header background and dark green border */
 .message.approval .header {
   background-color: #7FFF7F;

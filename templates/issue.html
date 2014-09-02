@@ -82,20 +82,33 @@
     </a>
   </h3>
 
-  {%if messages%}<div><i>Total messages: {{messages|length}}</i></div>{%endif%}
+  {%if messages%}
+    <div><i>
+    Total messages: {{messages|length}} ({{generated_messages|length}} generated)
+    </i></div>
+  {%endif%}
 
   <div id="messages">
     <div style="margin-bottom: .5em;">
-      <a href="javascript:M_showAllComments('cl', {{messages|length}})">
-        Expand All Messages</a>
+      <a href="javascript:M_expandAllVisibleComments('cl', {{messages|length}})">
+        Expand Messages</a>
       |
-      <a href="javascript:M_hideAllComments('cl', {{messages|length}})">
-        Collapse All Messages</a>
+      <a href="javascript:M_collapseAllVisibleComments('cl', {{messages|length}})">
+        Collapse Messages</a>
+      {% if generated_messages %}
+      |
+      <a href="javascript:M_showGeneratedComments({{messages|length}})">
+        Show Generated Messages</a>
+      |
+      <a href="javascript:M_hideGeneratedComments({{messages|length}})">
+        Hide Generated Messages</a>
+      {% endif %}
     </div>
 
     {%for message in messages%}
-      <div class="message {%if message.issue_was_closed%}issue_was_closed{%endif%} {%if message.approval%}approval{%endif%} {%if message.disapproval%}disapproval{%endif%}"
-           id="msg{{forloop.counter}}"
+      <div class="message {%if message.issue_was_closed%}issue_was_closed{%endif%} {%if message.approval%}approval{%endif%} {%if message.disapproval%}disapproval{%endif%} {%if message.auto_generated %}generated{%endif%}"
+           {%if message.auto_generated and messages|length != generated_messages|length %}style="display: none"{%endif%}
+           id="{%if message.auto_generated %}generated-{%endif%}msg{{forloop.counter}}"
            name="{{forloop.counter0}}">
         <div class="header">
           <table border="0" width="100%" cellspacing="0" cellpadding="0">
@@ -156,11 +169,19 @@
     {%endfor%}
 
     <div>
-      <a href="javascript:M_showAllComments('cl', {{messages|length}})">
-      Expand All Messages</a>
+      <a href="javascript:M_expandAllVisibleComments('cl', {{messages|length}})">
+        Expand Messages</a>
       |
-      <a href="javascript:M_hideAllComments('cl', {{messages|length}})">
-        Collapse All Messages</a>
+      <a href="javascript:M_collapseAllVisibleComments('cl', {{messages|length}})">
+        Collapse Messages</a>
+      {% if generated_messages %}
+      |
+      <a href="javascript:M_showGeneratedComments({{messages|length}})">
+        Show Generated Messages</a>
+      |
+      <a href="javascript:M_hideGeneratedComments({{messages|length}})">
+        Hide Generated Messages</a>
+      {% endif %}
     </div>
 
   </div>
