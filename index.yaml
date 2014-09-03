@@ -328,18 +328,18 @@ indexes:
 - kind: Message
   ancestor: yes
   properties:
-  - name: date
-
-- kind: Message
-  ancestor: yes
-  properties:
+  - name: auto_generated
   - name: draft
   - name: date
 
 - kind: Message
   ancestor: yes
   properties:
-  - name: auto_generated
+  - name: date
+
+- kind: Message
+  ancestor: yes
+  properties:
   - name: draft
   - name: date
 

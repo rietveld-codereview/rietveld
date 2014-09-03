@@ -2759,7 +2759,7 @@ def _get_mail_template(request, issue, full_diff=False):
   if request.user == issue.owner:
     query = models.Message.query(
         models.Message.sender == request.user.email(),
-        models.Message.auto_generated == False,
+        models.Message.auto_generated != True,
         ancestor=issue.key)
     if query.count(1) == 0:
       template = 'mails/review.txt'

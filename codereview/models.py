@@ -275,8 +275,13 @@ class Issue(ndb.Model):
     self.num_messages = 0
     old_messages = Message.query(
         Message.draft == False,
-        Message.auto_generated == False,
         ancestor=self.key).order(Message.date)
+    # We cannot put this condition in the query because:
+    # (a) auto_generated == False does not return legacy messages
+    # and (b) auto_generated != True conflicts with sorting.
+    old_messages = [
+      msg for msg in old_messages if not msg.auto_generated]
+
 
     for msg in itertools.chain(old_messages, msgs):
       if self._original_subject is None:
