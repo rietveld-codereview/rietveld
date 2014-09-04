@@ -158,6 +158,11 @@ class Issue(ndb.Model):
   def patchsets(self):
     return PatchSet.query(ancestor=self.key).order(Issue.created)
 
+  def most_recent_patchset_key(self):
+    query = PatchSet.query(ancestor=self.key).order(-Issue.created)
+    ps_key = query.get(keys_only=True)
+    return ps_key
+
   @property
   def messages(self):
     return Message.query(ancestor=self.key).order(Message.date)
@@ -687,6 +692,8 @@ class Message(ndb.Model):
   # Whether this Message was auto generated in response to an action the system
   # would like to log. Eg: Checking CQ checkbox or changing reviewers.
   auto_generated = ndb.BooleanProperty(default=False)
+  # Patchset that the user was responding to.
+  patchset_key = ndb.KeyProperty(PatchSet)
 
   _approval = None
   _disapproval = None

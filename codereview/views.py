@@ -2032,6 +2032,7 @@ def _issue_as_dict(issue, messages, request=None):
         'approval': m.approval,
         'disapproval': m.disapproval,
         'auto_generated': m.auto_generated,
+        'patchset': m.patchset_key.id() if m.patchset_key else None,
       }
       for m in models.Message.query(ancestor=issue.key)),
       key=lambda x: x['date'])
@@ -3083,6 +3084,8 @@ def make_message(request, issue, message, comments=None, send_mail=False,
     msg.auto_generated = auto_generated
   if not auto_generated:
     issue.calculate_updates_for(msg)
+
+  msg.patchset_key = issue.most_recent_patchset_key()
 
   if in_reply_to:
     try:
