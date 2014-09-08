@@ -1525,11 +1525,17 @@ def show(request):
   messages = []
   generated_messages = []
   has_draft_message = False
+  # Keep track of the last non-generated message.
+  message_index = -1
+  last_user_message_index = -1
   for msg in request.issue.messages:
     if msg.auto_generated:
       generated_messages.append(msg)
     if not msg.draft:
       messages.append(msg)
+      message_index += 1
+      if not msg.auto_generated:
+        last_user_message_index = message_index
     elif msg.draft and request.user and msg.sender == request.user.email():
       has_draft_message = True
   num_patchsets = len(patchsets)
@@ -1566,6 +1572,7 @@ def show(request):
     'last_patchset': last_patchset,
     'messages': messages,
     'generated_messages': generated_messages,
+    'last_user_message_index': last_user_message_index,
     'num_patchsets': num_patchsets,
     'patchsets': patchsets,
     'src_url': src_url,

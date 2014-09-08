@@ -122,7 +122,7 @@
                        width="100%">
                   <tr>
                     <td>
-                      <span style="white-space: nowrap; overflow: hidden;{%if forloop.last%} display: none;{%endif%}"
+                      <span style="white-space: nowrap; overflow: hidden;{%if forloop.last or last_user_message_index == forloop.counter0%} display: none;{%endif%}"
                            class="extra"
                            id="cl-preview-{{forloop.counter0}}">
                           {{message.text|truncatewords:15}}
@@ -142,7 +142,7 @@
         </div>
 
         <div id="cl-comment-{{forloop.counter0}}"
-             {%if forloop.last%}{%else%}style="display: none;"{%endif%}>
+             {%if forloop.last or last_user_message_index == forloop.counter0%}{%else%}style="display: none;"{%endif%}>
           <div class="message-body">
             {%if message.issue_was_closed%}
               <span class="extra-note">
