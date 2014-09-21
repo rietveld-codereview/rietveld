@@ -1774,7 +1774,11 @@ class MercurialVCS(VersionControlSystem):
     if self.options.revision:
       self.base_rev = self.options.revision
     else:
-      self.base_rev = RunShell(["hg", "parent", "-q"]).split(':')[1].strip()
+      parent = RunShell(["hg", "parent", "-q"], silent_ok=True)
+      if parent:
+        self.base_rev = parent.split(':')[1].strip()
+      else:
+        self.base_rev = '0'
 
   def GetGUID(self):
     # See chapter "Uniquely identifying a repository"
