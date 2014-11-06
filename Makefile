@@ -64,13 +64,15 @@ update_revision:
 	@echo "---[Updating REVISION]---"
 	@echo "$(VERSION_TAG)" >REVISION
 
-update: update_revision mapreduce update_backend
+update_frontend: update_revision mapreduce
 	@echo "---[Updating $(APPID)]---"
 	$(APPCFG) $(APPCFG_FLAGS) update . --oauth2 --application $(APPID) --version $(VERSION)
 
 update_backend: update_revision mapreduce
 	@echo "---[Updating backend $(APPID)]---"
 	$(APPCFG) $(APPCFG_FLAGS) backends update . --oauth2 --application $(APPID) --version $(VERSION)
+
+update: update_frontend update_backend
 
 upload: update
 
