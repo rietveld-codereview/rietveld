@@ -530,7 +530,8 @@ function M_toggleIssueOverviewByAnchor() {
       var elem = document.getElementById(anchor);
       elem.className += ' referenced';
       var num = elem.getAttribute('name');
-      M_switchChangelistComment(num);
+      if (anchor.slice(3) != lastMsgID)
+        M_switchChangelistComment(num);
     } else if (anchor.slice(0, 2) == 'ps') {
       // hide last patchset which is visible by default.
       M_toggleSectionForPS(issueId, lastPSId);
