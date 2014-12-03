@@ -1302,7 +1302,7 @@ class SubversionVCS(VersionControlSystem):
     return filename
 
   def GenerateDiff(self, args):
-    cmd = ["svn", "diff"]
+    cmd = ["svn", "diff", "--internal-diff"]
     if self.options.revision:
       cmd += ["-r", self.options.revision]
     cmd.extend(args)
