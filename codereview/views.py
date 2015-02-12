@@ -932,6 +932,7 @@ def edit_patchset_title(request):
 
 @deco.admin_required
 @deco.user_key_required
+@deco.xsrf_required
 def block_user(request):
   """/user/<user>/block - Blocks a specific user."""
   account = models.Account.get_account_for_user(request.user_to_show)
@@ -1368,7 +1369,7 @@ def _get_data_url(form):
     url = None
   elif url:
     try:
-      fetch_result = urlfetch.fetch(url)
+      fetch_result = urlfetch.fetch(url, validate_certificate=True)
     except Exception as err:
       form.errors['url'] = [str(err)]
       return None

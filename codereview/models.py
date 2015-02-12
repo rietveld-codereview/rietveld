@@ -856,7 +856,7 @@ class Patch(ndb.Model):
     url = utils.make_url(base, self.filename, rev)
     logging.info('Fetching %s', url)
     try:
-      result = urlfetch.fetch(url)
+      result = urlfetch.fetch(url, validate_certificate=True)
     except urlfetch.Error, err:
       msg = 'Error fetching %s: %s: %s' % (url, err.__class__.__name__, err)
       logging.warn('FetchBase: %s', msg)
