@@ -28,12 +28,12 @@ APPCFG_FLAGS?=
 
 # Set dirty suffix depending on output of "hg status".
 dirty=
-ifneq ($(shell hg status),)
+ifneq ($(shell git status -s),)
         dirty="-tainted"
 endif
-VERSION_TAG= `hg parents --template='{rev}:{node|short}'`$(dirty)
+VERSION_TAG= `git log --pretty=format:'%h' -n 1`$(dirty)
 # AppEngine version cannot use ':' in its name so use a '-' instead.
-VERSION?= `hg parents --template='{rev}-{node|short}'`$(dirty)
+VERSION?= `git log --pretty=format:'%h' -n 1`$(dirty)
 
 PYTHON?= python2.7
 COVERAGE?= coverage
