@@ -4,7 +4,8 @@ In addition, I hope it will serve as a practical tool for the Python developer c
 
 Some code in this project was derived from Mondrian, but this is not the full Mondrian tool.
 
-**Source code has been published!**  See the **Source** tab above.
+Slides of a talk about the original Mondrian tool are available:
+https://github.com/rietveld-codereview/rietveld/blob/wiki/Mondrian2006.pdf
 
 **NOTE:** Because of spam comments, commenting on the Wiki have been disabled. Send your questions to the mailing list.
 
