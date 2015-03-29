@@ -84,4 +84,4 @@ Administration
 
 Various jobs to administer an instance are collected in admin_tasks.py. These
 jobs can be run by an instance administrator by visiting
-http://<your-instance>/mapreduce/.
+http://your-instance/mapreduce/.
