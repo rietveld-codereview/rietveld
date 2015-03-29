@@ -41,9 +41,9 @@ Running
 To run the app locally (e.g. for testing), download the Google App
 Engine SDK from http://code.google.com/appengine/downloads.html.  You
 can then run the server using
-
+```
   make serve
-
+```
 (assuming you're on Linux or Mac OS X).  On Windows just use Google
 App Engine Launcher.
 
@@ -63,12 +63,12 @@ To deploy your own instance of the app to Google App Engine:
   1. Register your own application ID on the App Engine admin site.
   2. Edit app.yaml to use this app ID instead of 'codereview-hr'.
   3. Upload using
-
-    make update VERSION=123f
-
-*** Don't forget step 2!  If you forget to change the application ID,
+     ```
+       make update VERSION=123f
+     ```
+**Don't forget step 2!  If you forget to change the application ID,
 you'll get a error message from "appcfg.py update" (called by "make
-update") complaining you don't have the right to administer this app.
+update") complaining you don't have the right to administer this app.**
 
 The VERSION=xxx argument sets the version; the version from the
 app.yaml is not used.  This is to support a convention used for the
