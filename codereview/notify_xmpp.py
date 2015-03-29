@@ -79,7 +79,7 @@ def notify_issue(request, issue, message):
     emails.update(issue.reviewers)
   if request.user:
     # Do not XMPP the person who made the rietveld modifications.
-    # See https://code.google.com/p/rietveld/issues/detail?id=401.
+    # See https://github.com/rietveld-codereview/rietveld/issues/401.
     emails.discard(request.user.email())
   accounts = models.Account.get_multiple_accounts_by_email(emails)
   jids = []

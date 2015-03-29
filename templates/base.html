@@ -195,16 +195,16 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
 |
 {%endif%}
 <a class="novisit" target="_blank"
-   href="http://code.google.com/p/rietveld/wiki/CodeReviewHelp">Help</a>
+   href="https://github.com/rietveld-codereview/rietveld/wiki">Help</a>
 |
 <a class="novisit" target="_blank"
-   href="http://code.google.com/p/rietveld/issues/list">Bug tracker</a>
+   href="https://github.com/rietveld-codereview/rietveld/issues">Bug tracker</a>
 |
 <a class="novisit" target="_blank"
    href="http://groups.google.com/group/codereview-discuss">Discussion group</a>
 |
 <a class="novisit" target="_blank"
-   href="http://code.google.com/p/rietveld">Source code</a>
+   href="https://github.com/rietveld-codereview/rietveld">Source code</a>
 |
 {%if user%}
 <a class="novisit" href="{{sign_out}}">Sign out</a>
@@ -255,7 +255,7 @@ var publish_link = "{%url codereview.views.publish issue.key.id%}";
   <a href="{%url rss_issue issue.key.id%}">This issue</a>
   {%endif%}
   </div>
-  <div style="margin-top: .3em;">This is Rietveld <a href='http://code.google.com/p/rietveld/source/list'>{{rietveld_revision}}</a></div>
+  <div style="margin-top: .3em;">This is Rietveld <a href='https://github.com/rietveld-codereview/rietveld'>{{rietveld_revision}}</a></div>
 </div>
 
 {%if not is_dev%}

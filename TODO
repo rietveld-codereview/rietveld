@@ -2,7 +2,8 @@ Bugs
 ----
 
 If a user never logs in, someone else can grab their nickname
-See the issue tracker at code.google.com/p/rietveld for more bugs
+See the issue tracker at https://github.com/rietveld-codereview/rietveld/issues
+for more bugs.
 
 Data Cleaning
 -------------

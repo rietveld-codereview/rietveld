@@ -569,7 +569,7 @@ class CondensedHelpFormatter(optparse.IndentedHelpFormatter):
 
 parser = optparse.OptionParser(
     usage=("%prog [options] [-- diff_options] [path...]\n"
-           "See also: http://code.google.com/p/rietveld/wiki/UploadPyUsage"),
+           "See also: https://github.com/rietveld-codereview/rietveld/wiki/upload.py-Usage"),
     add_help_option=False,
     formatter=CondensedHelpFormatter()
 )
@@ -2529,7 +2529,7 @@ def RealMain(argv, data=None):
       parser.epilog = (
         "Use '--help -v' to show additional Perforce options. "
         "For more help, see "
-        "http://code.google.com/p/rietveld/wiki/CodeReviewHelp"
+        "https://github.com/rietveld-codereview/rietveld/wiki"
         )
       parser.option_groups.remove(parser.get_option_group('--p4_port'))
     parser.print_help()
