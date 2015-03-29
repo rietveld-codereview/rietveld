@@ -1,6 +1,8 @@
 Welcome to Rietveld
 -------------------
 
+GitHub Wiki: https://github.com/rietveld-codereview/rietveld/wiki
+
 This project shows how to create a somewhat substantial web
 application using Django on Google App Engine.  It requires Python 2.7
 and Django version 1.3 (although a previous version using Python 2.5
@@ -21,12 +23,12 @@ the full Mondrian tool.
 Links
 -----
 
-Mondrian video: http://www.youtube.com/watch?v=sMql3Di4Kgc
-Google App Engine: http://code.google.com/appengine/
-Live app: https://codereview.appspot.com
-About code review: http://en.wikipedia.org/wiki/Code_review
-Django: http://djangoproject.com
-Python: http://python.org
+- Mondrian video: http://www.youtube.com/watch?v=sMql3Di4Kgc
+- Google App Engine: http://code.google.com/appengine/
+- Live app: https://codereview.appspot.com
+- About code review: http://en.wikipedia.org/wiki/Code_review
+- Django: http://djangoproject.com
+- Python: http://python.org
 
 License
 -------
@@ -39,9 +41,9 @@ Running
 To run the app locally (e.g. for testing), download the Google App
 Engine SDK from http://code.google.com/appengine/downloads.html.  You
 can then run the server using
-
+```
   make serve
-
+```
 (assuming you're on Linux or Mac OS X).  On Windows just use Google
 App Engine Launcher.
 
@@ -61,12 +63,13 @@ To deploy your own instance of the app to Google App Engine:
   1. Register your own application ID on the App Engine admin site.
   2. Edit app.yaml to use this app ID instead of 'codereview-hr'.
   3. Upload using
+     ```
+       make update VERSION=123f
+     ```
 
-    make update VERSION=123
-
-*** Don't forget step 2!  If you forget to change the application ID,
+**Don't forget step 2!  If you forget to change the application ID,
 you'll get a error message from "appcfg.py update" (called by "make
-update") complaining you don't have the right to administer this app.
+update") complaining you don't have the right to administer this app.**
 
 The VERSION=xxx argument sets the version; the version from the
 app.yaml is not used.  This is to support a convention used for the
@@ -80,5 +83,5 @@ Administration
 --------------
 
 Various jobs to administer an instance are collected in admin_tasks.py. These
-jobs can be run by an instance administrator by visiting http://<your-
-instance>/mapreduce/.
+jobs can be run by an instance administrator by visiting
+http://your-instance/mapreduce/.
