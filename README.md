@@ -66,6 +66,7 @@ To deploy your own instance of the app to Google App Engine:
      ```
        make update VERSION=123f
      ```
+
 **Don't forget step 2!  If you forget to change the application ID,
 you'll get a error message from "appcfg.py update" (called by "make
 update") complaining you don't have the right to administer this app.**
