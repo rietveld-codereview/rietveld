@@ -23,12 +23,12 @@ the full Mondrian tool.
 Links
 -----
 
-Mondrian video: http://www.youtube.com/watch?v=sMql3Di4Kgc
-Google App Engine: http://code.google.com/appengine/
-Live app: https://codereview.appspot.com
-About code review: http://en.wikipedia.org/wiki/Code_review
-Django: http://djangoproject.com
-Python: http://python.org
+- Mondrian video: http://www.youtube.com/watch?v=sMql3Di4Kgc
+- Google App Engine: http://code.google.com/appengine/
+- Live app: https://codereview.appspot.com
+- About code review: http://en.wikipedia.org/wiki/Code_review
+- Django: http://djangoproject.com
+- Python: http://python.org
 
 License
 -------
