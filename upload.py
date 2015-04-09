@@ -312,7 +312,7 @@ class AbstractRpcServer(object):
       # Needed for use inside Google.
       account_type = "HOSTED"
     req = self._CreateRequest(
-        url="https://www.google.com/accounts/ClientLogin",
+        url="https://www.google.com/accounts/ClientAuth",
         data=urllib.urlencode({
             "Email": email,
             "Passwd": password,
