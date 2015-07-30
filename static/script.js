@@ -2825,7 +2825,7 @@ function M_dashboardKeyDown(evt) {
       if (dashboardState) {
 	var child = dashboardState.curTR.cells[2].firstChild;
 	while (child && child.nodeName != "A") {
-	  child = child.firstChild;
+	  child = child.firstElementChild;
 	}
 	if (child) {
 	  location.href = child.href;
