@@ -249,6 +249,7 @@ def require_methods(*methods):
         rsp = HttpTextResponse('This requires a specific method: %s' % allowed,
                                status=405)
         rsp['Allow'] = allowed
+        return rsp
       return func(request, *args, **kwds)
     return wrapped
   return decorator
