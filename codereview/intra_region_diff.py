@@ -52,6 +52,8 @@ BEGIN_TAG = "<span class=\"%s\">"
 END_TAG = "</span>"
 # Tag used for visual tab indication.
 TAB_TAG = "<span class=\"visualtab\">&raquo;</span>"
+# Tag used for trailing space indication.
+TRAILING_SPACE_TAG = "<span class=\"visualspace\">&middot;</span>"
 # Color scheme to govern the display properties of diff blocks and matching
 # blocks. Each value e.g. 'oldlight' corresponds to a CSS style.
 COLOR_SCHEME = {
@@ -173,6 +175,8 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
     text = cgi.escape(text)
   # Colorize tab markers
   text = text.replace("\t", TAB_TAG)
+  s_text = text.rstrip()
+  text = s_text + (TRAILING_SPACE_TAG * (len(text) - len(s_text)))
   if isinstance(text, unicode):
     return text.encode("utf-8", "replace")
   return text
