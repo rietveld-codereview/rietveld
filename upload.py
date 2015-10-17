@@ -217,7 +217,8 @@ def StatusUpdate(msg):
 
 def ErrorExit(msg):
   """Print an error message to stderr and exit."""
-  print >>sys.stderr, msg
+  sys.stderr.write(msg)
+  sys.stderr.write('\n')
   sys.exit(1)
 
 
@@ -380,41 +381,41 @@ class AbstractRpcServer(object):
       try:
         auth_token = self._GetAuthToken(credentials[0], credentials[1])
       except ClientLoginError as e:
-        print >>sys.stderr, ''
+        sys.stderr.write('\n')
         if e.reason == "BadAuthentication":
           if e.info == "InvalidSecondFactor":
-            print >>sys.stderr, (
+            sys.stderr.write(
                 "Use an application-specific password instead "
                 "of your regular account password.\n"
                 "See http://www.google.com/"
-                "support/accounts/bin/answer.py?answer=185833")
+                "support/accounts/bin/answer.py?answer=185833\n")
           else:
-            print >>sys.stderr, "Invalid username or password."
+            sys.stderr.write("Invalid username or password.\n")
         elif e.reason == "CaptchaRequired":
-          print >>sys.stderr, (
+          sys.stderr.write(
               "Please go to\n"
               "https://www.google.com/accounts/DisplayUnlockCaptcha\n"
               "and verify you are a human.  Then try again.\n"
               "If you are using a Google Apps account the URL is:\n"
-              "https://www.google.com/a/yourdomain.com/UnlockCaptcha")
+              "https://www.google.com/a/yourdomain.com/UnlockCaptcha\n")
         elif e.reason == "NotVerified":
-          print >>sys.stderr, "Account not verified."
+          sys.stderr.write("Account not verified.\n")
         elif e.reason == "TermsNotAgreed":
-          print >>sys.stderr, "User has not agreed to TOS."
+          sys.stderr.write("User has not agreed to TOS.\n")
         elif e.reason == "AccountDeleted":
-          print >>sys.stderr, "The user account has been deleted."
+          sys.stderr.write("The user account has been deleted.\n")
         elif e.reason == "AccountDisabled":
-          print >>sys.stderr, "The user account has been disabled."
+          sys.stderr.write("The user account has been disabled.\n")
           break
         elif e.reason == "ServiceDisabled":
-          print >>sys.stderr, ("The user's access to the service has been "
-                               "disabled.")
+          sys.stderr.write("The user's access to the service has been "
+                               "disabled.\n")
         elif e.reason == "ServiceUnavailable":
-          print >>sys.stderr, "The service is not available; try again later."
+          sys.stderr.write("The service is not available; try again later.\n")
         else:
           # Unknown error.
           raise
-        print >>sys.stderr, ''
+        sys.stderr.write('\n')
         continue
       self._GetAuthCookie(auth_token)
       return
@@ -1041,7 +1042,7 @@ def RunShellWithReturnCodeAndStderr(command, print_output=False,
   p.wait()
   errout = p.stderr.read()
   if print_output and errout:
-    print >>sys.stderr, errout
+    sys.stderr.write(errout + '\n')
   p.stdout.close()
   p.stderr.close()
   return output, errout, p.returncode
