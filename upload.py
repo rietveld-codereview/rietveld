@@ -731,7 +731,7 @@ class ClientRedirectHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     query_params = urlparse.parse_qs(query_string)
 
     if len(query_params) == 1:
-      if query_params.has_key(ACCESS_TOKEN_PARAM):
+      if ACCESS_TOKEN_PARAM in query_params:
         access_token_list = query_params[ACCESS_TOKEN_PARAM]
         if len(access_token_list) == 1:
           self.server.access_token = access_token_list[0]
