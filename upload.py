@@ -530,10 +530,10 @@ class HttpRpcServer(AbstractRpcServer):
           pass
       else:
         # Create an empty cookie file with mode 600
-        fd = os.open(self.cookie_file, os.O_CREAT, 0600)
+        fd = os.open(self.cookie_file, os.O_CREAT, 0o600)
         os.close(fd)
       # Always chmod the cookie file
-      os.chmod(self.cookie_file, 0600)
+      os.chmod(self.cookie_file, 0o600)
     else:
       # Don't save cookies across runs of update.py.
       self.cookie_jar = cookielib.CookieJar()
