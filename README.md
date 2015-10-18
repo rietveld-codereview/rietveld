@@ -2,6 +2,7 @@ Welcome to Rietveld
 -------------------
 
 GitHub Wiki: https://github.com/rietveld-codereview/rietveld/wiki
+Google Group: http://groups.google.com/group/codereview-discuss
 
 This project shows how to create a somewhat substantial web
 application using Django on Google App Engine.  It requires Python 2.7
