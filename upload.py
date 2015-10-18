@@ -188,7 +188,7 @@ def GetEmail(prompt):
       last_email = last_email_file.readline().strip("\n")
       last_email_file.close()
       prompt += " [%s]" % last_email
-    except IOError, e:
+    except IOError as e:
       pass
   email = raw_input(prompt + ": ").strip()
   if email:
@@ -196,7 +196,7 @@ def GetEmail(prompt):
       last_email_file = open(last_email_file_name, "w")
       last_email_file.write(email)
       last_email_file.close()
-    except IOError, e:
+    except IOError as e:
       pass
   else:
     email = last_email
@@ -217,7 +217,8 @@ def StatusUpdate(msg):
 
 def ErrorExit(msg):
   """Print an error message to stderr and exit."""
-  print >>sys.stderr, msg
+  sys.stderr.write(msg)
+  sys.stderr.write('\n')
   sys.exit(1)
 
 
@@ -327,7 +328,7 @@ class AbstractRpcServer(object):
       response_dict = dict(x.split("=")
                            for x in response_body.split("\n") if x)
       return response_dict["Auth"]
-    except urllib2.HTTPError, e:
+    except urllib2.HTTPError as e:
       if e.code == 403:
         body = e.read()
         response_dict = dict(x.split("=", 1) for x in body.split("\n") if x)
@@ -352,7 +353,7 @@ class AbstractRpcServer(object):
                               (self.host, urllib.urlencode(args)))
     try:
       response = self.opener.open(req)
-    except urllib2.HTTPError, e:
+    except urllib2.HTTPError as e:
       response = e
     if (response.code != 302 or
         response.info()["location"] != continue_location):
@@ -379,42 +380,42 @@ class AbstractRpcServer(object):
       credentials = self.auth_function()
       try:
         auth_token = self._GetAuthToken(credentials[0], credentials[1])
-      except ClientLoginError, e:
-        print >>sys.stderr, ''
+      except ClientLoginError as e:
+        sys.stderr.write('\n')
         if e.reason == "BadAuthentication":
           if e.info == "InvalidSecondFactor":
-            print >>sys.stderr, (
+            sys.stderr.write(
                 "Use an application-specific password instead "
                 "of your regular account password.\n"
                 "See http://www.google.com/"
-                "support/accounts/bin/answer.py?answer=185833")
+                "support/accounts/bin/answer.py?answer=185833\n")
           else:
-            print >>sys.stderr, "Invalid username or password."
+            sys.stderr.write("Invalid username or password.\n")
         elif e.reason == "CaptchaRequired":
-          print >>sys.stderr, (
+          sys.stderr.write(
               "Please go to\n"
               "https://www.google.com/accounts/DisplayUnlockCaptcha\n"
               "and verify you are a human.  Then try again.\n"
               "If you are using a Google Apps account the URL is:\n"
-              "https://www.google.com/a/yourdomain.com/UnlockCaptcha")
+              "https://www.google.com/a/yourdomain.com/UnlockCaptcha\n")
         elif e.reason == "NotVerified":
-          print >>sys.stderr, "Account not verified."
+          sys.stderr.write("Account not verified.\n")
         elif e.reason == "TermsNotAgreed":
-          print >>sys.stderr, "User has not agreed to TOS."
+          sys.stderr.write("User has not agreed to TOS.\n")
         elif e.reason == "AccountDeleted":
-          print >>sys.stderr, "The user account has been deleted."
+          sys.stderr.write("The user account has been deleted.\n")
         elif e.reason == "AccountDisabled":
-          print >>sys.stderr, "The user account has been disabled."
+          sys.stderr.write("The user account has been disabled.\n")
           break
         elif e.reason == "ServiceDisabled":
-          print >>sys.stderr, ("The user's access to the service has been "
-                               "disabled.")
+          sys.stderr.write("The user's access to the service has been "
+                               "disabled.\n")
         elif e.reason == "ServiceUnavailable":
-          print >>sys.stderr, "The service is not available; try again later."
+          sys.stderr.write("The service is not available; try again later.\n")
         else:
           # Unknown error.
           raise
-        print >>sys.stderr, ''
+        sys.stderr.write('\n')
         continue
       self._GetAuthCookie(auth_token)
       return
@@ -465,7 +466,7 @@ class AbstractRpcServer(object):
           response = f.read()
           f.close()
           return response
-        except urllib2.HTTPError, e:
+        except urllib2.HTTPError as e:
           if tries > 3:
             raise
           elif e.code == 401 or e.code == 302:
@@ -530,10 +531,10 @@ class HttpRpcServer(AbstractRpcServer):
           pass
       else:
         # Create an empty cookie file with mode 600
-        fd = os.open(self.cookie_file, os.O_CREAT, 0600)
+        fd = os.open(self.cookie_file, os.O_CREAT, 0o600)
         os.close(fd)
       # Always chmod the cookie file
-      os.chmod(self.cookie_file, 0600)
+      os.chmod(self.cookie_file, 0o600)
     else:
       # Don't save cookies across runs of update.py.
       self.cookie_jar = cookielib.CookieJar()
@@ -731,7 +732,7 @@ class ClientRedirectHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     query_params = urlparse.parse_qs(query_string)
 
     if len(query_params) == 1:
-      if query_params.has_key(ACCESS_TOKEN_PARAM):
+      if ACCESS_TOKEN_PARAM in query_params:
         access_token_list = query_params[ACCESS_TOKEN_PARAM]
         if len(access_token_list) == 1:
           self.server.access_token = access_token_list[0]
@@ -835,7 +836,7 @@ def GetAccessToken(server=DEFAULT_REVIEW_SERVER, port=DEFAULT_OAUTH2_PORT,
     if page_opened:
       try:
         access_token = WaitForAccessToken(port=port)
-      except socket.error, e:
+      except socket.error as e:
         print 'Can\'t start local webserver. Socket Error: %s\n' % (e.strerror,)
 
   if access_token is None:
@@ -1041,7 +1042,7 @@ def RunShellWithReturnCodeAndStderr(command, print_output=False,
   p.wait()
   errout = p.stderr.read()
   if print_output and errout:
-    print >>sys.stderr, errout
+    sys.stderr.write(errout + '\n')
   p.stdout.close()
   p.stderr.close()
   return output, errout, p.returncode
@@ -1183,7 +1184,7 @@ class VersionControlSystem(object):
                                             [("data", filename, content)])
       try:
         response_body = rpc_server.Send(url, body, content_type=ctype)
-      except urllib2.HTTPError, e:
+      except urllib2.HTTPError as e:
         response_body = ("Failed to upload file for %s. Got %d status code." %
             (filename, e.code))
 
@@ -2245,7 +2246,7 @@ def UploadSeparatePatches(issue, rpc_server, patchset, data, options):
 
     try:
       response_body = rpc_server.Send(url, body, content_type=ctype)
-    except urllib2.HTTPError, e:
+    except urllib2.HTTPError as e:
       response_body = ("Failed to upload patch for %s. Got %d status code." %
           (filename, e.code))
 
@@ -2309,7 +2310,8 @@ def GuessVCSName(options):
       out, returncode = RunShellWithReturnCode(command)
       if returncode == 0:
         return (vcs_type, out.strip())
-    except OSError, (errcode, message):
+    except OSError as e:
+      (errcode, message) = e.args
       if errcode != errno.ENOENT:  # command not found code
         raise
 
