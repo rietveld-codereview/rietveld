@@ -156,8 +156,10 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
   A trailing newline is always stripped from the input first.
   """
   assert tabsize > 0, tabsize
+  has_newline = False
   if text.endswith("\n"):
     text = text[:-1]
+    has_newline = True
   text = TryDecode(text)
   # Expand all tabs.
   # If mark_tabs is true, we retain one \t character as a marker during
@@ -175,8 +177,9 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
     text = cgi.escape(text)
   # Colorize tab markers
   text = text.replace("\t", TAB_TAG)
-  s_text = text.rstrip()
-  text = s_text + (TRAILING_SPACE_TAG * (len(text) - len(s_text)))
+  if has_newline:
+      s_text = text.rstrip()
+      text = s_text + (TRAILING_SPACE_TAG * (len(text) - len(s_text)))
   if isinstance(text, unicode):
     return text.encode("utf-8", "replace")
   return text
