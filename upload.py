@@ -40,6 +40,7 @@ import cookielib
 import errno
 import fnmatch
 import getpass
+import json
 import logging
 import marshal
 import mimetypes
@@ -494,10 +495,28 @@ class HttpRpcServer(AbstractRpcServer):
   def _Authenticate(self):
     """Save the cookie jar after authentication."""
     if isinstance(self.auth_function, OAuth2Creds):
-      access_token = self.auth_function()
+      token_file = os.path.expanduser("~/.codereview_upload_tokens")
+      key = '%s:%s' % (self.auth_function.server, self.auth_function.port)
+      tokens = {}
+      if os.path.exists(token_file):
+        try:
+           tokens = json.load(open(token_file))
+        except ValueError:
+            pass
+      else:
+        fd = os.open(token_file, os.O_CREAT, 0o600)
+        os.close(fd)
+      os.chmod(token_file, 0o600)
+      # If already authenticated means the current token is invalid
+      if not self.authenticated and key in tokens:
+        access_token = tokens[key]
+      else:
+        access_token = self.auth_function()
       if access_token is not None:
         self.extra_headers['Authorization'] = 'OAuth %s' % (access_token,)
         self.authenticated = True
+        tokens[key] = access_token
+        json.dump(tokens, open(token_file, 'w'))
     else:
       super(HttpRpcServer, self)._Authenticate()
       if self.save_cookies:
