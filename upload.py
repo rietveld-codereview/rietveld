@@ -701,7 +701,7 @@ group.add_option("--p4_client", action="store", dest="p4_client",
                  help=("Perforce client/workspace"))
 group.add_option("--p4_user", action="store", dest="p4_user",
                  metavar="P4_USER", default=None,
-                 help=("Perforce user"))# SVN-specific
+                 help=("Perforce user"))
 # SVN-specific
 group.add_option("--svn_changelist", action="store", dest="svn_changelist",
                  metavar="SVN_CHANGELIST", default=None,
