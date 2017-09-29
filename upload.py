@@ -701,7 +701,11 @@ group.add_option("--p4_client", action="store", dest="p4_client",
                  help=("Perforce client/workspace"))
 group.add_option("--p4_user", action="store", dest="p4_user",
                  metavar="P4_USER", default=None,
-                 help=("Perforce user"))
+                 help=("Perforce user"))# SVN-specific
+# SVN-specific
+group.add_option("--svn_changelist", action="store", dest="svn_changelist",
+                 metavar="SVN_CHANGELIST", default=None,
+                 help="SVN Changelist to filter the diff uploaded to Rietveld")
 
 
 # OAuth 2.0 Methods and Helpers
@@ -1306,6 +1310,8 @@ class SubversionVCS(VersionControlSystem):
     cmd = ["svn", "diff", "--internal-diff"]
     if self.options.revision:
       cmd += ["-r", self.options.revision]
+    if self.options.svn_changelist:
+      cmd += ["--changelist", self.options.svn_changelist]
     cmd.extend(args)
     data = RunShell(cmd)
     count = 0
