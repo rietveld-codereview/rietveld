@@ -70,7 +70,6 @@ from codereview import auth_utils
 from codereview import engine
 from codereview import library
 from codereview import models
-from codereview import notify_xmpp
 from codereview import patching
 from codereview import utils
 from codereview.common import IS_DEV
@@ -352,9 +351,6 @@ class SettingsForm(forms.Form):
       max_value=django_settings.MAX_COLUMN_WIDTH)
   notify_by_email = forms.BooleanField(required=False,
                                        widget=forms.HiddenInput())
-  notify_by_chat = forms.BooleanField(
-      required=False,
-      help_text='You must accept the invite for this to work.')
 
   def clean_nickname(self):
     nickname = self.cleaned_data.get('nickname')
@@ -1251,7 +1247,6 @@ def upload_complete(request, patchset_id=None):
                         send_mail=(request.POST.get('send_mail', '') == 'yes'))
     request.issue.put()
     msg.put()
-    notify_xmpp.notify_issue(request, request.issue, 'Mailed')
 
   return HttpTextResponse('OK')
 
@@ -1329,7 +1324,6 @@ def _make_new(request, form):
     msg = _make_message(request, issue, '', '', True)
     issue.put()
     msg.put()
-    notify_xmpp.notify_issue(request, issue, 'Created')
   return (issue, patchset)
 
 
@@ -1435,7 +1429,6 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
     msg = _make_message(request, issue, message, '', True)
     issue.put()
     msg.put()
-    notify_xmpp.notify_issue(request, issue, 'Updated')
   return patchset
 
 
@@ -1709,7 +1702,6 @@ def mailissue(request):
   msg = _make_message(request, issue, '', '', True)
   issue.put()
   msg.put()
-  notify_xmpp.notify_issue(request, issue, 'Mailed')
 
   return HttpTextResponse('OK')
 
@@ -2748,8 +2740,6 @@ def publish(request):
   for obj in tbd:
     obj.put()
 
-  notify_xmpp.notify_issue(request, issue, 'Comments published')
-
   # There are now no comments here (modulo race conditions)
   models.Account.current_user_account.update_drafts(issue, 0)
   if form.cleaned_data.get('no_redirect', False):
@@ -3451,26 +3441,16 @@ def settings(request):
                                  'context': default_context,
                                  'column_width': default_column_width,
                                  'notify_by_email': account.notify_by_email,
-                                 'notify_by_chat': account.notify_by_chat,
                                  })
-    chat_status = None
-    if account.notify_by_chat:
-      chat_status = notify_xmpp.get_chat_status(account)
-    return respond(request, 'settings.html', {'form': form,
-                                              'chat_status': chat_status})
+    return respond(request, 'settings.html', {'form': form})
   form = SettingsForm(request.POST)
   if form.is_valid():
     account.nickname = form.cleaned_data.get('nickname')
     account.default_context = form.cleaned_data.get('context')
     account.default_column_width = form.cleaned_data.get('column_width')
     account.notify_by_email = form.cleaned_data.get('notify_by_email')
-    notify_by_chat = form.cleaned_data.get('notify_by_chat')
-    must_invite = notify_by_chat and not account.notify_by_chat
-    account.notify_by_chat = notify_by_chat
     account.fresh = False
     account.put()
-    if must_invite:
-      notify_xmpp.must_invite(account)
   else:
     return respond(request, 'settings.html', {'form': form})
   return HttpResponseRedirect(reverse(mine))
