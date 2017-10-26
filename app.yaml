@@ -50,7 +50,6 @@ admin_console:
 
 inbound_services:
 - mail
-- xmpp_message
 - warmup
 
 libraries:

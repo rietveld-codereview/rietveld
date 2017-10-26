@@ -108,14 +108,6 @@ urlpatterns = patterns(
     (r'^_ah/mail/(.*)', 'incoming_mail'),
     )
 
-
-### XMPP notification support
-urlpatterns += patterns(
-  'codereview.notify_xmpp',
-  (r'^_ah/xmpp/message/chat/', 'incoming_chat'),
-)
-
-
 ### RSS Feed support
 urlpatterns += patterns(
     '',

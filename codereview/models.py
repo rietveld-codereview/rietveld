@@ -1010,7 +1010,6 @@ class Account(ndb.Model):
   stars = ndb.IntegerProperty(repeated=True)  # Issue ids of all starred issues
   fresh = ndb.BooleanProperty()
   notify_by_email = ndb.BooleanProperty(default=True)
-  notify_by_chat = ndb.BooleanProperty(default=False)
   # Spammer; only blocks sending messages, not uploading issues.
   blocked = ndb.BooleanProperty(default=False)
 
