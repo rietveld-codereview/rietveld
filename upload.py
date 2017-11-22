@@ -1395,7 +1395,7 @@ class SubversionVCS(VersionControlSystem):
         if returncode:
           # Directory might not yet exist at start revison
           # svn: Unable to find repository location for 'abc' in revision nnn
-          if re.match('^svn: Unable to find repository location for .+ in revision \d+', err):
+          if re.match('^svn:( E195012:)? Unable to find repository location for .+ in revision \d+', err):
             old_files = ()
           else:
             ErrorExit("Failed to get status for %s:\n%s" % (filename, err))
