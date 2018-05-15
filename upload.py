@@ -1404,7 +1404,9 @@ class SubversionVCS(VersionControlSystem):
       # If file is in a cl, the output will begin with
       # "\n--- Changelist 'cl_name':\n".  See
       # http://svn.collab.net/repos/svn/trunk/notes/changelist-design.txt
-      if (len(status_lines) == 3 and
+      # The file could also be moved and in a CL, in which case there will
+      # be 4 lines in the output, the last one starting with "> moved to"
+      if (len(status_lines) >= 3 and
           not status_lines[0] and
           status_lines[1].startswith("--- Changelist")):
         status = status_lines[2]
