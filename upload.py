@@ -40,6 +40,7 @@ import cookielib
 import errno
 import fnmatch
 import getpass
+import json
 import logging
 import marshal
 import mimetypes
@@ -494,10 +495,30 @@ class HttpRpcServer(AbstractRpcServer):
   def _Authenticate(self):
     """Save the cookie jar after authentication."""
     if isinstance(self.auth_function, OAuth2Creds):
-      access_token = self.auth_function()
+      tokens = {}
+      if self.save_cookies:
+        token_file = os.path.expanduser("~/.codereview_upload_tokens")
+        key = '%s:%s' % (self.auth_function.server, self.auth_function.port)
+        if os.path.exists(token_file):
+          try:
+             tokens = json.load(open(token_file))
+          except ValueError:
+              pass
+        else:
+          fd = os.open(token_file, os.O_CREAT, 0o600)
+          os.close(fd)
+        os.chmod(token_file, 0o600)
+      # If already authenticated means the current token is invalid
+      if not self.authenticated and key in tokens:
+        access_token = tokens[key]
+      else:
+        access_token = self.auth_function()
       if access_token is not None:
         self.extra_headers['Authorization'] = 'OAuth %s' % (access_token,)
         self.authenticated = True
+        tokens[key] = access_token
+        if self.save_cookies:
+          json.dump(tokens, open(token_file, 'w'))
     else:
       super(HttpRpcServer, self)._Authenticate()
       if self.save_cookies:
@@ -702,6 +723,10 @@ group.add_option("--p4_client", action="store", dest="p4_client",
 group.add_option("--p4_user", action="store", dest="p4_user",
                  metavar="P4_USER", default=None,
                  help=("Perforce user"))
+# SVN-specific
+group.add_option("--svn_changelist", action="store", dest="svn_changelist",
+                 metavar="SVN_CHANGELIST", default=None,
+                 help="SVN Changelist to filter the diff uploaded to Rietveld")
 
 
 # OAuth 2.0 Methods and Helpers
@@ -1306,6 +1331,8 @@ class SubversionVCS(VersionControlSystem):
     cmd = ["svn", "diff", "--internal-diff"]
     if self.options.revision:
       cmd += ["-r", self.options.revision]
+    if self.options.svn_changelist:
+      cmd += ["--changelist", self.options.svn_changelist]
     cmd.extend(args)
     data = RunShell(cmd)
     count = 0
@@ -1395,7 +1422,7 @@ class SubversionVCS(VersionControlSystem):
         if returncode:
           # Directory might not yet exist at start revison
           # svn: Unable to find repository location for 'abc' in revision nnn
-          if re.match('^svn: Unable to find repository location for .+ in revision \d+', err):
+          if re.match('^svn:( E195012:)? Unable to find repository location for .+ in revision \d+', err):
             old_files = ()
           else:
             ErrorExit("Failed to get status for %s:\n%s" % (filename, err))
@@ -2573,8 +2600,6 @@ def RealMain(argv, data=None):
   files = vcs.GetBaseFiles(data)
   if verbosity >= 1:
     print "Upload server:", options.server, "(change with -s/--server)"
-  if options.use_oauth2:
-    options.save_cookies = False
   rpc_server = GetRpcServer(options.server,
                             options.email,
                             options.host,
