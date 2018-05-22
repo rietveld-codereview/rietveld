@@ -1406,7 +1406,7 @@ class SubversionVCS(VersionControlSystem):
       # http://svn.collab.net/repos/svn/trunk/notes/changelist-design.txt
       # The file could also be moved and in a CL, in which case there will
       # be 4 lines in the output, the last one starting with "> moved to"
-      if (len(status_lines) >= 3 and
+      if (len(status_lines) in (3, 4) and
           not status_lines[0] and
           status_lines[1].startswith("--- Changelist")):
         status = status_lines[2]
