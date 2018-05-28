@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import sys
 
 from google.appengine.ext.appstats import recording
 
@@ -10,7 +11,8 @@ logging.info('Loading %s from %s', __name__, __file__)
 
 # Custom webapp middleware to add Appstats.
 def webapp_add_wsgi_middleware(app):
-  app = recording.appstats_wsgi_middleware(app)
+  # If reenabling appstats, do not forget to reeanble it in app.yaml too.
+  #app = recording.appstats_wsgi_middleware(app)
   return app
 
 # Custom Appstats path normalization.
@@ -31,12 +33,14 @@ def appstats_normalize_path(path):
             return path[:i] + '/X'
     return re.sub(r'\d+', 'X', path)
 
-# Declare the Django version we need.
-from google.appengine.dist import use_library
-use_library('django', '1.2')
+# Segregate Appstats by runtime (python vs. python27).
+appstats_KEY_NAMESPACE = '__appstats_%s__' % os.getenv('APPENGINE_RUNTIME')
 
-# Django 1.2 requires DJANGO_SETTINGS_MODULE environment variable to be set
-# http://code.google.com/appengine/docs/python/tools/libraries.html#Django 
-os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
-# NOTE: All "main" scripts must import webapp.template before django.
+# Enable Interactive Playground.
+appstats_SHELL_OK = True
 
+# Enable RPC cost calculation.
+appstats_CALC_RPC_COSTS = True
+
+# Enable third-party imports
+sys.path.append(os.path.join(os.path.dirname(__file__), 'third_party'))

@@ -114,6 +114,45 @@ function M_getPageOffsetTop(element) {
   return y;
 }
 
+function M_editPatchsetTitle(issue, patchset, xsrf_token,
+                             original_patchset_title, patch_count) {
+
+  var new_patchset_title = prompt(
+      'Please enter the new title of Patch Set ' + patch_count,
+      original_patchset_title);
+  if (new_patchset_title == null) { 
+    return false;
+  } else if (new_patchset_title == original_patchset_title) {
+    // Do not make an HTTP req if the new specified title is exactly the same.
+    return false;
+  }
+
+  //Build POST data for request.
+  var data = [];
+  data.push('xsrf_token=' + xsrf_token);
+  data.push('patchset_title=' + new_patchset_title);
+
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function() {
+    if (httpreq.readyState == 4) {
+      if (httpreq.status == 200) {
+        window.location.reload();
+      }
+    }
+  }
+  httpreq.open(
+      'POST',
+       base_url + issue + "/patchset/" + patchset + '/edit_patchset_title',
+       true);
+  httpreq.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  httpreq.send(data.join("&"));
+
+  return true;
+}
+
 /**
  * Return distance in pixels of the given element from the left of the document.
  * @param {Element} element The element whose offset we want to find
@@ -466,6 +505,224 @@ function M_toggleSectionForPS(issue, patchset) {
   http_request.send(null);
 }
 
+/**
+ * Send an /<issue>/edit_flags POST request.
+ * @param {String} issue The issue key
+ * @param {String} data The POST data to send in the request.
+ * @param {Function} func_opt Callback called when the request completes.
+ *     Take an XMLHttpRequest as argument, and returns nothing.
+ */
+function M_sendEditFlagsRequest(issue, data, func_opt) {
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq)
+    return;
+
+  // This timeout can potentially race with the request coming back OK. In
+  // general, if it hasn't come back for 60 seconds, it won't ever come back.
+  var aborted = false;
+  var httpreq_timeout = setTimeout(function() {
+    aborted = true;
+    httpreq.abort();
+    alert('Request could not be updated for 60 seconds. Please ensure ' +
+          'connectivity (and that the server is up) and try again.');
+  }, 60000);
+  httpreq.onreadystatechange = function () {
+    // Firefox 2.0, at least, runs this with readyState = 4 but all other
+    // fields unset when the timeout aborts the request, against all
+    // documentation.
+    if (httpreq.readyState == 4 && !aborted) {
+      clearTimeout(httpreq_timeout);
+      if (httpreq.status != 200) {
+        alert('An error occurred while trying to update the issue');
+      }
+      if (func_opt)
+        func_opt(httpreq);
+    }
+  }
+  httpreq.open('POST', base_url + issue + '/edit_flags', true);
+  httpreq.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  httpreq.send(data);
+}
+
+/**
+ * Toggle the visibility of the revert reason popup.
+ */
+function M_toggleRevertReasonPopup(display) {
+  var popupElement = document.getElementById("revert-reason-popup-div");
+  // Remove all text from the textarea while toggling.
+  document.getElementById("revert_reason_textarea").value = ""
+  popupElement.style.display = display ? "" : "none";
+}
+
+/**
+ * Validates the revert reason and submits the revert form.
+ */
+function M_createRevertPatchset() {
+  revert_reason = document.getElementById("revert_reason_textarea").value;
+  // Validate that the revert reason is not null and does not contain only
+  // newlines and whitespace characters.
+  if (revert_reason == null ||
+      revert_reason.replace(/(\s+|\r\n|\n|\r)/gm, "") == "") {
+    alert('Must enter a revert reason. Please try again.');
+    return false;
+  }
+
+  document.getElementById("revert-form")["revert_reason"].value = revert_reason;
+
+  check_cq_value = document.getElementById("check_cq").checked ? '1' : '0';
+  document.getElementById("revert-form")["revert_cq"].value = check_cq_value;
+
+  // Confirm that this patchset should really be reverted.
+  return confirm("Proceed with creating a revert of this patchset?");
+}
+
+/**
+ * Change the commit bit for the given issue by using edit_flags.
+ * @param {String} issue The issue key
+ */
+function M_editFlags(issue) {
+  var req = [];
+  var len = document.commitform.elements.length;
+  for (var i = 0; i < len; i++) {
+    var element = document.commitform.elements[i];
+    var value = undefined;
+    if (element.type == 'hidden') {
+      value = element.value;
+    } else if (element.type == 'checkbox') {
+      if (element.checked) {
+        value = '1';
+      } else {
+        value = '0';
+      }
+    }
+    if (value != undefined) {
+      req.push(element.name + '=' + encodeURIComponent(value));
+    }
+  }
+
+  M_sendEditFlagsRequest(issue, req.join('&'));
+  return true;
+}
+
+/**
+ * Edit the list of pending try jobs for the given patchset. 
+ * @param {String} patchset The patchset key.
+ */
+function M_editPendingTryJobs(patchset) {
+  var checkboxContainer = document.getElementById('trybot-popup-checkboxes');
+  if (! checkboxContainer) {
+    checkboxContainer = document.getElementById(
+        'trybot-popup-checkboxes-with-categories')
+  }
+  var checkboxElements = checkboxContainer.getElementsByTagName('input');
+  for (var checkbox, i = 0; checkbox = checkboxElements[i]; i++) {
+    checkbox.checked = false;
+    checkbox.disabled = false;
+  }
+
+  // Position popup below anchor.
+  var anchor = document.getElementById('tryjobchange-' + patchset);
+  var anchorRect = anchor.getBoundingClientRect();
+  var popupElement = document.getElementById('trybot-popup');
+  popupElement.style.left = anchorRect.left + 'px';
+  popupElement.style.top = anchorRect.bottom + 'px';
+  popupElement.style.display = '';
+
+  // Extra padding to allow for scrollbars.
+  var scrollbarWidth = 20;
+
+  // Move popup as need to be on screen.
+  var popupRect = popupElement.getBoundingClientRect();
+  if (popupRect.bottom > window.innerHeight)
+    popupElement.style.top = (anchorRect.bottom - (popupRect.bottom - window.innerHeight) - scrollbarWidth) + 'px';  
+  if (popupRect.right > window.innerWidth)
+    popupElement.style.left = (anchorRect.left - (popupRect.right - window.innerWidth) - scrollbarWidth) + 'px';  
+}
+
+/**
+ * Updates the pending builders for the patchset.
+ * @param {String} issue The issue key.
+ * @param {String} patchset The patchset key.
+ * @param {String} xsrf_token Security token.
+ */
+function M_updatePendingTrybots(issue, patchset, xsrf_token) {
+  // Find which builder are checked.
+  var builders = [];
+  var popup = jQuery('#trybot-popup');
+  jQuery('input:checkbox', popup).each(function(i) {
+    var self = jQuery(this);
+    if (self.attr('checked'))
+      builders.push(self.attr('name')); 
+  });
+  
+  // Build POST data for request.
+  var data = [];
+  data.push('xsrf_token=' + xsrf_token);
+  data.push('last_patchset=' + patchset);
+  data.push('builders=' + builders.join(','));
+  
+  M_sendEditFlagsRequest(issue, data.join("&"), function(xhr) {
+    if (xhr.status == 200)
+      window.location.reload();
+  });
+  
+  // Hide the popup.
+  jQuery('#trybot-popup').css('display', 'none');
+  return true;
+}
+
+/**
+ * Hide the pending builders popup.
+ */
+function M_closePendingTrybots() {
+  jQuery('#trybot-popup').css('display', 'none');
+}
+
+/**
+ * Show or hide older try bot results. 
+ * @param {String} id The id of the div elements that holds all the try job
+ *     a elements.
+ * @param makeVisible If true, makes older try bots visible.
+ */
+function M_showTryJobResult(id, makeVisible) {
+  // This set keeps track of the first occurance of each try job result for
+  // a given builder.  The try job results are ordered reverse chronologically,
+  // so we visit them from newest to oldest.
+  var firstBuilderSet = {};
+  var oldBuildersExist = false;
+  jQuery('a', document.getElementById(id)).each(function(i) {
+    var self = jQuery(this); 
+    var builder = self.text();
+    if (self.attr('status') == 'try-pending') {
+      // Try pending jobs are always visible.
+      self.css('display', 'inline');
+    } else if (builder in firstBuilderSet) {
+      // This is not the first time we see this builder, so toggle its
+      // visibility.
+      self.css('display', makeVisible ? 'inline' : 'none');
+      oldBuildersExist = true;
+    } else {
+      // The first time we see a builder, its always visible.  Remember the
+      // builder name.
+      self.css('display', 'inline');
+      firstBuilderSet[builder] = true;
+    }
+  });
+  jQuery('#' + id + '-morelink')
+      .css('display', !oldBuildersExist || makeVisible ? 'none' : '');
+  jQuery('#' + id + '-lesslink')
+      .css('display', oldBuildersExist && makeVisible ? '' : 'none');
+}
+
+/**
+ * Toggle the visibility of the "Quick LGTM" link on the changelist page.
+ * @param {String} id The id of the target element
+ */
+function M_toggleQuickLGTM(id) {
+  M_toggleSection(id);
+  window.scrollTo(0, document.body.offsetHeight);
+}
+
 // Comment expand/collapse
 
 /**
@@ -511,12 +768,13 @@ function M_switchInlineComment(cid, lineno, side) {
 }
 
 /**
- * Used to expand all comments, hiding the preview and showing the comment.
+ * Used to expand all visible comments, hiding the preview and showing the
+ * comment.
  * @param {String} prefix The level of the comment -- one of
  *                        ('cl', 'file', 'inline')
  * @param {Integer} num_comments The number of comments to show
  */
-function M_showAllComments(prefix, num_comments) {
+function M_expandAllVisibleComments(prefix, num_comments) {
   for (var i = 0; i < num_comments; i++) {
     M_hideElement(prefix + "-preview-" + i);
     M_showElement(prefix + "-comment-" + i);
@@ -524,15 +782,38 @@ function M_showAllComments(prefix, num_comments) {
 }
 
 /**
- * Used to collpase all comments, showing the preview and hiding the comment.
+ * Used to collapse all visible comments, showing the preview and hiding the
+ * comment.
  * @param {String} prefix The level of the comment -- one of
  *                        ('cl', 'file', 'inline')
  * @param {Integer} num_comments The number of comments to hide
  */
-function M_hideAllComments(prefix, num_comments) {
+function M_collapseAllVisibleComments(prefix, num_comments) {
   for (var i = 0; i < num_comments; i++) {
     M_showElement(prefix + "-preview-" + i);
     M_hideElement(prefix + "-comment-" + i);
+  }
+}
+
+/**
+ * Used to show all auto_generated comments.
+ * @param {Integer} num_comments The total number of comments to loop through
+ */
+function M_showGeneratedComments(num_comments) {
+  for (var i = 0; i < num_comments; i++) {
+    // The top level msg div starts at index 1.
+    M_showElement("generated-msg" + (i+1));
+  }
+}
+
+/**
+ * Used to hide all auto_generated comments.
+ * @param {Integer} num_comments The total number of comments to loop through
+ */
+function M_hideGeneratedComments(num_comments) {
+  for (var i = 0; i < num_comments; i++) {
+    // The top level msg div starts at index 1.
+    M_hideElement("generated-msg" + (i+1));
   }
 }
 
@@ -667,9 +948,6 @@ function M_replyToMessage(message_id, written_time, author,
     container.innerHTML = "";
   }
 
-  form.send_mail.id = 'message-reply-send-mail-'+message_id;
-  var lbl = document.getElementById(form.send_mail.id).nextSibling.nextSibling;
-  lbl.setAttribute('for', form.send_mail.id);
   if (!form.message.value) {
     form.message.value = "On " + written_time + ", " + author + " wrote:\n";
     var divs = document.getElementsByName("cl-message-" + message_id);
@@ -677,6 +955,10 @@ function M_replyToMessage(message_id, written_time, author,
     M_setValueFromDivs(divs, form.message);
     form.message.value += "\n";
   }
+  // Scroll view to bottom of message textarea and scroll textarea to bottom
+  // too, so that the user can write w/o adjusting the views first.
+  M_scrollIntoView(window, form.send_mail, 1);
+  form.message.scrollTop = form.message.scrollHeight;
   M_addTextResizer_(form);
   M_hideElement(replyLink);
 }
@@ -1413,12 +1695,15 @@ function M_handleTableTouchStart(evt) {
   if (evt.touches && evt.touches.length == 1) { // 1 finger touch
     M_clearTableTouchTimeout();
     M_timerLongTap = setTimeout(function() {
-     M_clearTableTouchTimeout();
+      M_clearTableTouchTimeout();
       M_handleTableDblClick(evt);
     }, 1000);
   }
 }
 
+function M_handleTableTouchMove(evt) {
+  M_clearTableTouchTimeout();
+}
 
 /**
  * Handles touchend event for long taps on mobile devices.
@@ -1915,6 +2200,68 @@ M_HookState.prototype.gotoPrevHook = function(opt_findComment) {
 };
 
 /**
+ * Finds the list of comments attached to the current hook, if any.
+ *
+ * @param self The calling object.
+ * @return The list of comment DOM elements.
+ */
+function M_findCommentsForCurrentHook_(self) {
+  var hooks = self.visibleHookCache;
+  var hasHook = (self.hookPos >= 0 && self.hookPos < hooks.length &&
+		 M_isElementVisible(self.win, hooks[self.hookPos].cells[0]));
+  if (!hasHook)
+    return [];
+
+  // Go through this tr and collect divs.
+  var comments = hooks[self.hookPos].getElementsByTagName("div");
+  if (comments && comments.length == 0) {
+    // Don't give up too early and look a bit forward
+    var sibling = hooks[self.hookPos].nextSibling;
+    while (sibling && sibling.tagName != "TR") {
+      sibling = sibling.nextSibling;
+    }
+    comments = sibling.getElementsByTagName("div");
+  }
+  return comments;
+}
+
+/**
+ * If the currently selected hook is a comment, either respond to it or edit
+ * the draft if there is one already. Prefer the right side of the table.
+ */
+M_HookState.prototype.markAsDone = function() {
+  var comments = M_findCommentsForCurrentHook_(this);
+  var commentsLength = comments.length;
+  if (!comments || !commentsLength)
+    return;
+
+  var last = null;
+  // Try responding to the last comment. The general hope is that
+  // these are returned in DOM order.
+  for (var i = commentsLength - 1; i >= 0; i--) {
+    if (comments[i].getAttribute("name") == "comment-border") {
+      last = comments[i];
+      break;
+    }
+  }
+  if (!last)
+    return;
+
+  var links = last.getElementsByTagName("a");
+  if (links) {
+    for (var i = links.length - 1; i >= 0; i--) {
+      if (links[i].getAttribute("name") == "comment-done" &&
+          links[i].style.display != "none") {
+        document.location.href = links[i].href;
+	// Prevent done from being posted again.
+	links[i].setAttribute("name", "");
+        return;
+      }
+    }
+  }
+};
+
+/**
  * If the currently selected hook is a comment, either respond to it or edit
  * the draft if there is one already. Prefer the right side of the table.
  */
@@ -1922,46 +2269,38 @@ M_HookState.prototype.respond = function() {
   if (this.indicated_element &&
       ! this.indicated_element.getAttribute("name") != "hook") {
     // Turn indicated element into a "real" hook so we can add comments.
-    this.indicated_element.setAttribute("name", "hook")
+    this.indicated_element.setAttribute("name", "hook");
   }
   this.updateHooks();
   var hooks = this.visibleHookCache;
-  if (this.hookPos >= 0 && this.hookPos < hooks.length &&
-      M_isElementVisible(this.win, hooks[this.hookPos].cells[0])) {
-    // Go through this tr and try responding to the last comment. The general
-    // hope is that these are returned in DOM order
-    var comments = hooks[this.hookPos].getElementsByTagName("div");
-    var commentsLength = comments.length;
-    if (comments && commentsLength == 0) {
-      // Don't give up too early and look a bit forward
-      var sibling = hooks[this.hookPos].nextSibling;
-      while (sibling && sibling.tagName != "TR") {
-        sibling = sibling.nextSibling;
+  var hasHook = (this.hookPos >= 0 && this.hookPos < hooks.length &&
+                 M_isElementVisible(this.win, hooks[this.hookPos].cells[0]));
+  if (!hasHook)
+    return;
+
+  var comments = M_findCommentsForCurrentHook_(this);
+  var commentsLength = comments.length;
+  if (comments && commentsLength > 0) {
+    var last = null;
+    for (var i = commentsLength - 1; i >= 0; i--) {
+      if (comments[i].getAttribute("name") == "comment-border") {
+        last = comments[i];
+        break;
       }
-      comments = sibling.getElementsByTagName("div");
-      commentsLength = comments.length;
     }
-    if (comments && commentsLength > 0) {
-      var last = null;
-      for (var i = commentsLength - 1; i >= 0; i--) {
-        if (comments[i].getAttribute("name") == "comment-border") {
-          last = comments[i];
-          break;
-        }
-      }
-      if (last) {
-        var links = last.getElementsByTagName("a");
-        if (links) {
-          for (var i = links.length - 1; i >= 0; i--) {
-            if (links[i].getAttribute("name") == "comment-reply" &&
-                links[i].style.display != "none") {
-              document.location.href = links[i].href;
-              return;
-            }
+    if (last) {
+      var links = last.getElementsByTagName("a");
+      if (links) {
+        for (var i = links.length - 1; i >= 0; i--) {
+          if (links[i].getAttribute("name") == "comment-reply" &&
+              links[i].style.display != "none") {
+            document.location.href = links[i].href;
+            return;
           }
         }
       }
-    } else {
+    }
+  } else {
     // Create a comment at this line
     // TODO: Implement this in a sane fashion, e.g. opens up a comment
     // at the end of the diff chunk.
@@ -1974,7 +2313,6 @@ M_HookState.prototype.respond = function() {
         M_createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'a');
         return;
       }
-    }
     }
   }
 };
@@ -2180,7 +2518,6 @@ function M_keyDownCommon(evt, handler, input_handler) {
         return false;
       }
     }
-    return true;
   }
   return handler(keyName);
 }
@@ -2194,7 +2531,7 @@ function M_keyDownCommon(evt, handler, input_handler) {
  */
 function M_commentTextKeyDown_(src, key) {
   if (src.nodeName == "TEXTAREA") {
-    if (key == 'Ctrl-S') {
+    if (key == 'Ctrl-S' || key == 'Ctrl-Enter') {
       // Save the form corresponding to this text area.
       M_disableCarefulUnload();
       if (src.form.save.onclick) {
@@ -2288,6 +2625,9 @@ function M_keyDown(evt) {
     } else if (key == 'Enter') {
       // respond to current comment
       if (hookState) hookState.respond();
+    } else if (key == 'D') {
+      // mark current comment as done
+      if (hookState) hookState.markAsDone();
     } else {
       return true;
     }
@@ -2332,11 +2672,34 @@ function M_changelistKeyDown(evt) {
     } else if (key == 'U') {
       // back to dashboard
       document.location.href = base_url;
+    } else if (key == 'Esc') {
+      M_closePendingTrybots();
     } else {
       return true;
     }
     return false;
   });
+}
+
+/**
+ * A mouse down handler for the change list page.  Dismissed the try bot
+ * popup if visible.
+ * @param {Event} evt The event object that triggered this handler.
+ * @return false if the event was handled.
+ */
+function M_changelistMouseDown(evt) {
+  var trybotPopup = document.getElementById('trybot-popup');
+  if (trybotPopup && trybotPopup.style.display != 'none') {
+    var target = M_getEventTarget(evt);
+    while(target) {
+      if (target == trybotPopup)
+        return true;
+      target = target.parentNode;
+    }
+    trybotPopup.style.display = 'none';
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -2764,11 +3127,11 @@ function M_fillTableCell_(attrs, text) {
  * See _ShortenBuffer() in codereview/engine.py.
  */
 function M_expandSkipped(id_before, id_after, where, id_skip) {
-  links = document.getElementById('skiplinks-'+id_skip).getElementsByTagName('a');
+  var links = document.getElementById('skiplinks-'+id_skip).getElementsByTagName('a');
   for (var i=0; i<links.length; i++) {
 	links[i].href = '#skiplinks-'+id_skip;
   }
-  tr = document.getElementById('skip-'+id_skip);
+  var tr = document.getElementById('skip-'+id_skip);
   var httpreq = M_getXMLHttpRequest();
   if (!httpreq) {
     html = '<td colspan="2" style="text-align: center;">';
@@ -2783,11 +3146,11 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
   if (context_select) {
     context = context_select.value;
   }
-  aborted = false;
+  var aborted = false;
   httpreq.onreadystatechange = function () {
     if (httpreq.readyState == 4 && !aborted) {
       if (httpreq.status == 200) {
-        response = eval('('+httpreq.responseText+')');
+        var response = eval('('+httpreq.responseText+')');
 	var last_row = null;
         for (var i=0; i<response.length; i++) {
           var data = response[i];

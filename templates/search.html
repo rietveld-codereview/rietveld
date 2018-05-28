@@ -1,7 +1,6 @@
 {%extends "base.html"%}
 {%block mainmenu%}
 <a href="{%url codereview.views.index%}">Issues</a>
-<a href="{%url codereview.views.repos%}">Repositories</a>
 <a href="{%url codereview.views.search%}" class="active">Search</a>
 {%endblock%}
 
@@ -11,7 +10,7 @@
 <h2>Search</h2>
 
 <form action="{%url codereview.views.search%}" method="get">
-<table>
+<table class="formtable">
 {{form}}
 <tr><td><input type="submit" value="Search"></td></tr>
 </table>

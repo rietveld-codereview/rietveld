@@ -24,10 +24,10 @@ import sys
 ROOT = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..')
 LIB = os.path.join(ROOT, '..', 'google_appengine', 'lib')
 sys.path.insert(0, os.path.join(ROOT, '..', 'google_appengine'))
-sys.path.append(os.path.join(LIB, 'django_1_2'))
+sys.path.append(os.path.join(LIB, 'django-1.3'))
 sys.path.append(os.path.join(LIB, 'fancy_urllib'))
 sys.path.append(os.path.join(LIB, 'simplejson'))
-sys.path.append(os.path.join(LIB, 'webob'))
+sys.path.append(os.path.join(LIB, 'webob-1.2.3'))
 sys.path.append(os.path.join(LIB, 'yaml', 'lib'))
 sys.path.append(ROOT)
 
@@ -65,16 +65,18 @@ def setup_env(app_id, host=None, auth_func=None):
   from google.appengine.api import memcache
   from google.appengine.api.users import User
   from google.appengine.ext import db
+  from google.appengine.ext import ndb
   remote_api_stub.ConfigureRemoteDatastore(
-      app_id, '/_ah/remote_api', auth_func, host)
+      None, '/_ah/remote_api', auth_func, host)
 
   # Initialize environment.
   os.environ['SERVER_SOFTWARE'] = ''
+  os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
   import appengine_config
 
   # Create shortcuts.
   import codereview
-  from codereview import models, views
+  from codereview import models, models_chromium, views, views_chromium
 
   # Symbols presented to the user.
   predefined_vars = locals().copy()
@@ -85,6 +87,9 @@ def setup_env(app_id, host=None, auth_func=None):
   for i in dir(models):
     if re.match(r'[A-Z][a-z]', i[:2]):
       predefined_vars[i] = getattr(models, i)
+  for i in dir(models_chromium):
+    if re.match(r'[A-Z][a-z]', i[:2]):
+      predefined_vars[i] = getattr(models_chromium, i)
   return predefined_vars
 
 

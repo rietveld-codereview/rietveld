@@ -39,6 +39,9 @@ from google.appengine.ext.webapp import util
 # Import webapp.template.  This makes most Django setup issues go away.
 from google.appengine.ext.webapp import template
 
+# Django 1.2+ requires DJANGO_SETTINGS_MODULE environment variable to be set
+# http://code.google.com/appengine/docs/python/tools/libraries.html#Django
+os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
 
 # Import various parts of Django.
 import django.core.handlers.wsgi
@@ -61,11 +64,12 @@ django.core.signals.got_request_exception.connect(log_exception)
 django.core.signals.got_request_exception.disconnect(
     django.db._rollback_on_exception)
 
+# Create a Django application for WSGI.
+application = django.core.handlers.wsgi.WSGIHandler()
+
 
 def real_main():
   """Main program."""
-  # Create a Django application for WSGI.
-  application = django.core.handlers.wsgi.WSGIHandler()
   # Run the WSGI CGI handler with that application.
   util.run_wsgi_app(application)
 

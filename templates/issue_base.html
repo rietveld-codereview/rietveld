@@ -2,34 +2,31 @@
 
 {%block mainmenu%}
   <a href="{%url codereview.views.index%}" class="active">Issues</a>
-  <a href="{%url codereview.views.repos%}">Repositories</a>
   <a href="{%url codereview.views.search%}">Search</a>
 {%endblock%}
 
 
 {%block mainmenu2%}
   {%if user%}
-    {%if uploadpy_hint%}
-      <a href="{%url codereview.views.use_uploadpy%}">Create Issue</a>
-    {%else%}
-      <a href="{%url codereview.views.new%}">Create Issue</a>
-    {%endif%}
+    {%comment%}
+    <a href="{%url codereview.views.use_uploadpy%}">Create Issue</a>
+    {%endcomment%}
     &nbsp;&nbsp;&nbsp;
     <a href="{%url codereview.views.mine%}">My Issues</a>
     |
     <a href="{%url codereview.views.starred%}">Starred</a>
     &nbsp;&nbsp;&nbsp;
-    <a href="{%url codereview.views.all%}?closed=0">Open</a>
+    <a href="{%url codereview.views.view_all%}?closed=0">Open</a>
     |
-    <a href="{%url codereview.views.all%}?closed=1">Closed</a>
+    <a href="{%url codereview.views.view_all%}?closed=1">Closed</a>
     |
-    <a href="{%url codereview.views.all%}">All</a>
+    <a href="{%url codereview.views.view_all%}">All</a>
   {%else%}
     <a class="novisit" href="{%url codereview.views.index%}?closed=0">Open Issues</a>
     |
     <a class="novisit" href="{%url codereview.views.index%}?closed=1">Closed Issues</a>
     |
-    <a class="novisit" href="{%url codereview.views.all%}">All Issues</a>
+    <a class="novisit" href="{%url codereview.views.view_all%}">All Issues</a>
     |
     <a class="novisit" href="{{sign_in}}">Sign in</a>
     with your <a href="https://www.google.com/accounts/NewAccount">Google
@@ -94,7 +91,7 @@
             {{issue.modified|timesince}} ago
           </div>
           <div><b>Reviewers:</b><br/>
-            {{issue.reviewers|show_users}}
+            {{issue.formatted_reviewers|show_reviewers}}
           </div>
           {%if issue.cc%}
           <div><b>CC:</b><br/>
@@ -103,12 +100,25 @@
           {%endif%}
           {%if issue.base%}
           <div><b>Base URL:</b><br/>
+            {%if src_url%}
+              <a href="{{src_url}}" target="blank">
+            {%endif%}
             {{issue.base}}
+            {%if src_url%}
+              </a>
+            {%endif%}
+          </div>
+          {%endif%}
+          {%if issue.project%}
+          <div><b>Project:</b><br/>
+            <a href="{%url codereview.views.search%}?project={{issue.project}}">
+              {{issue.project}}
+            </a>
           </div>
           {%endif%}
           <div><b>Visibility:</b><br/>
             {%if issue.private%}
-                Private. Only viewable by reviewers and CCs.
+                Private/Protected. Only viewable by @chromium and @google accounts.
             {% else %}
                 Public.
             {%endif%}
@@ -134,14 +144,14 @@
   {%if issue%}
     <div class="popup" id="popup-issue">
       <b>Issue {{issue.key.id}}: {{issue.subject}}
-	{%if issue.closed %} (Closed) {%endif%}</b><br/>
+    {%if issue.closed %} (Closed) {%endif%}</b><br/>
       Created {{issue.created|timesince}} ago by {%nickname issue.owner%}<br/>
       Modified {{issue.modified|timesince}} ago<br/>
       Reviewers: {%nicknames issue.reviewers%}<br/>
       Base URL: {{issue.base}}<br/>
       Comments: {{issue.num_comments}}
-      {%if issue.num_drafts%} <span style="color: red;">+
-	{{issue.num_drafts}} drafts</span>{%endif%}
+      {%if issue|num_drafts:user%} <span style="color: red;">+
+   {{issue|num_drafts:user}} drafts</span>{%endif%}
     </div>
   {%endif%}
 {%endblock%}

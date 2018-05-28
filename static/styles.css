@@ -20,13 +20,6 @@ body {
   background-color: #fff;
 }
 
-.home {
-  font-size: 200%;
-  font-weight: bold;
-  color: #000;
-  /* text-decoration: none; */
-}
-
 tt, code, pre {
   font-size: 12px;
 }
@@ -45,22 +38,6 @@ ul {
   margin-bottom: 0px;
 }
 
-.gaia {
-  text-align: right;
-  padding: 2px;
-  white-space: nowrap;
-}
-
-.search {
-  text-align: left;
-  padding: 2px;
-  white-space: nowrap;
-}
-
-.bluebg {
-  background-color: #ccf;
-}
-
 a {
   color: #4182fa;
 }
@@ -69,9 +46,12 @@ a.novisit {
   color: #2a55a3;
 }
 
-a.redlink {
+.approval a, span.approval {
+  color: green;
+}
+
+.disapproval a, span.disapproval {
   color: red;
-  font-weight: bold;
 }
 
 .anchor {
@@ -101,6 +81,12 @@ a:visited.noul, a:visited.noulv {
   color: #a32a91; /* #2a55a3; */
 }
 
+.editpatchset {
+  font-size: 80%;
+  cursor: pointer;
+  vertical-align: top;
+}
+
 .filegone, .filegone a, .filegone a:visited {
   color: gray;
 }
@@ -110,7 +96,7 @@ a:visited.noul, a:visited.noulv {
 .oldlight, .newlight, .oldreplace1, .newreplace1,
 .newreplace, .newdelete, .newinsert, .newequal, .newblank,
 .oldmove, .oldchangemove, .oldchangemove1, .oldmove_out, .oldchangemove_out,
-.newmove, .newchangemove, .newchangemove1,
+.newmove, .newchangemove,
 .udiffadd, .udiffremove, .udiff, .debug-info {
   white-space: pre;
   font-family: monospace;
@@ -147,10 +133,6 @@ a:visited.noul, a:visited.noulv {
 }
 
 .newreplace1 {
-  background-color: #9f9;
-}
-
-.newchangemove1 {
   background-color: #9f9;
 }
 
@@ -253,6 +235,11 @@ a:visited.noul, a:visited.noulv {
 
 .extra {
   color: #777;
+}
+
+.extra-note {
+  color: #777;
+  font-style:italic;
 }
 
 .date {
@@ -517,18 +504,59 @@ table.property_changes {
   margin-bottom: 1em;
 }
 
-table#queues, table#clfiles {
+table#queues {
   border-collapse: collapse;
   width: 100%;
 }
 
-table#queues tr, table#clfiles tr {
+table#queues tr {
   border-bottom: thin solid lightgray;
 }
 
-table#queues td, table#clfiles td {
+table#queues td {
   padding: 2px;
 }
+
+table#queues div.subject a:visited {
+  color:  #a32a91;
+}
+
+#trybot-popup {
+  position: fixed;
+  overflow: hidden;
+  padding: 8px;
+  background-color: #E5ECF9;
+  border: 1px solid  #93b7fa;
+  border-radius: 4px;
+  -webkit-border-radius: 4px;
+  -moz-border-radius: 4px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  max-height: 550px;
+}
+
+.trybot-popup-builders {
+  columns: 4;
+  -webkit-columns: 4;
+  width: 150ex;
+  padding: 3px;
+  margin: 3px;
+}
+
+.trybot-popup-checkboxes-with-categories {
+  columns: 1;
+  -webkit-columns: 1;
+  width: 150ex;
+  padding: 3px;
+  margin: 3px;
+}
+
+div.trybot-popup-input {
+  margin-right: 8px;
+}
+
+
+/* --- keyboard shortcuts help --- */
 
 div#help {
   position: fixed;
@@ -562,16 +590,23 @@ div#help td {
   font-weight: normal;
 }
 
-td.shortcut {
+table.shortcuts, table.shortcuts table {
+  width:100%;
+}
+
+table.shortcuts table td:first-child {
   text-align: right;
 }
 
-span.letter {
+table.shortcuts table span {
   color: #88dd00;
   font-weight: bold;
   font-family: monospace;
   font-size: medium;
 }
+
+/* --/ keyboard shortcuts help-- */
+
 
 /* Visual tab indication. */
 
@@ -663,7 +698,14 @@ span.visualtab {
   margin: 0px;
   padding: 3px;
   padding-left: 0px;
-  
+}
+
+.issue-list #queues a {
+  text-decoration: none;
+}
+
+.issue-list .updated {
+  font-weight: bold;
 }
 
 .issue-list .pagination {
@@ -707,6 +749,8 @@ span.visualtab {
 
 .issue_details_sidebar div {
   margin-top: .8em;
+  max-width: 25em;
+  word-wrap: break-word;
 }
 
 
@@ -730,12 +774,16 @@ span.visualtab {
   -webkit-border-radius: 8px 8px 0px 0px;
   -moz-border-radius: 8px 8px 0px 0px;
   cursor: pointer;
+  padding-bottom: 8px;
+  margin-top: -8px;
+  min-height: 1.5em;
+  background-color: white;
 }
 .message-body {
   border-left: 1px solid lightgray;
   border-right: 1px solid lightgray;
 }
-.message-body pre {
+.message-body span, .message-body pre {
   margin: 0px;
   margin-left: 5px;
   margin-right: 5px;
@@ -751,7 +799,13 @@ span.visualtab {
   margin-bottom: .8em;
 }
 
-/* Approved messages have light green header background and dark green border */
+/* auto-generated messages have a light grey background and the default
+   border */
+.message.generated .header {
+  background-color: #EEE;
+}
+
+/* Approval messages have light green header background and dark green border */
 .message.approval .header {
   background-color: #7FFF7F;
   border-color: green;
@@ -759,6 +813,16 @@ span.visualtab {
 .message.approval .message-body,
 .message.approval .message-actions {
   border-color: green;
+}
+
+/* Disapproval messages have light red header background and red border */
+.message.disapproval .header {
+  background-color: #FFAAAA;
+  border-color: red;
+}
+.message.disapproval .message-body,
+.message.disapproval .message-actions {
+  border-color: red;
 }
 
 .message.referenced .header {
@@ -770,6 +834,16 @@ span.visualtab {
   border-color: yellow;
 }
 
+/* Messages sent while issue was closed have a light blue header background
+   and a blue border */
+.message.issue_was_closed .header {
+  background-color: #AAAAFF;
+  border-color: blue;
+}
+.message.issue_was_closed .message-body,
+.message.issue_was_closed .message-actions {
+  border-color: blue;
+}
 
 .popup {
   visibility: hidden;
@@ -819,6 +893,37 @@ ul.errorlist li {
   font-weight: bold;
 }
 
+.build-result {
+  text-decoration: none;
+  color: #333333;
+  border-radius: 3px;
+  padding: 1px 0;
+}
+
+.build-status-color-exception {
+  background-color: rgb(224, 176, 255);
+}
+
+.build-status-color-failure {
+  background-color: rgb(233, 128, 128);
+}
+
+.build-status-color-pending {
+  background-color: rgb(255, 252,108);
+}
+
+.build-status-color-success {
+  background-color: rgb(143, 223, 95);
+}
+
+.build-status-color-try-pending {
+  background-color: rgb(223, 223, 223);
+}
+
+.build-status-color-skipped {
+  background-color: rgb(180, 180, 255);
+}
+
 
 #reviewmsgdlg {
   background-color: #E9F2DF;
@@ -858,4 +963,31 @@ ul.errorlist li {
 
 #repoview table {
   margin-top: 0.5em;
+}
+
+.formtable th {
+  padding-top: 6px;
+  vertical-align: top;
+  text-align: right;
+}
+
+.formtable td {
+  padding: 4px;
+  vertical-align: top;
+}
+
+.if_checked {
+  display: none;
+}
+
+input:checked ~ span .if_checked {
+  display: block;
+  font-weight: bold;
+}
+
+#issue-description {
+  font-family: monospace;
+  font-size: 12px;
+  margin-left: 15px;
+  white-space: pre-wrap;
 }

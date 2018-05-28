@@ -14,7 +14,13 @@
 
 """Minimal Django settings."""
 
+import logging
 import os
+import re
+
+DISALLOWED_USER_AGENTS = (
+    re.compile(r'^Googlebot'),
+)
 
 from google.appengine.api import app_identity
 
@@ -30,14 +36,33 @@ from google.appengine.api import app_identity
 
 APPEND_SLASH = False
 DEBUG = os.environ['SERVER_SOFTWARE'].startswith('Dev')
+
+# Django requires that settings.SECRET_KEY be defined.  According to the docs,
+# It is used by django.core.signing, which we do not use in our app.
+# We could just set it to 'foo' and ignore it, but that would not be secure.
+# So, we make sure that it is never used for anything.
+class MakeSureNothingReadsThisString(object):
+  """If Django reads this string for any reason, fail loudly."""
+  def __str__(self):
+    logging.error('SECRET_KEY was never meant to be used')
+    raise NotImplementedError()
+
+SECRET_KEY = MakeSureNothingReadsThisString()
+
+
 INSTALLED_APPS = (
     'codereview',
 )
+HSTS_MAX_AGE = 60*60*24*365  # 1 year in seconds.
 MIDDLEWARE_CLASSES = (
     'django.middleware.common.CommonMiddleware',
     'django.middleware.http.ConditionalGetMiddleware',
+    'codereview.middleware.RedirectToHTTPSMiddleware',
+    'codereview.middleware.AddHSTSHeaderMiddleware',
     'codereview.middleware.AddUserToRequestMiddleware',
     'codereview.middleware.PropagateExceptionMiddleware',
+    # TODO: figure how/when to re-enable these redirects.
+    #'codereview.middleware.RedirectDotVersionMiddleware',
 )
 ROOT_URLCONF = 'urls'
 TEMPLATE_CONTEXT_PROCESSORS = (
@@ -48,8 +73,9 @@ TEMPLATE_DIRS = (
     os.path.join(os.path.dirname(__file__), 'templates'),
     )
 TEMPLATE_LOADERS = (
-    'django.template.loaders.filesystem.load_template_source',
-    )
+    'django.template.loaders.filesystem.Loader',
+    'django.template.loaders.app_directories.Loader',
+)
 FILE_UPLOAD_HANDLERS = (
     'django.core.files.uploadhandler.MemoryFileUploadHandler',
 )
@@ -60,6 +86,7 @@ MEDIA_URL = '/static/'
 appid = app_identity.get_application_id()
 RIETVELD_INCOMING_MAIL_ADDRESS = ('reply@%s.appspotmail.com' % appid)
 RIETVELD_INCOMING_MAIL_MAX_SIZE = 500 * 1024  # 500K
+RIETVELD_INCOMING_MAIL_RECOGNIZE_LGTM = False
 RIETVELD_REVISION = '<unknown>'
 try:
     RIETVELD_REVISION = open(
@@ -67,6 +94,16 @@ try:
     ).read()
 except:
     pass
+
+# When sending an email in response to an email, we don't know which domain
+# name is the preferred one for accessing the site, so we use this dict to build
+# URLs to put in the email message.  If the app_id is not found listed below,
+# then the canonical app_id.appspot.com domain is used.  A dict is used rather than
+# a simple string constant to make it safer to deploy and use staging instances
+# and other instances of the app.
+PREFERRED_DOMAIN_NAMES = {
+  'chromiumcodereview-hr': 'codereview.chromium.org',
+  }
 
 UPLOAD_PY_SOURCE = os.path.join(os.path.dirname(__file__), 'upload.py')
 

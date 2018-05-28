@@ -23,13 +23,6 @@ Patch Sets
 Edit patch set message
 Delete patch sets
 
-Repositories and Branches
--------------------------
-
-Get rid of the repository feature in favor of always using upload.py?
-Edit/Delete Repository?
-Automatically add Repository entries when a new project uploads stuff?
-
 Searching, Organizing
 ---------------------
 
@@ -67,3 +60,5 @@ Software Engineering
 --------------------
 
 Unittests
+Move library.py to codereview/templatetags/codereview.py to match the default
+Django project layout.

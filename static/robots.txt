@@ -13,5 +13,7 @@ Disallow: /*/diff2/
 Disallow: /*/patch/
 Disallow: /*/publish
 Disallow: /download/
-Disallow: /user/
 Disallow: /rss/
+Disallow: /search
+Disallow: /tarball/
+Disallow: /user/
