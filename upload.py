@@ -667,9 +667,10 @@ group.add_option("--private", action="store_true", dest="private",
                  help="Make the issue restricted to reviewers and those CCed")
 # Upload options
 group = parser.add_option_group("Patch options")
-group.add_option("-i", "--issue", type="int", action="store",
+group.add_option("-i", "--issue", action="store",
                  metavar="ISSUE", default=None,
-                 help="Issue number to which to add. Defaults to new issue.")
+                 help="Issue number to which to add.Defaults to new issue.\n"
+                 "It can be a file from which to read and write issue number.")
 group.add_option("--base_url", action="store", dest="base_url", default=None,
                  help="Base URL path for files (listed as \"Base URL\" when "
                  "viewing issue).  If omitted, will be guessed automatically "
@@ -2623,8 +2624,19 @@ def RealMain(argv, data=None):
       base = urlparse.urlunparse((b.scheme, netloc, b.path, b.params,
                                   b.query, b.fragment))
     form_fields.append(("base", base))
+  issue = None
   if options.issue:
-    form_fields.append(("issue", str(options.issue)))
+    try:
+      issue = int(options.issue)
+    except ValueError:
+      try:
+        file = open(options.issue, 'r')
+        issue = file.readline().strip()
+        file.close()
+      except IOError:
+        pass
+    if issue:
+      form_fields.append(("issue", str(issue)))
   if options.email:
     form_fields.append(("user", options.email))
   if options.reviewers:
@@ -2645,26 +2657,26 @@ def RealMain(argv, data=None):
     file = open(options.file, 'r')
     message = file.read()
     file.close()
-  if options.issue:
+  if issue:
     prompt = "Title describing this patch set: "
   else:
     prompt = "New issue subject: "
   title = (
       title or message.split('\n', 1)[0].strip() or raw_input(prompt).strip())
-  if not title and not options.issue:
+  if not title and not issue:
     ErrorExit("A non-empty title is required for a new issue")
   # For existing issues, it's fine to give a patchset an empty name. Rietveld
   # doesn't accept that so use a whitespace.
   title = title or " "
   if len(title) > 100:
     title = title[:99] + '…'
-  if title and not options.issue:
+  if title and not issue:
     message = message or title
 
   form_fields.append(("subject", title))
   # If it's a new issue send message as description. Otherwise a new
   # message is created below on upload_complete.
-  if message and not options.issue:
+  if message and not issue:
     form_fields.append(("description", message))
 
   # Send a hash of all the base file so the server can determine if a copy
@@ -2678,7 +2690,7 @@ def RealMain(argv, data=None):
       base_hashes += checksum + ":" + file
   form_fields.append(("base_hashes", base_hashes))
   if options.private:
-    if options.issue:
+    if issue:
       print "Warning: Private flag ignored when updating an existing issue."
     else:
       form_fields.append(("private", "1"))
@@ -2709,26 +2721,30 @@ def RealMain(argv, data=None):
   if not response_body.startswith("Issue created.") and \
   not response_body.startswith("Issue updated."):
     sys.exit(0)
-  issue = msg[msg.rfind("/")+1:]
+  issue_id = msg[msg.rfind("/")+1:]
 
   if not uploaded_diff_file:
-    result = UploadSeparatePatches(issue, rpc_server, patchset, data, options)
+    result = UploadSeparatePatches(issue_id, rpc_server, patchset, data, options)
     if not options.download_base:
       patches = result
 
   if not options.download_base:
-    vcs.UploadBaseFiles(issue, rpc_server, patches, patchset, options, files)
+    vcs.UploadBaseFiles(issue_id, rpc_server, patches, patchset, options, files)
 
   payload = {}  # payload for final request
   if options.send_mail:
     payload["send_mail"] = "yes"
     if options.send_patch:
       payload["attach_patch"] = "yes"
-  if options.issue and message:
+  if issue and message:
     payload["message"] = message
   payload = urllib.urlencode(payload)
-  rpc_server.Send("/" + issue + "/upload_complete/" + (patchset or ""),
+  rpc_server.Send("/" + issue_id + "/upload_complete/" + (patchset or ""),
                   payload=payload)
+  if options.issue and not issue:
+    file = open(options.issue, 'w')
+    file.write(issue_id)
+    file.close()
   return issue, patchset
 
 
