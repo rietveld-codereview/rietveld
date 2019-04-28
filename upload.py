@@ -627,9 +627,10 @@ group.add_option("-H", "--host", action="store", dest="host",
 group.add_option("--no_cookies", action="store_false",
                  dest="save_cookies", default=True,
                  help="Do not save authentication cookies to local disk.")
-group.add_option("--oauth2", action="store_true",
-                 dest="use_oauth2", default=False,
-                 help="Use OAuth 2.0 instead of a password.")
+group.add_option("--no_oauth2", action="store_false", default=True,
+                 dest="use_oauth2",
+                 help=("Use password instead of OAuth 2.0. "
+                       "Useful with development server."))
 group.add_option("--oauth2_port", action="store", type="int",
                  dest="oauth2_port", default=DEFAULT_OAUTH2_PORT,
                  help=("Port to use to handle OAuth 2.0 redirect. Must be an "
