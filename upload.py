@@ -1874,7 +1874,7 @@ class MercurialVCS(VersionControlSystem):
     if out[0].startswith('%s: ' % relpath):
       out = out[1:]
     status, _ = out[0].split(' ', 1)
-    if len(out) > 1 and status == "A":
+    if len(out) > 1 and status == "A" and not out[1].startswith('? '):
       # Moved/copied => considered as modified, use old filename to
       # retrieve base contents
       oldrelpath = out[1].strip()
