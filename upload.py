@@ -1825,7 +1825,7 @@ class MercurialVCS(VersionControlSystem):
     return os.path.relpath(absname)
 
   def GenerateDiff(self, extra_args):
-    cmd = ["hg", "diff", "--git", "-S", "-r", self.base_rev] + extra_args
+    cmd = ["hg", "diff", "--git", "-r", self.base_rev] + extra_args
     data = RunShell(cmd, silent_ok=True)
     svndiff = []
     filecount = 0
@@ -1851,7 +1851,7 @@ class MercurialVCS(VersionControlSystem):
   def GetUnknownFiles(self):
     """Return a list of files unknown to the VCS."""
     args = []
-    status = RunShell(["hg", "status", "-S", "--rev", self.base_rev, "-u", "."],
+    status = RunShell(["hg", "status", "--rev", self.base_rev, "-u", "."],
         silent_ok=True)
     unknown_files = []
     for line in status.splitlines():
@@ -1868,7 +1868,7 @@ class MercurialVCS(VersionControlSystem):
     is_binary = False
     oldrelpath = relpath = self._GetRelPath(filename)
     # "hg status -C" returns two lines for moved/copied files, one otherwise
-    out = RunShell(["hg", "status", "-S", "-C", "--rev", self.base_rev, relpath])
+    out = RunShell(["hg", "status", "-C", "--rev", self.base_rev, relpath])
     out = out.splitlines()
     # HACK: strip error message about missing file/directory if it isn't in
     # the working copy
