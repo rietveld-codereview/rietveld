@@ -15,7 +15,7 @@ queue:
     task_retry_limit: 100
     min_backoff_seconds: 10
     max_backoff_seconds: 600
-  target: mapreduce-backend
+  target: mapreduce
 
 # Severely limit this task to reduce the likelihood of having 2 concurrent
 # tasks triggered simultaneously.
