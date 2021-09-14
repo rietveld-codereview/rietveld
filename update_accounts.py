@@ -10,13 +10,13 @@
 #    without any changes to the datastore.
 
 
-from google.appengine.ext import db
+from google.appengine.ext import ndb
 
 from codereview import models
 
 
 def fetch_accounts():
-    query = models.Account.all()
+    query = models.Account.query()
     accounts = {}
     results = query.fetch(100)
     while results:
@@ -29,8 +29,8 @@ def fetch_accounts():
             last = account
         if last is None:
             break
-        results = models.Account.all().filter('__key__ >',
-                                              last.key()).fetch(100)
+        results = models.Account.query().filter(
+            models.Account.key > last.key).fetch(100)
     return accounts
 
 
@@ -55,7 +55,7 @@ def run():
     tbd = find_duplicates(accounts)
     print 'Updating %d accounts' % len(tbd)
 
-    db.put(tbd)
+    ndb.put_multi(tbd)
 
     print 'Updated accounts:'
     for account in tbd:

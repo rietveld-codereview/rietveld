@@ -21,8 +21,7 @@
      href="javascript:M_toggleSection('issue-description')"
      class="toggled-section opentriangle">
     Description</a></h3>
-  <div id="issue-description" style="margin-left:15px;">
-    <pre>{{issue.description|wordwrap:80|urlizetrunc:80}}</pre>
+  <div id="issue-description">{{issue.description}}
   </div>
 {%endif%}
 
@@ -37,6 +36,12 @@
       {%if patchset.message%}: {{patchset.message}}{%endif%}
       <span class="anchor">#</span>
     </a>
+    {%ifequal issue.owner user%}
+      <a class="editpatchset" onclick="M_editPatchsetTitle(
+          '{{issue.key.id}}', '{{patchset.key.id}}', '{{xsrf_token}}',
+          {%if patchset.message%}'{{patchset.message|escapejs}}'{% else %}''{% endif %},
+          '{{forloop.counter}}')">(edit)</a>
+    {%endifequal%}
   </h3>
 
   {%if patchset.num_comments or patchset.n_drafts%}
@@ -68,35 +73,6 @@
 {%endfor%}
 
 
-{%ifequal user issue.owner%}
-  {%if not issue.local_base%}
-    <h3>
-      <a id="add-pointer"
-         href="javascript:M_toggleSection('add')"
-         class="toggled-section">
-        Add Another Patch Set
-      </a>
-    </h3>
-
-    <form id="add" style="{%if not form.errors%}display:none{%endif%}"
-          action="{%url codereview.views.add issue.key.id%}" method="post"
-          enctype="multipart/form-data">
-      <input type="hidden" name="xsrf_token" value="{{xsrf_token}}">
-      <table>
-        {{form}}
-        <tr>
-          <td><input type="submit" value="Add Patch Set" /></td>
-          <td>
-            You can also add a patch set to this issue using
-            <code>upload.py -i {{issue.key.id}}</code>
-          </td>
-        </tr>
-      </table>
-    </form>
-  {%endif%}
-{%endifequal%}
-
-
 {%if messages%}
   <h3>
     <a id="messages-pointer"
@@ -118,7 +94,7 @@
     </div>
 
     {%for message in messages%}
-      <div class="message {%if message.approval%}approval{%endif%}"
+      <div class="message {%if message.issue_was_closed%}issue_was_closed{%endif%} {%if message.approval%}approval{%endif%} {%if message.disapproval%}disapproval{%endif%}"
            id="msg{{forloop.counter}}"
            name="{{forloop.counter0}}">
         <div class="header">
@@ -145,6 +121,7 @@
               <td align="right"
                   style="white-space: nowrap; padding-right: 5px; padding-left: 3px;">
                 {{message.date|timesince}} ago
+		({{message.date|date:"Y-m-d H:i:s T"}})
                 <a href="#msg{{forloop.counter}}">#{{forloop.counter}}</a>
               </td>
             </tr>
@@ -154,14 +131,19 @@
         <div id="cl-comment-{{forloop.counter0}}"
              {%if forloop.last%}{%else%}style="display: none;"{%endif%}>
           <div class="message-body">
+            {%if message.issue_was_closed%}
+              <span class="extra-note">
+                Message was sent while issue was closed.
+              </span>
+            {%endif%}
             <pre name="cl-message-{{forloop.counter0}}"
             >{{message.text|wordwrap:80|urlizetrunc:80}}</pre>
           </div>
           <div class="message-actions">
             {%if user%}
-              <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{%nickname message.sender True%}', '{{message.key}}')"
+              <a href="javascript:M_replyToMessage('{{forloop.counter0}}', '{{message.date|date:"Y/m/d H:i:s"}}', '{%nickname message.sender True%}', '{{message.key.id}}')"
                  id="message-reply-href-{{forloop.counter0}}">Reply</a>
-              <textarea rows="7" cols="70" name="message" style="display:none"></textarea>
+              <textarea rows="20" name="message" style="display:none; width:99%"></textarea>
               <div id="message-reply-{{forloop.counter0}}"
                    style="display:none;"></div>
             {%else%}
@@ -182,6 +164,13 @@
     </div>
 
   </div>
+
+<script language="JavaScript" type="text/javascript">
+<!--
+var lastMsgID = {{messages|length}};
+// -->
+</script>
+
 {%endif%}
 
 
@@ -206,7 +195,7 @@
       <input type="hidden" name="message_only" value="1" />
       <input type="submit" value="Send Message" />
       <input type="button" value="Discard" name="discard" />
-      <input type="checkbox" name="send_mail" value="1" 
+      <input type="checkbox" name="send_mail" value="1"
              id="message-reply-send-mail" checked="checked" />
       <label>Send mail to reviewers</label>
     </form>

@@ -1,0 +1,4 @@
+cron:
+- description: Create AccountStatistics for the past day.
+  url: /restricted/cron/update_yesterday_stats
+  schedule: every day 00:01

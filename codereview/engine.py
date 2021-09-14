@@ -18,11 +18,13 @@ import cgi
 import difflib
 import re
 
-from google.appengine.api import users
+from google.appengine.ext import db
+from google.appengine.ext import ndb
 
 from django.conf import settings
 from django.template import loader, RequestContext
 
+from codereview import auth_utils
 from codereview import intra_region_diff
 from codereview import models
 from codereview import patching
@@ -80,9 +82,17 @@ def ParsePatchSet(patchset):
     A list of models.Patch instances.
   """
   patches = []
-  for filename, text in SplitPatch(patchset.data):
-    patches.append(models.Patch(patchset=patchset, text=utils.to_dbtext(text),
-                                filename=filename, parent=patchset))
+  ps_key = patchset.key
+  splitted = SplitPatch(patchset.data)
+  if not splitted:
+    return []
+  first_id, last_id = models.Patch.allocate_ids(len(splitted), parent=ps_key)
+  ids = range(first_id, last_id + 1)
+  for filename, text in splitted:
+    key = ndb.Key(models.Patch, ids.pop(0), parent=ps_key)
+    patches.append(models.Patch(
+        patchset_key=patchset.key, text=utils.to_dbtext(text),
+        filename=filename, key=key))
   return patches
 
 
@@ -147,29 +157,29 @@ def _CleanupTableRowsGenerator(rows, context):
     Rows marked as 'equal' are possibly contracted using _ShortenBuffer().
     Stops on rows marked as 'error'.
   """
-  buffer = []
+  buf = []
   for tag, text in rows:
     if tag == 'equal':
-      buffer.append(text)
+      buf.append(text)
       continue
     else:
-      for t in _ShortenBuffer(buffer, context):
+      for t in _ShortenBuffer(buf, context):
         yield t
-      buffer = []
+      buf = []
     yield text
     if tag == 'error':
       yield None
       break
-  if buffer:
-    for t in _ShortenBuffer(buffer, context):
+  if buf:
+    for t in _ShortenBuffer(buf, context):
       yield t
 
 
-def _ShortenBuffer(buffer, context):
+def _ShortenBuffer(buf, context):
   """Render a possibly contracted series of HTML table rows.
 
   Args:
-    buffer: a list of strings representing HTML table rows.
+    buf: a list of strings representing HTML table rows.
     context: Maximum number of visible context lines. If None all lines are
       returned.
 
@@ -179,17 +189,17 @@ def _ShortenBuffer(buffer, context):
     table row representing the contraction, and the last context
     items.
   """
-  if context is None or len(buffer) < 3*context:
-    for t in buffer:
+  if context is None or len(buf) < 3*context:
+    for t in buf:
       yield t
   else:
     last_id = None
-    for t in buffer[:context]:
+    for t in buf[:context]:
       m = re.match('^<tr( name="hook")? id="pair-(?P<rowcount>\d+)">', t)
       if m:
         last_id = int(m.groupdict().get("rowcount"))
       yield t
-    skip = len(buffer) - 2*context
+    skip = len(buf) - 2*context
     expand_link = []
     if skip > 3*context:
       expand_link.append(('<a href="javascript:M_expandSkipped(%(before)d, '
@@ -216,7 +226,7 @@ def _ShortenBuffer(buffer, context):
            '</span>'
            '</td></tr>\n' % (last_id, last_id, skip,
                              last_id, expand_link, last_id))
-    for t in buffer[-context:]:
+    for t in buf[-context:]:
       yield t
 
 
@@ -233,14 +243,16 @@ def _RenderDiff2TableRows(request, old_lines, old_patch, new_lines, new_patch,
   old_dict = {}
   new_dict = {}
   for patch, dct in [(old_patch, old_dict), (new_patch, new_dict)]:
-    # XXX GQL doesn't support OR yet...  Otherwise we'd be using that.
-    for comment in models.Comment.gql(
-        'WHERE patch = :1 AND left = FALSE ORDER BY date', patch):
-      if comment.draft and comment.author != request.user:
-        continue  # Only show your own drafts
-      comment.complete()
-      lst = dct.setdefault(comment.lineno, [])
-      lst.append(comment)
+    if patch:  # Skip if the patchset had no patch for this file.
+      query = models.Comment.query(
+          models.Comment.patch_key == patch.key,
+          models.Comment.left == False).order(models.Comment.date)
+      for comment in query:
+        if comment.draft and comment.author != request.user:
+          continue  # Only show your own drafts
+        comment.complete()
+        lst = dct.setdefault(comment.lineno, [])
+        lst.append(comment)
   return _TableRowGenerator(old_patch, old_dict, len(old_lines)+1, 'new',
                             new_patch, new_dict, len(new_lines)+1, 'new',
                             _GenerateTriples(old_lines, new_lines),
@@ -276,11 +288,9 @@ def _GetComments(request):
   """
   old_dict = {}
   new_dict = {}
-  # XXX GQL doesn't support OR yet...  Otherwise we'd be using
-  # .gql('WHERE patch = :1 AND (draft = FALSE OR author = :2) ORDER BY data',
-  #      patch, request.user)
-  for comment in models.Comment.gql('WHERE patch = :1 ORDER BY date',
-                                    request.patch):
+  query = models.Comment.query(
+      models.Comment.patch_key == request.patch.key).order(models.Comment.date)
+  for comment in query:
     if comment.draft and comment.author != request.user:
       continue  # Only show your own drafts
     comment.complete()
@@ -476,7 +486,7 @@ def _RenderDiffInternal(old_buff, new_buff, ndigits, tag, frag_list,
             intra_region_diff.COLOR_SCHEME['new']['match'])
   oend = intra_region_diff.END_TAG
   nend = oend
-  user = users.get_current_user()
+  user = auth_utils.get_current_user()
 
   for i in xrange(len(old_buff)):
     tg = tag
@@ -577,13 +587,15 @@ def _RenderInlineComments(line_valid, lineno, data, user,
   if line_valid:
     comments.append('<td id="%s-line-%s">' % (prefix, lineno))
     if lineno in data:
+      patchset = patch.patchset_key.get()
+      issue = patchset.issue_key.get()
       comments.append(
         _ExpandTemplate('inline_comment.html',
                         request,
                         user=user,
                         patch=patch,
-                        patchset=patch.patchset,
-                        issue=patch.patchset.issue,
+                        patchset=patchset,
+                        issue=issue,
                         snapshot=snapshot,
                         side='a' if prefix == 'old' else 'b',
                         comments=data[lineno],
@@ -626,7 +638,7 @@ def RenderUnifiedTableRows(request, parsed_lines):
       style = 'udiffremove'
     else:
       style = ''
-    
+
     rows.append('<tr><td class="udiff %s" %s>%s</td></tr>' %
                 (style, row1_id, cgi.escape(line_text)))
 

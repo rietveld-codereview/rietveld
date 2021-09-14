@@ -14,17 +14,21 @@
 
 """Views for Rietveld."""
 
-
 import binascii
+import calendar
 import datetime
 import email  # see incoming_mail()
 import email.utils
+import itertools
+import json
 import logging
 import md5
-import mimetypes
 import os
 import random
 import re
+import tarfile
+import tempfile
+import time
 import urllib
 from cStringIO import StringIO
 from xml.etree import ElementTree
@@ -32,30 +36,46 @@ from xml.etree import ElementTree
 from google.appengine.api import mail
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
-from google.appengine.api import users
 from google.appengine.api import urlfetch
-from google.appengine.api import xmpp
+from google.appengine.api import users
+from google.appengine.datastore import datastore_query
 from google.appengine.ext import db
+from google.appengine.ext import ndb
 from google.appengine.runtime import DeadlineExceededError
 from google.appengine.runtime import apiproxy_errors
 
 from django import forms
 # Import settings as django_settings to avoid name conflict with settings().
 from django.conf import settings as django_settings
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotFound
 from django.shortcuts import render_to_response
 import django.template
 from django.template import RequestContext
-from django.utils import simplejson
+from django.utils import encoding
 from django.utils.safestring import mark_safe
 from django.core.urlresolvers import reverse
+from django.core.servers.basehttp import FileWrapper
 
+import httplib2
+from oauth2client.appengine import _parse_state_value
+from oauth2client.appengine import _safe_html
+from oauth2client.appengine import CredentialsNDBModel
+from oauth2client.appengine import StorageByKeyName
+from oauth2client.appengine import xsrf_secret_key
+from oauth2client.client import AccessTokenRefreshError
+from oauth2client.client import OAuth2WebServerFlow
+from oauth2client import xsrfutil
+
+from codereview import auth_utils
 from codereview import engine
 from codereview import library
 from codereview import models
 from codereview import patching
 from codereview import utils
+from codereview.common import IS_DEV
 from codereview.exceptions import FetchError
+from codereview.responses import HttpTextResponse, HttpHtmlResponse, respond
+import codereview.decorators as deco
 
 
 # Add our own custom template tags library.
@@ -65,7 +85,12 @@ django.template.add_to_builtins('codereview.library')
 ### Constants ###
 
 
-IS_DEV = os.environ['SERVER_SOFTWARE'].startswith('Dev')  # Development server
+OAUTH_DEFAULT_ERROR_MESSAGE = 'OAuth 2.0 error occurred.'
+_ACCESS_TOKEN_TEMPLATE_ROOT = 'http://localhost:%(port)d?'
+ACCESS_TOKEN_REDIRECT_TEMPLATE = (_ACCESS_TOKEN_TEMPLATE_ROOT +
+                                  'access_token=%(token)s')
+ACCESS_TOKEN_FAIL_REDIRECT_TEMPLATE = (_ACCESS_TOKEN_TEMPLATE_ROOT +
+                                       'error=%(error)s')
 # Maximum forms fields length
 MAX_SUBJECT = 100
 MAX_DESCRIPTION = 10000
@@ -75,6 +100,9 @@ MAX_CC = 2000
 MAX_MESSAGE = 10000
 MAX_FILENAME = 255
 MAX_DB_KEY_LENGTH = 1000
+
+DB_WRITE_TRIES = 3
+DB_WRITE_PAUSE = 4
 
 
 ### Form classes ###
@@ -143,31 +171,12 @@ class IssueBaseForm(forms.Form):
                        widget=AccountInput(attrs={'size': 60}))
   private = forms.BooleanField(required=False, initial=False)
 
-  def set_branch_choices(self, base=None):
-    branches = models.Branch.all()
-    bound_field = self['branch']
-    choices = []
-    default = None
-    for b in branches:
-      if not b.repo_name:
-        b.repo_name = b.repo.name
-        b.put()
-      pair = (b.key(), '%s - %s - %s' % (b.repo_name, b.category, b.name))
-      choices.append(pair)
-      if default is None and (base is None or b.url == base):
-        default = b.key()
-    choices.sort(key=lambda pair: pair[1].lower())
-    choices.insert(0, ('', '[See Base]'))
-    bound_field.field.choices = choices
-    if default is not None:
-      self.initial['branch'] = default
-
   def get_base(self):
     base = self.cleaned_data.get('base')
     if not base:
       key = self.cleaned_data['branch']
       if key:
-        branch = models.Branch.get(key)
+        branch = models.Branch.get_by_id(key)
         if branch is not None:
           base = branch.url
     if not base:
@@ -175,32 +184,11 @@ class IssueBaseForm(forms.Form):
     return base or None
 
 
-class NewForm(IssueBaseForm):
-
-  data = forms.FileField(required=False)
-  url = forms.URLField(required=False,
-                       max_length=MAX_URL,
-                       widget=forms.TextInput(attrs={'size': 60}))
-  send_mail = forms.BooleanField(required=False, initial=True)
-
-
-class AddForm(forms.Form):
-
-  message = forms.CharField(max_length=MAX_SUBJECT,
-                            widget=forms.TextInput(attrs={'size': 60}))
-  data = forms.FileField(required=False)
-  url = forms.URLField(required=False,
-                       max_length=MAX_URL,
-                       widget=forms.TextInput(attrs={'size': 60}))
-  reviewers = forms.CharField(max_length=MAX_REVIEWERS, required=False,
-                              widget=AccountInput(attrs={'size': 60}))
-  send_mail = forms.BooleanField(required=False, initial=True)
-
-
 class UploadForm(forms.Form):
 
   subject = forms.CharField(max_length=MAX_SUBJECT)
   description = forms.CharField(max_length=MAX_DESCRIPTION, required=False)
+  project = forms.CharField(required=False)
   content_upload = forms.BooleanField(required=False)
   separate_patches = forms.BooleanField(required=False)
   base = forms.CharField(max_length=MAX_URL, required=False)
@@ -251,11 +239,6 @@ class UploadPatchForm(forms.Form):
     return self.files['data'].read()
 
 
-class EditForm(IssueBaseForm):
-
-  closed = forms.BooleanField(required=False)
-
-
 class EditLocalBaseForm(forms.Form):
   subject = forms.CharField(max_length=MAX_SUBJECT,
                             widget=forms.TextInput(attrs={'size': 60}))
@@ -269,7 +252,13 @@ class EditLocalBaseForm(forms.Form):
                        max_length=MAX_CC,
                        label = 'CC',
                        widget=AccountInput(attrs={'size': 60}))
-  private = forms.BooleanField(required=False, initial=False)
+  private = forms.BooleanField(
+    required=False, initial=False, label='Protected',
+    help_text=(
+      'Only viewable by @chromium and @google accounts.'
+      '<div class="if_checked">'
+      'Please, avoid mailing lists in the CC and Reviewers fields.'
+      '</div>'))
   closed = forms.BooleanField(required=False)
 
   def get_base(self):
@@ -285,7 +274,7 @@ class RepoForm(forms.Form):
 class BranchForm(forms.Form):
   category = forms.CharField(
     widget=forms.Select(choices=[(ch, ch)
-                                 for ch in models.Branch.category.choices]))
+                                 for ch in models.BRANCH_CATEGORY_CHOICES]))
   name = forms.CharField()
   url = forms.URLField()
 
@@ -312,6 +301,9 @@ class PublishForm(forms.Form):
   in_reply_to = forms.CharField(required=False,
                                 max_length=MAX_DB_KEY_LENGTH,
                                 widget=forms.HiddenInput())
+  automated = forms.BooleanField(required=False, widget=forms.HiddenInput(),
+                                 initial=True)
+  verbose = forms.BooleanField(required=False, widget=forms.HiddenInput())
 
 
 class MiniPublishForm(forms.Form):
@@ -331,9 +323,18 @@ class MiniPublishForm(forms.Form):
                                     widget=forms.HiddenInput())
   no_redirect = forms.BooleanField(required=False,
                                    widget=forms.HiddenInput())
+  automated = forms.BooleanField(required=False, widget=forms.HiddenInput(),
+                                 initial=True)
+  verbose = forms.BooleanField(required=False, widget=forms.HiddenInput())
 
 
-FORM_CONTEXT_VALUES = [(x, '%d lines' % x) for x in models.CONTEXT_CHOICES]
+class BlockForm(forms.Form):
+  blocked = forms.BooleanField(
+      required=False,
+      help_text='Should this user be blocked')
+
+
+FORM_CONTEXT_VALUES = [(z, '%d lines' % z) for z in models.CONTEXT_CHOICES]
 FORM_CONTEXT_VALUES.append(('', 'Whole file'))
 
 
@@ -350,9 +351,6 @@ class SettingsForm(forms.Form):
       max_value=django_settings.MAX_COLUMN_WIDTH)
   notify_by_email = forms.BooleanField(required=False,
                                        widget=forms.HiddenInput())
-  notify_by_chat = forms.BooleanField(
-      required=False,
-      help_text='You must accept the invite for this to work.')
 
   def clean_nickname(self):
     nickname = self.cleaned_data.get('nickname')
@@ -372,15 +370,55 @@ class SettingsForm(forms.Form):
       raise forms.ValidationError('Choose a different nickname.')
 
     # Look for existing nicknames
-    accounts = list(models.Account.gql('WHERE lower_nickname = :1',
-                                       nickname.lower()))
-    for account in accounts:
-      if account.key() == models.Account.current_user_account.key():
-        continue
+    query = models.Account.query(
+        models.Account.lower_nickname == nickname.lower())
+    if any(
+        account.key != models.Account.current_user_account.key
+        for account in query):
       raise forms.ValidationError('This nickname is already in use.')
 
     return nickname
 
+
+class MigrateEntitiesForm(forms.Form):
+
+  account = forms.CharField(label='Your previous email address')
+  _user = None
+
+  def set_user(self, user):
+    """Sets the _user attribute.
+
+    A user object is needed for validation. This method has to be
+    called before is_valid() is called to allow us to validate if a
+    email address given in account belongs to the same user.
+    """
+    self._user = user
+
+  def clean_account(self):
+    """Verifies that an account with this emails exists and returns it.
+
+    This method is executed by Django when Form.is_valid() is called.
+    """
+    if self._user is None:
+      raise forms.ValidationError('No user given.')
+    account = models.Account.get_account_for_email(self.cleaned_data['account'])
+    if account is None:
+      raise forms.ValidationError('No such email.')
+    if account.user.email() == self._user.email():
+      raise forms.ValidationError(
+        'Nothing to do. This is your current email address.')
+    if account.user.user_id() != self._user.user_id():
+      raise forms.ValidationError(
+        'This email address isn\'t related to your account.')
+    return account
+
+
+ORDER_CHOICES = (
+    '__key__',
+    'owner',
+    'created',
+    'modified',
+)
 
 class SearchForm(forms.Form):
 
@@ -403,8 +441,7 @@ class SearchForm(forms.Form):
       required=False,
       min_value=1,
       max_value=1000,
-      initial=10,
-      widget=forms.HiddenInput(attrs={'value': '10'}))
+      widget=forms.HiddenInput(attrs={'value': '30'}))
   closed = forms.NullBooleanField(required=False)
   owner = forms.CharField(required=False,
                           max_length=MAX_REVIEWERS,
@@ -414,16 +451,27 @@ class SearchForm(forms.Form):
                              max_length=MAX_REVIEWERS,
                              widget=AccountInput(attrs={'size': 60,
                                                         'multiple': False}))
+  cc = forms.CharField(required=False,
+                       max_length=MAX_CC,
+                       label = 'CC',
+                       widget=AccountInput(attrs={'size': 60}))
   repo_guid = forms.CharField(required=False, max_length=MAX_URL,
                               label="Repository ID")
   base = forms.CharField(required=False, max_length=MAX_URL)
   private = forms.NullBooleanField(required=False)
-  created_before = forms.DateTimeField(required=False, label='Created before')
+  created_before = forms.DateTimeField(
+    required=False, label='Created before',
+    help_text='Format: YYYY-MM-DD and optional: hh:mm:ss')
   created_after = forms.DateTimeField(
       required=False, label='Created on or after')
   modified_before = forms.DateTimeField(required=False, label='Modified before')
   modified_after = forms.DateTimeField(
       required=False, label='Modified on or after')
+  order = forms.ChoiceField(
+      required=False, help_text='Order: Name of one of the datastore keys',
+      choices=sum(
+        ([(x, x), ('-' + x, '-' + x)] for x in ORDER_CHOICES),
+        [('', '(default)')]))
 
   def _clean_accounts(self, key):
     """Cleans up autocomplete field.
@@ -461,6 +509,33 @@ class SearchForm(forms.Form):
       return user.email()
 
 
+class StringListField(forms.CharField):
+
+  def prepare_value(self, value):
+    if value is None:
+      return ''
+    return ','.join(value)
+
+  def to_python(self, value):
+    if not value:
+      return []
+    return [list_value.strip() for list_value in value.split(',')]
+
+
+class ClientIDAndSecretForm(forms.Form):
+  """Simple form for collecting Client ID and Secret."""
+  client_id = forms.CharField()
+  client_secret = forms.CharField()
+  additional_client_ids = StringListField()
+
+
+class UpdateStatsForm(forms.Form):
+  tasks_to_trigger = forms.CharField(
+      required=True, max_length=2000,
+      help_text='Coma separated items.',
+      widget=forms.TextInput(attrs={'size': '100'}))
+
+
 ### Exceptions ###
 
 
@@ -469,61 +544,6 @@ class InvalidIncomingEmailError(Exception):
 
 
 ### Helper functions ###
-
-
-# Counter displayed (by respond()) below) on every page showing how
-# many requests the current incarnation has handled, not counting
-# redirects.  Rendered by templates/base.html.
-counter = 0
-
-
-def respond(request, template, params=None):
-  """Helper to render a response, passing standard stuff to the response.
-
-  Args:
-    request: The request object.
-    template: The template name; '.html' is appended automatically.
-    params: A dict giving the template parameters; modified in-place.
-
-  Returns:
-    Whatever render_to_response(template, params) returns.
-
-  Raises:
-    Whatever render_to_response(template, params) raises.
-  """
-  global counter
-  counter += 1
-  if params is None:
-    params = {}
-  must_choose_nickname = False
-  uploadpy_hint = False
-  if request.user is not None:
-    account = models.Account.current_user_account
-    must_choose_nickname = not account.user_has_selected_nickname()
-    uploadpy_hint = account.uploadpy_hint
-  params['request'] = request
-  params['counter'] = counter
-  params['user'] = request.user
-  params['is_admin'] = request.user_is_admin
-  params['is_dev'] = IS_DEV
-  params['media_url'] = django_settings.MEDIA_URL
-  params['special_banner'] = getattr(django_settings, 'SPECIAL_BANNER', None)
-  full_path = request.get_full_path().encode('utf-8')
-  if request.user is None:
-    params['sign_in'] = users.create_login_url(full_path)
-  else:
-    params['sign_out'] = users.create_logout_url(full_path)
-    account = models.Account.current_user_account
-    if account is not None:
-      params['xsrf_token'] = account.get_xsrf_token()
-  params['must_choose_nickname'] = must_choose_nickname
-  params['uploadpy_hint'] = uploadpy_hint
-  params['rietveld_revision'] = django_settings.RIETVELD_REVISION
-  try:
-    return render_to_response(template, params,
-                              context_instance=RequestContext(request))
-  finally:
-    library.user_cache.clear() # don't want this sticking around
 
 
 def _random_bytes(n):
@@ -555,382 +575,18 @@ def _clean_int(value, default, min_value=None, max_value=None):
   return value
 
 
-def _can_view_issue(user, issue):
-  if user is None:
-    return not issue.private
-  user_email = db.Email(user.email().lower())
-  return (not issue.private
-          or issue.owner == user
-          or user_email in issue.cc
-          or user_email in issue.reviewers)
-
-
-def _notify_issue(request, issue, message):
-  """Try sending an XMPP (chat) message.
-
-  Args:
-    request: The request object.
-    issue: Issue whose owner, reviewers, CC are to be notified.
-    message: Text of message to send, e.g. 'Created'.
-
-  The current user and the issue's subject and URL are appended to the message.
-
-  Returns:
-    True if the message was (apparently) delivered, False if not.
-  """
-  iid = issue.key().id()
-  emails = [issue.owner.email()]
-  if issue.reviewers:
-    emails.extend(issue.reviewers)
-  if issue.cc:
-    emails.extend(issue.cc)
-  accounts = models.Account.get_multiple_accounts_by_email(emails)
-  jids = []
-  for account in accounts.itervalues():
-    logging.debug('email=%r,chat=%r', account.email, account.notify_by_chat)
-    if account.notify_by_chat:
-      jids.append(account.email)
-  if not jids:
-    logging.debug('No XMPP jids to send to for issue %d', iid)
-    return True  # Nothing to do.
-  jids_str = ', '.join(jids)
-  logging.debug('Sending XMPP for issue %d to %s', iid, jids_str)
-  sender = '?'
-  if models.Account.current_user_account:
-    sender = models.Account.current_user_account.nickname
-  elif request.user:
-    sender = request.user.email()
-  message = '%s by %s: %s\n%s' % (message,
-                                  sender,
-                                  issue.subject,
-                                  request.build_absolute_uri(
-                                    reverse(show, args=[iid])))
-  try:
-    sts = xmpp.send_message(jids, message)
-  except Exception, err:
-    logging.exception('XMPP exception %s sending for issue %d to %s',
-                      err, iid, jids_str)
-    return False
-  else:
-    if sts == [xmpp.NO_ERROR] * len(jids):
-      logging.info('XMPP message sent for issue %d to %s', iid, jids_str)
-      return True
-    else:
-      logging.error('XMPP error %r sending for issue %d to %s',
-                    sts, iid, jids_str)
-      return False
-
-
-class HttpTextResponse(HttpResponse):
-  def __init__(self, *args, **kwargs):
-    kwargs['content_type'] = 'text/plain; charset=utf-8'
-    super(HttpTextResponse, self).__init__(*args, **kwargs)
-
-
-class HttpHtmlResponse(HttpResponse):
-  def __init__(self, *args, **kwargs):
-    kwargs['content_type'] = 'text/html; charset=utf-8'
-    super(HttpHtmlResponse, self).__init__(*args, **kwargs)
-
-
-### Decorators for request handlers ###
-
-
-def post_required(func):
-  """Decorator that returns an error unless request.method == 'POST'."""
-
-  def post_wrapper(request, *args, **kwds):
-    if request.method != 'POST':
-      return HttpTextResponse('This requires a POST request.', status=405)
-    return func(request, *args, **kwds)
-
-  return post_wrapper
-
-
-def login_required(func):
-  """Decorator that redirects to the login page if you're not logged in."""
-
-  def login_wrapper(request, *args, **kwds):
-    if request.user is None:
-      return HttpResponseRedirect(
-          users.create_login_url(request.get_full_path().encode('utf-8')))
-    return func(request, *args, **kwds)
-
-  return login_wrapper
-
-
-def xsrf_required(func):
-  """Decorator to check XSRF token.
-
-  This only checks if the method is POST; it lets other method go
-  through unchallenged.  Apply after @login_required and (if
-  applicable) @post_required.  This decorator is mutually exclusive
-  with @upload_required.
-  """
-
-  def xsrf_wrapper(request, *args, **kwds):
-    if request.method == 'POST':
-      post_token = request.POST.get('xsrf_token')
-      if not post_token:
-        return HttpTextResponse('Missing XSRF token.', status=403)
-      account = models.Account.current_user_account
-      if not account:
-        return HttpTextResponse('Must be logged in for XSRF check.', status=403)
-      xsrf_token = account.get_xsrf_token()
-      if post_token != xsrf_token:
-        # Try the previous hour's token
-        xsrf_token = account.get_xsrf_token(-1)
-        if post_token != xsrf_token:
-          msg = [u'Invalid XSRF token.']
-          if request.POST:
-            msg.extend([u'',
-                        u'However, this was the data posted to the server:',
-                        u''])
-            for key in request.POST:
-              msg.append(u'%s: %s' % (key, request.POST[key]))
-            msg.extend([u'', u'-'*10,
-                        u'Please reload the previous page and post again.'])
-          return HttpTextResponse(u'\n'.join(msg), status=403)
-    return func(request, *args, **kwds)
-
-  return xsrf_wrapper
-
-
-def upload_required(func):
-  """Decorator for POST requests from the upload.py script.
-
-  Right now this is for documentation only, but eventually we should
-  change this to insist on a special header that JavaScript cannot
-  add, to prevent XSRF attacks on these URLs.  This decorator is
-  mutually exclusive with @xsrf_required.
-  """
-  return func
-
-
-def admin_required(func):
-  """Decorator that insists that you're logged in as administratior."""
-
-  def admin_wrapper(request, *args, **kwds):
-    if request.user is None:
-      return HttpResponseRedirect(
-          users.create_login_url(request.get_full_path().encode('utf-8')))
-    if not request.user_is_admin:
-      return HttpTextResponse(
-          'You must be admin in for this function', status=403)
-    return func(request, *args, **kwds)
-
-  return admin_wrapper
-
-
-def issue_required(func):
-  """Decorator that processes the issue_id handler argument."""
-
-  def issue_wrapper(request, issue_id, *args, **kwds):
-    issue = models.Issue.get_by_id(int(issue_id))
-    if issue is None:
-      return HttpTextResponse(
-          'No issue exists with that id (%s)' % issue_id, status=404)
-    if issue.private:
-      if request.user is None:
-        return HttpResponseRedirect(
-            users.create_login_url(request.get_full_path().encode('utf-8')))
-      if not _can_view_issue(request.user, issue):
-        return HttpTextResponse(
-            'You do not have permission to view this issue', status=403)
-    request.issue = issue
-    return func(request, *args, **kwds)
-
-  return issue_wrapper
-
-
-def user_key_required(func):
-  """Decorator that processes the user handler argument."""
-
-  def user_key_wrapper(request, user_key, *args, **kwds):
-    user_key = urllib.unquote(user_key)
-    if '@' in user_key:
-      request.user_to_show = users.User(user_key)
-    else:
-      account = models.Account.get_account_for_nickname(user_key)
-      if not account:
-        logging.info("account not found for nickname %s" % user_key)
-        return HttpTextResponse(
-            'No user found with that key (%s)' % urllib.quote(user_key),
-            status=404)
-      request.user_to_show = account.user
-    return func(request, *args, **kwds)
-
-  return user_key_wrapper
-
-
-def owner_required(func):
-  """Decorator that insists you own the issue.
-
-  It must appear after issue_required or equivalent, like patchset_required.
-  """
-
-  @login_required
-  def owner_wrapper(request, *args, **kwds):
-    if request.issue.owner != request.user:
-      return HttpTextResponse('You do not own this issue', status=403)
-    return func(request, *args, **kwds)
-
-  return owner_wrapper
-
-
-def issue_owner_required(func):
-  """Decorator that processes the issue_id argument and insists you own it."""
-
-  @issue_required
-  @owner_required
-  def issue_owner_wrapper(request, *args, **kwds):
-    return func(request, *args, **kwds)
-
-  return issue_owner_wrapper
-
-
-def issue_editor_required(func):
-  """Decorator that processes the issue_id argument and insists the user has
-  permission to edit it."""
-
-  @login_required
-  @issue_required
-  def issue_editor_wrapper(request, *args, **kwds):
-    if not request.issue.user_can_edit(request.user):
-      return HttpTextResponse(
-          'You do not have permission to edit this issue', status=403)
-    return func(request, *args, **kwds)
-
-  return issue_editor_wrapper
-
-
-def patchset_required(func):
-  """Decorator that processes the patchset_id argument."""
-
-  @issue_required
-  def patchset_wrapper(request, patchset_id, *args, **kwds):
-    patchset = models.PatchSet.get_by_id(int(patchset_id), parent=request.issue)
-    if patchset is None:
-      return HttpTextResponse(
-          'No patch set exists with that id (%s)' % patchset_id, status=404)
-    patchset.issue = request.issue
-    request.patchset = patchset
-    return func(request, *args, **kwds)
-
-  return patchset_wrapper
-
-
-def patchset_owner_required(func):
-  """Decorator that processes the patchset_id argument and insists you own the
-  issue."""
-
-  @patchset_required
-  @owner_required
-  def patchset_owner_wrapper(request, *args, **kwds):
-    return func(request, *args, **kwds)
-
-  return patchset_owner_wrapper
-
-
-def patch_required(func):
-  """Decorator that processes the patch_id argument."""
-
-  @patchset_required
-  def patch_wrapper(request, patch_id, *args, **kwds):
-    patch = models.Patch.get_by_id(int(patch_id), parent=request.patchset)
-    if patch is None:
-      return HttpTextResponse(
-          'No patch exists with that id (%s/%s)' %
-          (request.patchset.key().id(), patch_id),
-          status=404)
-    patch.patchset = request.patchset
-    request.patch = patch
-    return func(request, *args, **kwds)
-
-  return patch_wrapper
-
-
-def patch_filename_required(func):
-  """Decorator that processes the patch_id argument."""
-
-  @patchset_required
-  def patch_wrapper(request, patch_filename, *args, **kwds):
-    patch = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                             request.patchset, patch_filename).get()
-    if patch is None and patch_filename.isdigit():
-      # It could be an old URL which has a patch ID instead of a filename
-      patch = models.Patch.get_by_id(int(patch_filename),
-                                     parent=request.patchset)
-    if patch is None:
-      return respond(request, 'diff_missing.html',
-                     {'issue': request.issue,
-                      'patchset': request.patchset,
-                      'patch': None,
-                      'patchsets': request.issue.patchset_set,
-                      'filename': patch_filename})
-    patch.patchset = request.patchset
-    request.patch = patch
-    return func(request, *args, **kwds)
-
-  return patch_wrapper
-
-
-def image_required(func):
-  """Decorator that processes the image argument.
-
-  Attributes set on the request:
-   content: a Content entity.
-  """
-
-  @patch_required
-  def image_wrapper(request, image_type, *args, **kwds):
-    content = None
-    if image_type == "0":
-      content = request.patch.content
-    elif image_type == "1":
-      content = request.patch.patched_content
-    # Other values are erroneous so request.content won't be set.
-    if not content or not content.data:
-      return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
-    request.mime_type = mimetypes.guess_type(request.patch.filename)[0]
-    if not request.mime_type or not request.mime_type.startswith('image/'):
-      return HttpResponseRedirect(django_settings.MEDIA_URL + "blank.jpg")
-    request.content = content
-    return func(request, *args, **kwds)
-
-  return image_wrapper
-
-
-def json_response(func):
-  """Decorator that converts into JSON any returned value that is not an
-  HttpResponse. It handles `pretty` URL parameter to tune JSON response for
-  either performance or readability."""
-
-  def json_wrapper(request, *args, **kwds):
-    data = func(request, *args, **kwds)
-    if isinstance(data, HttpResponse):
-      return data
-    if request.REQUEST.get('pretty','0').lower() in ('1', 'true', 'on'):
-      data = simplejson.dumps(data, indent='  ', sort_keys=True)
-    else:
-      data = simplejson.dumps(data, separators=(',',':'))
-    return HttpResponse(data, content_type='application/json; charset=utf-8')
-
-  return json_wrapper
-
-
 ### Request handlers ###
 
 
 def index(request):
   """/ - Show a list of review issues"""
   if request.user is None:
-    return all(request, index_call=True)
+    return view_all(request, index_call=True)
   else:
     return mine(request)
 
 
-DEFAULT_LIMIT = 10
+DEFAULT_LIMIT = 20
 
 
 def _url(path, **kwargs):
@@ -972,7 +628,7 @@ def _inner_paginate(request, issues, template, extra_template_params):
   Returns:
     Response for sending back to browser.
   """
-  visible_issues = [i for i in issues if _can_view_issue(request.user, i)]
+  visible_issues = [i for i in issues if i.view_allowed]
   _optimize_draft_counts(visible_issues)
   _load_users_for_issues(visible_issues)
   params = {
@@ -1026,7 +682,8 @@ def _paginate_issues(page_url,
     'nexttext': 'Older',
   }
   # Fetch one more to see if there should be a 'next' link
-  issues = query.fetch(limit+1, offset)
+  logging.info('query during pagination is %r', query)
+  issues = query.fetch(limit+1, offset=offset)
   if len(issues) > limit:
     del issues[limit:]
     params['next'] = _url(page_url, offset=offset + limit, **nav_parameters)
@@ -1044,6 +701,7 @@ def _paginate_issues(page_url,
 def _paginate_issues_with_cursor(page_url,
                                  request,
                                  query,
+                                 cursor,
                                  limit,
                                  template,
                                  extra_nav_parameters=None,
@@ -1055,7 +713,8 @@ def _paginate_issues_with_cursor(page_url,
       generated by calling 'reverse' with a name and arguments of a view
       function.
     request: Request containing offset and limit parameters.
-    query: Query over issues.
+    query: Query over issues
+    cursor: cursor object passed to web form and back again.
     limit: Maximum number of issues to return.
     template: Name of template that renders issue page.
     extra_nav_parameters: Dictionary of extra parameters to append to the
@@ -1066,27 +725,25 @@ def _paginate_issues_with_cursor(page_url,
   Returns:
     Response for sending back to browser.
   """
-  issues = query.fetch(limit)
+  issues, next_cursor, has_more = query.fetch_page(limit, start_cursor=cursor)
   nav_parameters = {}
   if extra_nav_parameters:
     nav_parameters.update(extra_nav_parameters)
-  nav_parameters['cursor'] = query.cursor()
+  nav_parameters['cursor'] = next_cursor.urlsafe() if next_cursor else ''
 
   params = {
     'limit': limit,
     'cursor': nav_parameters['cursor'],
-    'nexttext': 'Newer',
+    'nexttext': 'Next',
   }
-  # Fetch one more to see if there should be a 'next' link. Do it in a separate
-  # request so we have a valid cursor.
-  if query.fetch(1):
+  if has_more:
     params['next'] = _url(page_url, **nav_parameters)
   if extra_template_params:
     params.update(extra_template_params)
   return _inner_paginate(request, issues, template, params)
 
 
-def all(request, index_call=False):
+def view_all(request, index_call=False):
   """/all - Show a list of up to DEFAULT_LIMIT recent issues."""
   closed = request.GET.get('closed', '')
   if closed in ('0', 'false'):
@@ -1103,13 +760,13 @@ def all(request, index_call=False):
   if closed is not None:
     nav_parameters['closed'] = int(closed)
 
-  query = models.Issue.all().filter('private =', False)
+  query = models.Issue.query(
+      models.Issue.private == False).order(-models.Issue.modified)
   if closed is not None:
     # return only opened or closed issues
-    query.filter('closed =', closed)
-  query.order('-modified')
+    query = query.filter(models.Issue.closed == closed)
 
-  return _paginate_issues(reverse(all),
+  return _paginate_issues(reverse(view_all),
                           request,
                           query,
                           'all.html',
@@ -1135,27 +792,29 @@ def _optimize_draft_counts(issues):
   else:
     issue_ids = account.drafts
   for issue in issues:
-    if issue_ids is None or issue.key().id() not in issue_ids:
-      issue._num_drafts = 0
+    if issue_ids is None or issue.key.id() not in issue_ids:
+      issue._num_drafts = issue._num_drafts or {}
+      if account:
+        issue._num_drafts[account.email] = 0
 
 
-@login_required
+@deco.login_required
 def mine(request):
   """/mine - Show a list of issues created by the current user."""
   request.user_to_show = request.user
   return _show_user(request)
 
 
-@login_required
+@deco.login_required
 def starred(request):
   """/starred - Show a list of issues starred by the current user."""
   stars = models.Account.current_user_account.stars
   if not stars:
     issues = []
   else:
-    issues = [issue for issue in models.Issue.get_by_id(stars)
-                    if issue is not None
-                    and _can_view_issue(request.user, issue)]
+    starred_issue_keys = [ndb.Key(models.Issue, i) for i in stars]
+    issues = [issue for issue in ndb.get_multi(starred_issue_keys)
+              if issue and issue.view_allowed]
     _load_users_for_issues(issues)
     _optimize_draft_counts(issues)
   return respond(request, 'starred.html', {'issues': issues})
@@ -1170,7 +829,7 @@ def _load_users_for_issues(issues):
 
   library.get_links_for_users(user_dict.keys())
 
-@user_key_required
+@deco.user_key_required
 def show_user(request):
   """/user - Show the user's dashboard"""
   return _show_user(request)
@@ -1179,101 +838,153 @@ def show_user(request):
 def _show_user(request):
   user = request.user_to_show
   if user == request.user:
-    query = models.Comment.all().filter('draft =', True)
-    query = query.filter('author =', request.user).fetch(100)
-    draft_keys = set(d.parent_key().parent().parent() for d in query)
-    draft_issues = models.Issue.get(draft_keys)
+    draft_query = models.Comment.query(
+        models.Comment.draft == True, models.Comment.author == request.user)
+    draft_issue_keys = {
+        draft_key.parent().parent().parent()
+        for draft_key in draft_query.fetch(100, keys_only=True)}
+    draft_issues = ndb.get_multi(draft_issue_keys)
+    # Reduce the chance of someone trying to block himself.
+    show_block = False
   else:
-    draft_issues = draft_keys = []
+    draft_issues = draft_issue_keys = []
+    show_block = request.user_is_admin
   my_issues = [
-      issue for issue in db.GqlQuery(
-          'SELECT * FROM Issue '
-          'WHERE closed = FALSE AND owner = :1 '
-          'ORDER BY modified DESC '
-          'LIMIT 100',
-          user)
-      if issue.key() not in draft_keys and _can_view_issue(request.user, issue)]
+      issue for issue in models.Issue.query(
+          models.Issue.closed == False, models.Issue.owner == user).order(
+            -models.Issue.modified).fetch(100)
+      if issue.key not in draft_issue_keys and issue.view_allowed]
   review_issues = [
-      issue for issue in db.GqlQuery(
-          'SELECT * FROM Issue '
-          'WHERE closed = FALSE AND reviewers = :1 '
-          'ORDER BY modified DESC '
-          'LIMIT 100',
-          user.email().lower())
-      if (issue.key() not in draft_keys and issue.owner != user
-          and _can_view_issue(request.user, issue))]
+      issue for issue in models.Issue.query(
+          models.Issue.closed == False,
+          models.Issue.reviewers == user.email().lower()).order(
+            -models.Issue.modified).fetch(100)
+      if (issue.key not in draft_issue_keys and issue.owner != user
+          and issue.view_allowed)]
+  earliest_closed = datetime.datetime.utcnow() - datetime.timedelta(days=7)
   closed_issues = [
-      issue for issue in db.GqlQuery(
-          'SELECT * FROM Issue '
-          'WHERE closed = TRUE AND modified > :1 AND owner = :2 '
-          'ORDER BY modified DESC '
-          'LIMIT 100',
-          datetime.datetime.now() - datetime.timedelta(days=7),
-          user)
-      if issue.key() not in draft_keys and _can_view_issue(request.user, issue)]
+      issue for issue in models.Issue.query(
+          models.Issue.closed == True,
+          models.Issue.modified > earliest_closed,
+          models.Issue.owner == user).order(
+            -models.Issue.modified).fetch(100)
+      if issue.key not in draft_issue_keys and issue.view_allowed]
   cc_issues = [
-      issue for issue in db.GqlQuery(
-          'SELECT * FROM Issue '
-          'WHERE closed = FALSE AND cc = :1 '
-          'ORDER BY modified DESC '
-          'LIMIT 100',
-          user.email())
-      if (issue.key() not in draft_keys and issue.owner != user
-          and _can_view_issue(request.user, issue))]
+      issue for issue in models.Issue.query(
+          models.Issue.closed == False, models.Issue.cc == user.email()).order(
+            -models.Issue.modified).fetch(100)
+      if (issue.key not in draft_issue_keys and issue.owner != user
+          and issue.view_allowed)]
   all_issues = my_issues + review_issues + closed_issues + cc_issues
+
+  # Some of these issues may not have accurate updates_for information,
+  # so ask each issue to update itself.
+  futures = []
+  for issue in itertools.chain(draft_issues, all_issues):
+    ret = issue.calculate_and_save_updates_if_None()
+    if ret is not None:
+      futures.append(ret)
+  for f in futures:
+    f.get_result()
+
+  # When a CL is sent from upload.py using --send_mail we create an empty
+  # message. This might change in the future, either by not adding an empty
+  # message or by populating the message with the content of the email
+  # that was sent out.
+  outgoing_issues = [issue for issue in my_issues if issue.num_messages]
+  unsent_issues = [issue for issue in my_issues if not issue.num_messages]
   _load_users_for_issues(all_issues)
   _optimize_draft_counts(all_issues)
+  account = models.Account.get_account_for_user(request.user_to_show)
   return respond(request, 'user.html',
-                 {'email': user.email(),
-                  'my_issues': my_issues,
+                 {'viewed_account': account,
+                  'outgoing_issues': outgoing_issues,
+                  'unsent_issues': unsent_issues,
                   'review_issues': review_issues,
                   'closed_issues': closed_issues,
                   'cc_issues': cc_issues,
                   'draft_issues': draft_issues,
+                  'show_block': show_block,
                   })
 
 
-@login_required
-@xsrf_required
-def new(request):
-  """/new - Upload a new patch set.
+@deco.require_methods('POST')
+@deco.login_required
+@deco.patchset_required
+@deco.xsrf_required
+def edit_patchset_title(request):
+  """/<issue>/edit_patchset_title - Edit the specified patchset's title."""
 
-  GET shows a blank form, POST processes it.
-  """
-  if request.method != 'POST':
-    form = NewForm()
-    form.set_branch_choices()
-    return respond(request, 'new.html', {'form': form})
+  if request.user.email().lower() != request.issue.owner.email():
+    return HttpResponseBadRequest(
+        'Only the issue owner can edit patchset titles')
 
-  form = NewForm(request.POST, request.FILES)
-  form.set_branch_choices()
-  issue, _ = _make_new(request, form)
-  if issue is None:
-    return respond(request, 'new.html', {'form': form})
+  patchset = request.patchset
+  patchset.message = request.POST.get('patchset_title')
+  patchset.put()
+
+  return HttpResponse('OK', content_type='text/plain')
+
+
+@deco.admin_required
+@deco.user_key_required
+@deco.xsrf_required
+def block_user(request):
+  """/user/<user>/block - Blocks a specific user."""
+  account = models.Account.get_account_for_user(request.user_to_show)
+  if request.method == 'POST':
+    form = BlockForm(request.POST)
+    if form.is_valid():
+      account.blocked = form.cleaned_data['blocked']
+      logging.debug(
+          'Updating block bit to %s for user %s',
+          account.blocked,
+          account.email)
+      account.put()
+      if account.blocked:
+        # Remove user from existing issues so that he doesn't participate in
+        # email communication anymore.
+        tbd = {}
+        email = account.user.email()
+        query = models.Issue.query(models.Issue.reviewers == email)
+        for issue in query:
+          issue.reviewers.remove(email)
+          issue.calculate_updates_for()
+          tbd[issue.key] = issue
+        # look for issues where blocked user is in cc only
+        query = models.Issue.query(models.Issue.cc == email)
+        for issue in query:
+          if issue.key in tbd:
+            # Update already changed instance instead. This happens when the
+            # blocked user is in both reviewers and ccs.
+            issue = tbd[issue.key]
+          issue.cc.remove(account.user.email())
+          tbd[issue.key] = issue
+        ndb.put_multi(tbd.values())
   else:
-    return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
+    form = BlockForm()
+  form.initial['blocked'] = account.blocked
+  templates = {
+    'viewed_account': account,
+    'form': form,
+  }
+  return respond(request, 'block_user.html', templates)
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def use_uploadpy(request):
   """Show an intermediate page about upload.py."""
   if request.method == 'POST':
-    if 'disable_msg' in request.POST:
-      models.Account.current_user_account.uploadpy_hint = False
-      models.Account.current_user_account.put()
-    if 'download' in request.POST:
-      url = reverse(customized_upload_py)
-    else:
-      url = reverse(new)
-    return HttpResponseRedirect(url)
+    return HttpResponseRedirect(reverse(customized_upload_py))
   return respond(request, 'use_uploadpy.html')
 
 
-@post_required
-@upload_required
+@deco.require_methods('POST')
+@deco.upload_required
 def upload(request):
-  """/upload - Like new() or add(), but from the upload.py script.
+  """/upload - Used by upload.py to create a new Issue and add PatchSet's to
+  existing Issues.
 
   This generates a text/plain response.
   """
@@ -1296,13 +1007,16 @@ def upload(request):
       if issue is None:
         form.errors['issue'] = ['No issue exists with that id (%s)' %
                                 issue_id]
-      elif issue.local_base and not form.cleaned_data.get('content_upload'):
+      elif not form.cleaned_data.get('content_upload'):
         form.errors['issue'] = ['Base files upload required for that issue.']
         issue = None
       else:
-        if request.user != issue.owner:
+        if not issue.edit_allowed:
           form.errors['user'] = ['You (%s) don\'t own this issue (%s)' %
                                  (request.user, issue_id)]
+          issue = None
+        elif issue.closed:
+          form.errors['issue'] = ['This issue is closed (%s)' % (issue_id)]
           issue = None
         else:
           patchset = _add_patchset_from_form(request, issue, form, 'subject',
@@ -1318,14 +1032,13 @@ def upload(request):
     msg = ('Issue %s. URL: %s' %
            (action,
             request.build_absolute_uri(
-              reverse('show_bare_issue_number', args=[issue.key().id()]))))
+              reverse('show_bare_issue_number', args=[issue.key.id()]))))
     if (form.cleaned_data.get('content_upload') or
         form.cleaned_data.get('separate_patches')):
       # Extend the response message: 2nd line is patchset id.
-      msg +="\n%d" % patchset.key().id()
+      msg +="\n%d" % patchset.key.id()
       if form.cleaned_data.get('content_upload'):
         # Extend the response: additional lines are the expected filenames.
-        issue.local_base = True
         issue.put()
 
         base_hashes = {}
@@ -1335,52 +1048,65 @@ def upload(request):
           checksum, filename = file_info.split(":", 1)
           base_hashes[filename] = checksum
 
+        logging.info('base_hashes is %r', base_hashes)
         content_entities = []
         new_content_entities = []
-        patches = list(patchset.patch_set)
+        patches = list(patchset.patches)
+        logging.info('len(patches) = %r', len(patches))
+
         existing_patches = {}
-        patchsets = list(issue.patchset_set)
+        patchsets = list(issue.patchsets)
         if len(patchsets) > 1:
           # Only check the last uploaded patchset for speed.
-          last_patch_set = patchsets[-2].patch_set
+          last_patch_list = patchsets[-2].patches
           patchsets = None  # Reduce memory usage.
-          for opatch in last_patch_set:
-            if opatch.content:
+          for opatch in last_patch_list:
+            if opatch.content_key:
               existing_patches[opatch.filename] = opatch
         for patch in patches:
-          content = None
           # Check if the base file is already uploaded in another patchset.
           if (patch.filename in base_hashes and
               patch.filename in existing_patches and
               (base_hashes[patch.filename] ==
-               existing_patches[patch.filename].content.checksum)):
-            content = existing_patches[patch.filename].content
+               existing_patches[patch.filename].content_key.get().checksum)):
+            content_key = existing_patches[patch.filename].content_key
             patch.status = existing_patches[patch.filename].status
             patch.is_binary = existing_patches[patch.filename].is_binary
-          if not content:
-            content = models.Content(is_uploaded=True, parent=patch)
-            new_content_entities.append(content)
-          content_entities.append(content)
-        existing_patches = None  # Reduce memory usage.
-        if new_content_entities:
-          db.put(new_content_entities)
+            patch.content_key = content_key
 
-        for patch, content_entity in zip(patches, content_entities):
-          patch.content = content_entity
-          id_string = patch.key().id()
-          if content_entity not in new_content_entities:
+        existing_patches = None  # Reduce memory usage.
+
+        for patch in patches:
+          id_string = patch.key.id()
+          if patch.content_key is not None:
             # Base file not needed since we reused a previous upload.  Send its
             # patch id in case it's a binary file and the new content needs to
             # be uploaded.  We mark this by prepending 'nobase' to the id.
             id_string = "nobase_" + str(id_string)
           msg += "\n%s %s" % (id_string, patch.filename)
-        db.put(patches)
+
+        logging.info('upload response is:\n %s\n', msg)
+        ndb.put_multi(patches)
+
   return HttpTextResponse(msg)
 
 
-@post_required
-@patch_required
-@upload_required
+@ndb.transactional()
+def _update_patch(patch_key, content_key, is_current, status, is_binary):
+  """Store content-related info in a Patch."""
+  patch = patch_key.get()
+  patch.status = status
+  patch.is_binary = is_binary
+  if is_current:
+    patch.patched_content_key = content_key
+  else:
+    patch.content_key = content_key
+  patch.put()
+
+
+@deco.require_methods('POST')
+@deco.patch_required
+@deco.upload_required
 def upload_content(request):
   """/<issue>/upload_content/<patchset>/<patch> - Upload base file contents.
 
@@ -1395,23 +1121,19 @@ def upload_content(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if request.user != request.issue.owner:
+  if not request.issue.edit_allowed:
     return HttpTextResponse('ERROR: You (%s) don\'t own this issue (%s).' %
-                            (request.user, request.issue.key().id()))
+                            (request.user, request.issue.key.id()))
   patch = request.patch
-  patch.status = form.cleaned_data['status']
-  patch.is_binary = form.cleaned_data['is_binary']
-  patch.put()
 
   if form.cleaned_data['is_current']:
-    if patch.patched_content:
+    if patch.patched_content_key:
       return HttpTextResponse('ERROR: Already have current content.')
-    content = models.Content(is_uploaded=True, parent=patch)
-    content.put()
-    patch.patched_content = content
-    patch.put()
   else:
-    content = patch.content
+    if patch.content_key:
+      return HttpTextResponse('ERROR: Already have base content.')
+
+  content = models.Content(is_uploaded=True, parent=patch.key)
 
   if form.cleaned_data['file_too_large']:
     content.file_too_large = True
@@ -1419,21 +1141,32 @@ def upload_content(request):
     data = form.get_uploaded_content()
     checksum = md5.new(data).hexdigest()
     if checksum != request.POST.get('checksum'):
-      content.is_bad = True
-      content.put()
       return HttpTextResponse('ERROR: Checksum mismatch.')
-    if patch.is_binary:
+    if form.cleaned_data['is_binary']:
       content.data = data
     else:
       content.text = utils.to_dbtext(utils.unify_linebreaks(data))
     content.checksum = checksum
-  content.put()
-  return HttpTextResponse('OK')
+
+  for try_number in xrange(DB_WRITE_TRIES):
+    try:
+      content.put()
+      _update_patch(
+        patch.key, content.key, form.cleaned_data['is_current'],
+        form.cleaned_data['status'], form.cleaned_data['is_binary'])
+      return HttpTextResponse('OK')
+    except db.TransactionFailedError as err:
+      if not err.message.endswith('Please try again.'):
+        logging.exception(err)
+      # AppEngine datastore cannot write to the same entity group rapidly.
+      time.sleep(DB_WRITE_PAUSE + try_number * random.random())
+
+  return HttpTextResponse('Error: could not store data', status=500)
 
 
-@post_required
-@patchset_required
-@upload_required
+@deco.require_methods('POST')
+@deco.patchset_required
+@deco.upload_required
 def upload_patch(request):
   """/<issue>/upload_patch/<patchset> - Upload patch to patchset.
 
@@ -1445,10 +1178,10 @@ def upload_patch(request):
       request.user = users.User(request.POST.get('user', 'test@example.com'))
     else:
       return HttpTextResponse('Error: Login required', status=401)
-  if request.user != request.issue.owner:
+  if not request.issue.edit_allowed:
     return HttpTextResponse(
         'ERROR: You (%s) don\'t own this issue (%s).' %
-        (request.user, request.issue.key().id()))
+        (request.user, request.issue.key.id()))
   form = UploadPatchForm(request.POST, request.FILES)
   if not form.is_valid():
     return HttpTextResponse(
@@ -1458,23 +1191,18 @@ def upload_patch(request):
     return HttpTextResponse(
         'ERROR: Can\'t upload patches to patchset with data.')
   text = utils.to_dbtext(utils.unify_linebreaks(form.get_uploaded_patch()))
-  patch = models.Patch(patchset=patchset,
-                       text=text,
-                       filename=form.cleaned_data['filename'], parent=patchset)
+  patch = models.Patch(
+    patchset_key=patchset.key, text=text,
+    filename=form.cleaned_data['filename'], parent=patchset.key)
   patch.put()
-  if form.cleaned_data.get('content_upload'):
-    content = models.Content(is_uploaded=True, parent=patch)
-    content.put()
-    patch.content = content
-    patch.put()
 
-  msg = 'OK\n' + str(patch.key().id())
+  msg = 'OK\n' + str(patch.key.id())
   return HttpTextResponse(msg)
 
 
-@post_required
-@issue_owner_required
-@upload_required
+@deco.require_methods('POST')
+@deco.issue_editor_required
+@deco.upload_required
 def upload_complete(request, patchset_id=None):
   """/<issue>/upload_complete/<patchset> - Patchset upload is complete.
      /<issue>/upload_complete/ - used when no base files are uploaded.
@@ -1486,42 +1214,41 @@ def upload_complete(request, patchset_id=None):
   """
   if patchset_id is not None:
     patchset = models.PatchSet.get_by_id(int(patchset_id),
-                                         parent=request.issue)
+                                         parent=request.issue.key)
     if patchset is None:
       return HttpTextResponse(
           'No patch set exists with that id (%s)' % patchset_id, status=403)
     # Add delta calculation task.
-    taskqueue.add(url=reverse(calculate_delta),
-                  params={'key': str(patchset.key())},
+    # TODO(jrobbins): If this task has transient failures, consider using cron.
+    taskqueue.add(url=reverse(task_calculate_delta),
+                  params={'key': patchset.key.urlsafe()},
                   queue_name='deltacalculation')
   else:
     patchset = None
   # Check for completeness
   errors = []
-  if request.issue.local_base and patchset is not None:
-    query = patchset.patch_set.filter('is_binary =', False)
-    query = query.filter('status =', None)  # all uploaded file have a status
+  if patchset is not None:
+    query = models.Patch.query(
+        models.Patch.is_binary == False, models.Patch.status == None,
+        ancestor=patchset.key)
+    # All uploaded files have a status, any with status==None are missing.
     if query.count() > 0:
       errors.append('Base files missing.')
+
+  if errors:
+    msg = ('The following errors occured:\n%s\n'
+           'Try to upload the changeset again.' % '\n'.join(errors))
+    logging.error('Returning error:\n %s', msg)
+    return HttpTextResponse(msg, status=500)
+
   # Create (and send) a message if needed.
   if request.POST.get('send_mail') == 'yes' or request.POST.get('message'):
     msg = _make_message(request, request.issue, request.POST.get('message', ''),
                         send_mail=(request.POST.get('send_mail', '') == 'yes'))
+    request.issue.put()
     msg.put()
-    _notify_issue(request, request.issue, 'Mailed')
-  if errors:
-    msg = ('The following errors occured:\n%s\n'
-           'Try to upload the changeset again.'
-           % '\n'.join(errors))
-    status = 500
-  else:
-    msg = 'OK'
-    status = 200
-  return HttpTextResponse(msg, status=status)
 
-
-class EmptyPatchSet(Exception):
-  """Exception used inside _make_new() to break out of the transaction."""
+  return HttpTextResponse('OK')
 
 
 def _make_new(request, form):
@@ -1532,6 +1259,10 @@ def _make_new(request, form):
   Returns (Issue, PatchSet) or (None, None).
   """
   if not form.is_valid():
+    return (None, None)
+  account = models.Account.get_account_for_user(request.user)
+  if account.blocked:
+    # Early exit for blocked accounts.
     return (None, None)
 
   data_url = _get_data_url(form)
@@ -1551,43 +1282,53 @@ def _make_new(request, form):
   if base is None:
     return (None, None)
 
-  def txn():
-    issue = models.Issue(subject=form.cleaned_data['subject'],
-                         description=form.cleaned_data['description'],
-                         base=base,
-                         repo_guid=form.cleaned_data.get('repo_guid', None),
-                         reviewers=reviewers,
-                         cc=cc,
-                         private=form.cleaned_data.get('private', False),
-                         n_comments=0)
-    issue.put()
+  first_issue_id, _ = models.Issue.allocate_ids(1)
+  issue_key = ndb.Key(models.Issue, first_issue_id)
 
-    patchset = models.PatchSet(issue=issue, data=data, url=url, parent=issue)
-    patchset.put()
+  issue = models.Issue(subject=form.cleaned_data['subject'],
+                       description=form.cleaned_data['description'],
+                       project=form.cleaned_data['project'],
+                       base=base,
+                       repo_guid=form.cleaned_data.get('repo_guid', None),
+                       reviewers=reviewers,
+                       cc=cc,
+                       private=form.cleaned_data.get('private', False),
+                       n_comments=0,
+                       key=issue_key)
+  issue.put()
 
-    if not separate_patches:
+  first_ps_id, _ = models.PatchSet.allocate_ids(1, parent=issue.key)
+  ps_key = ndb.Key(models.PatchSet, first_ps_id, parent=issue.key)
+  patchset = models.PatchSet(issue_key=issue.key, data=data, url=url, key=ps_key)
+  patchset.put()
+
+  if not separate_patches:
+    try:
       patches = engine.ParsePatchSet(patchset)
-      if not patches:
-        raise EmptyPatchSet  # Abort the transaction
-      db.put(patches)
-    return issue, patchset
+    except:
+      # catch all exceptions happening in engine.ParsePatchSet,
+      # engine.SplitPatch. With malformed diffs a variety of exceptions could
+      # happen there.
+      logging.exception('Exception during patch parsing')
+      patches = []
+    if not patches:
+      patchset.key.delete()
+      issue.key.delete()
+      errkey = url and 'url' or 'data'
+      form.errors[errkey] = ['Patch set contains no recognizable patches']
+      return (None, None)
 
-  try:
-    issue, patchset = db.run_in_transaction(txn)
-  except EmptyPatchSet:
-    errkey = url and 'url' or 'data'
-    form.errors[errkey] = ['Patch set contains no recognizable patches']
-    return (None, None)
+    ndb.put_multi(patches)
 
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, '', '', True)
+    issue.put()
     msg.put()
-    _notify_issue(request, issue, 'Created')
   return (issue, patchset)
 
 
 def _get_data_url(form):
-  """Helper for _make_new() above and add() below.
+  """Helper for _make_new().
 
   Args:
     form: Django form object.
@@ -1622,8 +1363,8 @@ def _get_data_url(form):
     url = None
   elif url:
     try:
-      fetch_result = urlfetch.fetch(url)
-    except Exception, err:
+      fetch_result = urlfetch.fetch(url, validate_certificate=True)
+    except Exception as err:
       form.errors['url'] = [str(err)]
       return None
     if fetch_result.status_code != 200:
@@ -1634,43 +1375,39 @@ def _get_data_url(form):
   return data, url, separate_patches
 
 
-@post_required
-@issue_owner_required
-@xsrf_required
-def add(request):
-  """/<issue>/add - Add a new PatchSet to an existing Issue."""
-  issue = request.issue
-  form = AddForm(request.POST, request.FILES)
-  if not _add_patchset_from_form(request, issue, form):
-    return show(request, issue.key().id(), form)
-  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
-
-
 def _add_patchset_from_form(request, issue, form, message_key='message',
                             emails_add_only=False):
-  """Helper for add() and upload()."""
-  # TODO(guido): use a transaction like in _make_new(); may be share more code?
+  """Helper for upload()."""
   if form.is_valid():
     data_url = _get_data_url(form)
   if not form.is_valid():
     return None
-  if request.user != issue.owner:
+  account = models.Account.get_account_for_user(request.user)
+  if account.blocked:
+    return None
+  if not issue.edit_allowed:
     # This check is done at each call site but check again as a safety measure.
     return None
   data, url, separate_patches = data_url
   message = form.cleaned_data[message_key]
-  patchset = models.PatchSet(issue=issue, message=message, data=data, url=url,
-                             parent=issue)
+  first_id, _ = models.PatchSet.allocate_ids(1, parent=issue.key)
+  ps_key = ndb.Key(models.PatchSet, first_id, parent=issue.key)
+  patchset = models.PatchSet(
+    issue_key=issue.key, message=message, data=data, url=url, key=ps_key)
   patchset.put()
 
   if not separate_patches:
-    patches = engine.ParsePatchSet(patchset)
+    try:
+      patches = engine.ParsePatchSet(patchset)
+    except:
+      logging.exception('Exception during patchset parsing')
+      patches = []
     if not patches:
-      patchset.delete()
+      patchset.key.delete()
       errkey = url and 'url' or 'data'
       form.errors[errkey] = ['Patch set contains no recognizable patches']
       return None
-    db.put(patches)
+    ndb.put_multi(patches)
 
   if emails_add_only:
     emails = _get_emails(form, 'reviewers')
@@ -1685,12 +1422,13 @@ def _add_patchset_from_form(request, issue, form, message_key='message',
   else:
     issue.reviewers = _get_emails(form, 'reviewers')
     issue.cc = _get_emails(form, 'cc')
+  issue.calculate_updates_for()
   issue.put()
 
   if form.cleaned_data.get('send_mail'):
     msg = _make_message(request, issue, message, '', True)
+    issue.put()
     msg.put()
-    _notify_issue(request, issue, 'Updated')
   return patchset
 
 
@@ -1711,199 +1449,34 @@ def _get_emails_from_raw(raw_emails, form=None, label=None):
           account = models.Account.get_account_for_nickname(email)
           if account is None:
             raise db.BadValueError('Unknown user: %s' % email)
-          db_email = db.Email(account.user.email().lower())
+          db_email = account.user.email().lower()
         elif email.count('@') != 1:
           raise db.BadValueError('Invalid email address: %s' % email)
         else:
           _, tail = email.split('@')
           if '.' not in tail:
             raise db.BadValueError('Invalid email address: %s' % email)
-          db_email = db.Email(email.lower())
-      except db.BadValueError, err:
+          db_email = email.lower()
+      except db.BadValueError as err:
         if form:
           form.errors[label] = [unicode(err)]
         return None
       if db_email not in emails:
         emails.append(db_email)
+  # Remove blocked accounts
+  for account in models.Account.get_multiple_accounts_by_email(emails).values():
+    if account.blocked:
+      try:
+        emails.remove(account.email)
+      except IndexError:
+        pass
   return emails
 
 
-def _calculate_delta(patch, patchset_id, patchsets):
-  """Calculates which files in earlier patchsets this file differs from.
-
-  Args:
-    patch: The file to compare.
-    patchset_id: The file's patchset's key id.
-    patchsets: A list of existing patchsets.
-
-  Returns:
-    A list of patchset ids.
-  """
-  delta = []
-  if patch.no_base_file:
-    return delta
-  for other in patchsets:
-    if patchset_id == other.key().id():
-      break
-    if not hasattr(other, 'parsed_patches'):
-      other.parsed_patches = None  # cache variable for already parsed patches
-    if other.data or other.parsed_patches:
-      # Loading all the Patch entities in every PatchSet takes too long
-      # (DeadLineExceeded) and consumes a lot of memory (MemoryError) so instead
-      # just parse the patchset's data.  Note we can only do this if the
-      # patchset was small enough to fit in the data property.
-      if other.parsed_patches is None:
-        # PatchSet.data is stored as db.Blob (str). Try to convert it
-        # to unicode so that Python doesn't need to do this conversion
-        # when comparing text and patch.text, which is db.Text
-        # (unicode).
-        try:
-          other.parsed_patches = engine.SplitPatch(other.data.decode('utf-8'))
-        except UnicodeDecodeError:  # Fallback to str - unicode comparison.
-          other.parsed_patches = engine.SplitPatch(other.data)
-        other.data = None  # Reduce memory usage.
-      for filename, text in other.parsed_patches:
-        if filename == patch.filename:
-          if text != patch.text:
-            delta.append(other.key().id())
-          break
-      else:
-        # We could not find the file in the previous patchset. It must
-        # be new wrt that patchset.
-        delta.append(other.key().id())
-    else:
-      # other (patchset) is too big to hold all the patches inside itself, so
-      # we need to go to the datastore.  Use the index to see if there's a
-      # patch against our current file in other.
-      query = models.Patch.all()
-      query.filter("filename =", patch.filename)
-      query.filter("patchset =", other.key())
-      other_patches = query.fetch(100)
-      if other_patches and len(other_patches) > 1:
-        logging.info("Got %s patches with the same filename for a patchset",
-                     len(other_patches))
-      for op in other_patches:
-        if op.text != patch.text:
-          delta.append(other.key().id())
-          break
-      else:
-        # We could not find the file in the previous patchset. It must
-        # be new wrt that patchset.
-        delta.append(other.key().id())
-
-  return delta
-
-
-def _get_patchset_info(request, patchset_id):
-  """ Returns a list of patchsets for the issue.
-
-  Args:
-    request: Django Request object.
-    patchset_id: The id of the patchset that the caller is interested in.  This
-      is the one that we generate delta links to if they're not available.  We
-      can't generate for all patchsets because it would take too long on issues
-      with many patchsets.  Passing in None is equivalent to doing it for the
-      last patchset.
-
-  Returns:
-    A 3-tuple of (issue, patchsets, HttpResponse).
-    If HttpResponse is not None, further processing should stop and it should be
-    returned.
-  """
-  issue = request.issue
-  patchsets = list(issue.patchset_set.order('created'))
-  response = None
-  if not patchset_id and patchsets:
-    patchset_id = patchsets[-1].key().id()
-
-  if request.user:
-    drafts = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = TRUE'
-                                     '  AND author = :2',
-                                     issue, request.user))
-  else:
-    drafts = []
-  comments = list(models.Comment.gql('WHERE ANCESTOR IS :1 AND draft = FALSE',
-                                     issue))
-  issue.draft_count = len(drafts)
-  for c in drafts:
-    c.ps_key = c.patch.patchset.key()
-  patchset_id_mapping = {}  # Maps from patchset id to its ordering number.
-  for patchset in patchsets:
-    patchset_id_mapping[patchset.key().id()] = len(patchset_id_mapping) + 1
-    patchset.n_drafts = sum(c.ps_key == patchset.key() for c in drafts)
-    patchset.patches = None
-    patchset.parsed_patches = None
-    if patchset_id == patchset.key().id():
-      patchset.patches = list(patchset.patch_set.order('filename'))
-      try:
-        attempt = _clean_int(request.GET.get('attempt'), 0, 0)
-        if attempt < 0:
-          response = HttpTextResponse('Invalid parameter', status=404)
-          break
-        for patch in patchset.patches:
-          pkey = patch.key()
-          patch._num_comments = sum(c.parent_key() == pkey for c in comments)
-          patch._num_drafts = sum(c.parent_key() == pkey for c in drafts)
-          if not patch.delta_calculated:
-            if attempt > 2:
-              # Too many patchsets or files and we're not able to generate the
-              # delta links.  Instead of giving a 500, try to render the page
-              # without them.
-              patch.delta = []
-            else:
-              # Compare each patch to the same file in earlier patchsets to see
-              # if they differ, so that we can generate the delta patch urls.
-              # We do this once and cache it after.  It's specifically not done
-              # on upload because we're already doing too much processing there.
-              # NOTE: this function will clear out patchset.data to reduce
-              # memory so don't ever call patchset.put() after calling it.
-              patch.delta = _calculate_delta(patch, patchset_id, patchsets)
-              patch.delta_calculated = True
-              # A multi-entity put would be quicker, but it fails when the
-              # patches have content that is large.  App Engine throws
-              # RequestTooLarge.  This way, although not as efficient, allows
-              # multiple refreshes on an issue to get things done, as opposed to
-              # an all-or-nothing approach.
-              patch.put()
-          # Reduce memory usage: if this patchset has lots of added/removed
-          # files (i.e. > 100) then we'll get MemoryError when rendering the
-          # response.  Each Patch entity is using a lot of memory if the files
-          # are large, since it holds the entire contents.  Call num_chunks and
-          # num_drafts first though since they depend on text.
-          # These are 'active' properties and have side-effects when looked up.
-          # pylint: disable=W0104
-          patch.num_chunks
-          patch.num_drafts
-          patch.num_added
-          patch.num_removed
-          patch.text = None
-          patch._lines = None
-          patch.parsed_deltas = []
-          for delta in patch.delta:
-            patch.parsed_deltas.append([patchset_id_mapping[delta], delta])
-      except DeadlineExceededError:
-        logging.exception('DeadlineExceededError in _get_patchset_info')
-        if attempt > 2:
-          response = HttpTextResponse(
-              'DeadlineExceededError - create a new issue.')
-        else:
-          response = HttpResponseRedirect('%s?attempt=%d' %
-                                          (request.path, attempt + 1))
-        break
-  # Reduce memory usage (see above comment).
-  for patchset in patchsets:
-    patchset.parsed_patches = None
-  return issue, patchsets, response
-
-
-@issue_required
-def show(request, form=None):
+@deco.issue_required
+def show(request):
   """/<issue> - Show an issue."""
-  issue, patchsets, response = _get_patchset_info(request, None)
-  if response:
-    return response
-  if not form:
-    form = AddForm(initial={'reviewers': ', '.join(issue.reviewers)})
+  patchsets = request.issue.get_patchset_info(request.user, None)
   last_patchset = first_patch = None
   if patchsets:
     last_patchset = patchsets[-1]
@@ -1911,58 +1484,59 @@ def show(request, form=None):
       first_patch = last_patchset.patches[0]
   messages = []
   has_draft_message = False
-  for msg in issue.message_set.order('date'):
+  for msg in request.issue.messages:
     if not msg.draft:
       messages.append(msg)
     elif msg.draft and request.user and msg.sender == request.user.email():
       has_draft_message = True
   num_patchsets = len(patchsets)
-  return respond(request, 'issue.html',
-                 {'issue': issue, 'patchsets': patchsets,
-                  'messages': messages, 'form': form,
-                  'last_patchset': last_patchset,
-                  'num_patchsets': num_patchsets,
-                  'first_patch': first_patch,
-                  'has_draft_message': has_draft_message,
-                  })
+  return respond(request, 'issue.html', {
+    'first_patch': first_patch,
+    'has_draft_message': has_draft_message,
+    'is_editor': request.issue.edit_allowed,
+    'issue': request.issue,
+    'last_patchset': last_patchset,
+    'messages': messages,
+    'num_patchsets': num_patchsets,
+    'patchsets': patchsets,
+  })
 
 
-@patchset_required
+@deco.patchset_required
 def patchset(request):
   """/patchset/<key> - Returns patchset information."""
-  patchset = request.patchset
-  issue, patchsets, response = _get_patchset_info(request, patchset.key().id())
-  if response:
-    return response
+  patchsets = request.issue.get_patchset_info(
+    request.user, request.patchset.key.id())
   for ps in patchsets:
-    if ps.key().id() == patchset.key().id():
+    if ps.key.id() == request.patchset.key.id():
       patchset = ps
   return respond(request, 'patchset.html',
-                 {'issue': issue,
-                  'patchset': patchset,
+                 {'issue': request.issue,
+                  'patchset': request.patchset,
                   'patchsets': patchsets,
+                  'is_editor': request.issue.edit_allowed,
                   })
 
 
-@login_required
+@deco.login_required
 def account(request):
   """/account/?q=blah&limit=10&timestamp=blah - Used for autocomplete."""
-  def searchAccounts(property, domain, added, response):
-    query = request.GET.get('q').lower()
+  def searchAccounts(prop, domain, added, response):
+    prefix = request.GET.get('q').lower()
     limit = _clean_int(request.GET.get('limit'), 10, 10, 100)
 
-    accounts = models.Account.all()
-    accounts.filter("lower_%s >= " % property, query)
-    accounts.filter("lower_%s < " % property, query + u"\ufffd")
-    accounts.order("lower_%s" % property)
-    for account in accounts:
-      if account.key() in added:
+    accounts_query = models.Account.query(
+        prop >= prefix, prop < prefix + u"\ufffd").order(prop)
+    for account in accounts_query:
+      if account.blocked:
+        continue
+      if account.key in added:
         continue
       if domain and not account.email.endswith(domain):
         continue
       if len(added) >= limit:
         break
-      added.add(account.key())
+      added.add(account.key)
       response += '%s (%s)\n' % (account.email, account.nickname)
     return added, response
 
@@ -1972,24 +1546,24 @@ def account(request):
   if domain != 'gmail.com':
     # 'gmail.com' is the value AUTH_DOMAIN is set to if the app is running
     # on appspot.com and shouldn't prioritize the custom domain.
-    added, response = searchAccounts("email", domain, added, response)
-    added, response = searchAccounts("nickname", domain, added, response)
-  added, response = searchAccounts("nickname", "", added, response)
-  added, response = searchAccounts("email", "", added, response)
+    added, response = searchAccounts(
+      models.Account.lower_email, domain, added, response)
+    added, response = searchAccounts(
+      models.Account.lower_nickname, domain, added, response)
+
+  added, response = searchAccounts(
+    models.Account.lower_nickname, "", added, response)
+  added, response = searchAccounts(
+    models.Account.lower_email, "", added, response)
   return HttpTextResponse(response)
 
 
-@issue_editor_required
-@xsrf_required
+@deco.issue_editor_required
+@deco.xsrf_required
 def edit(request):
   """/<issue>/edit - Edit an issue."""
   issue = request.issue
   base = issue.base
-
-  if issue.local_base:
-    form_cls = EditLocalBaseForm
-  else:
-    form_cls = EditForm
 
   if request.method != 'POST':
     reviewers = [models.Account.get_nickname_for_email(reviewer,
@@ -1997,7 +1571,7 @@ def edit(request):
                  for reviewer in issue.reviewers]
     ccs = [models.Account.get_nickname_for_email(cc, default=cc)
            for cc in issue.cc]
-    form = form_cls(initial={'subject': issue.subject,
+    form = EditLocalBaseForm(initial={'subject': issue.subject,
                              'description': issue.description,
                              'base': base,
                              'reviewers': ', '.join(reviewers),
@@ -2005,22 +1579,20 @@ def edit(request):
                              'closed': issue.closed,
                              'private': issue.private,
                              })
-    if not issue.local_base:
-      form.set_branch_choices(base)
-    return respond(request, 'edit.html', {'issue': issue, 'form': form})
+    return respond(request, 'edit.html', {
+        'issue': issue,
+        'form': form,
+        'offer_delete': (issue.owner == request.user
+                         or auth_utils.is_current_user_admin())
+        })
 
-  form = form_cls(request.POST)
-  if not issue.local_base:
-    form.set_branch_choices()
+  form = EditLocalBaseForm(request.POST)
 
   if form.is_valid():
     reviewers = _get_emails(form, 'reviewers')
 
   if form.is_valid():
     cc = _get_emails(form, 'cc')
-
-  if form.is_valid() and not issue.local_base:
-    base = form.get_base()
 
   if not form.is_valid():
     return respond(request, 'edit.html', {'issue': issue, 'form': form})
@@ -2036,111 +1608,72 @@ def edit(request):
   issue.reviewers = reviewers
   issue.cc = cc
   if base_changed:
-    for patchset in issue.patchset_set:
-      db.run_in_transaction(_delete_cached_contents, list(patchset.patch_set))
+    for patchset in issue.patchsets:
+      ndb.transaction(lambda: _delete_cached_contents(list(patchset.patches)))
+  issue.calculate_updates_for()
   issue.put()
-  if issue.closed == was_closed:
-    message = 'Edited'
-  elif issue.closed:
-    message = 'Closed'
-  else:
-    message = 'Reopened'
-  _notify_issue(request, issue, message)
 
-  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
+  return HttpResponseRedirect(reverse(show, args=[issue.key.id()]))
 
 
-def _delete_cached_contents(patch_set):
+def _delete_cached_contents(patch_list):
   """Transactional helper for edit() to delete cached contents."""
   # TODO(guido): No need to do this in a transaction.
   patches = []
-  contents = []
-  for patch in patch_set:
+  content_keys = []
+  for patch in patch_list:
     try:
-      content = patch.content
+      content_key = patch.content_key
     except db.Error:
-      content = None
+      content_key = None
     try:
-      patched_content = patch.patched_content
+      patched_content_key = patch.patched_content_key
     except db.Error:
-      patched_content = None
-    if content is not None:
-      contents.append(content)
-    if patched_content is not None:
-      contents.append(patched_content)
-    patch.content = None
-    patch.patched_content = None
+      patched_content_key = None
+    if content_key is not None:
+      content_keys.append(content_key)
+    if patched_content_key is not None:
+      content_keys.append(patched_content_key)
+    patch.content_key = None
+    patch.patched_content_key = None
     patches.append(patch)
-  if contents:
-    logging.info("Deleting %d contents", len(contents))
-    db.delete(contents)
+  if content_keys:
+    logging.info("Deleting %d contents", len(content_keys))
+    ndb.delete_multi(content_keys)
   if patches:
     logging.info("Updating %d patches", len(patches))
-    db.put(patches)
+    ndb.put_multi(patches)
 
 
-@post_required
-@issue_owner_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.issue_editor_required
+@deco.xsrf_required
 def delete(request):
   """/<issue>/delete - Delete an issue.  There is no way back."""
   issue = request.issue
   tbd = [issue]
   for cls in [models.PatchSet, models.Patch, models.Comment,
               models.Message, models.Content]:
-    tbd += cls.gql('WHERE ANCESTOR IS :1', issue)
-  db.delete(tbd)
-  _notify_issue(request, issue, 'Deleted')
+    tbd += cls.query(ancestor=issue.key)
+  ndb.delete_multi(entity.key for entity in tbd)
   return HttpResponseRedirect(reverse(mine))
 
 
-@post_required
-@patchset_owner_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.patchset_editor_required
+@deco.xsrf_required
 def delete_patchset(request):
   """/<issue>/patch/<patchset>/delete - Delete a patchset.
 
   There is no way back.
   """
-  issue = request.issue
-  ps_delete = request.patchset
-  ps_id = ps_delete.key().id()
-  patchsets_after = issue.patchset_set.filter('created >', ps_delete.created)
-  patches = []
-  for patchset in patchsets_after:
-    for patch in patchset.patch_set:
-      if patch.delta_calculated:
-        if ps_id in patch.delta:
-          patches.append(patch)
-  db.run_in_transaction(_patchset_delete, ps_delete, patches)
-  _notify_issue(request, issue, 'Patchset deleted')
-  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
+  request.patchset.nuke()
+  return HttpResponseRedirect(reverse(show, args=[request.issue.key.id()]))
 
 
-def _patchset_delete(ps_delete, patches):
-  """Transactional helper for delete_patchset.
-
-  Args:
-    ps_delete: The patchset to be deleted.
-    patches: Patches that have delta against patches of ps_delete.
-
-  """
-  patchset_id = ps_delete.key().id()
-  tbp = []
-  for patch in patches:
-    patch.delta.remove(patchset_id)
-    tbp.append(patch)
-  if tbp:
-    db.put(tbp)
-  tbd = [ps_delete]
-  for cls in [models.Patch, models.Comment]:
-    tbd += cls.gql('WHERE ANCESTOR IS :1', ps_delete)
-  db.delete(tbd)
-
-
-@post_required
-@issue_editor_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.issue_editor_required
+@deco.xsrf_required
 def close(request):
   """/<issue>/close - Close an issue."""
   issue = request.issue
@@ -2150,36 +1683,36 @@ def close(request):
     if new_description:
       issue.description = new_description
   issue.put()
-  _notify_issue(request, issue, 'Closed')
   return HttpTextResponse('Closed')
 
 
-@post_required
-@issue_required
-@upload_required
+@deco.require_methods('POST')
+@deco.issue_required
+@deco.upload_required
 def mailissue(request):
   """/<issue>/mail - Send mail for an issue.
 
   This URL is deprecated and shouldn't be used anymore.  However,
   older versions of upload.py or wrapper scripts still may use it.
   """
-  if request.issue.owner != request.user:
+  if not request.issue.edit_allowed:
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
   issue = request.issue
   msg = _make_message(request, issue, '', '', True)
+  issue.put()
   msg.put()
-  _notify_issue(request, issue, 'Mailed')
 
   return HttpTextResponse('OK')
 
 
-@patchset_required
+@deco.access_control_allow_origin_star
+@deco.patchset_required
 def download(request):
   """/download/<issue>_<patchset>.diff - Download a patch set."""
   if request.patchset.data is None:
     return HttpTextResponse(
-        'Patch set (%s) is too large.' % request.patchset.key().id(),
+        'Patch set (%s) is too large.' % request.patchset.key.id(),
         status=404)
   padding = ''
   user_agent = request.META.get('HTTP_USER_AGENT')
@@ -2189,8 +1722,65 @@ def download(request):
   return HttpTextResponse(padding + request.patchset.data)
 
 
-@issue_required
-@upload_required
+@deco.patchset_required
+def tarball(request):
+  """/tarball/<issue>/<patchset>/[lr] - Returns a .tar.bz2 file
+  containing a/ and b/ trees of the complete files for the entire patchset."""
+
+  patches = (models.Patch
+             .query(models.Patch.patchset_key == request.patchset.key)
+             .order(models.Patch.filename)
+             .fetch(1000))
+
+  temp = tempfile.TemporaryFile()
+  tar = tarfile.open(mode="w|bz2", fileobj=temp)
+
+  def add_entry(prefix, content):
+    data = content.data
+    if data is None:
+      data = content.text
+      if isinstance(data, unicode):
+        data = data.encode("utf-8", "replace")
+    if data is None:
+      return
+    info = tarfile.TarInfo(prefix + patch.filename)
+    info.size = len(data)
+    # TODO(adonovan): set SYMTYPE/0755 when Rietveld supports symlinks.
+    info.type = tarfile.REGTYPE
+    info.mode = 0644
+    # datetime->time_t
+    delta = request.patchset.modified - datetime.datetime(1970, 1, 1)
+    info.mtime = int(delta.days * 86400 + delta.seconds)
+    tar.addfile(info, fileobj=StringIO(data))
+
+  for patch in patches:
+    if not patch.no_base_file:
+      try:
+        add_entry('a/', patch.get_content())  # before
+      except FetchError:  # I/O problem?
+        logging.exception('tarball: patch(%s, %s).get_content failed' %
+                          (patch.key.id(), patch.filename))
+    try:
+      add_entry('b/', patch.get_patched_content())  # after
+    except FetchError:  # file deletion?  I/O problem?
+      logging.exception('tarball: patch(%s, %s).get_patched_content failed' %
+                        (patch.key.id(), patch.filename))
+
+  tar.close()
+  temp.flush()
+
+  wrapper = FileWrapper(temp)
+  response = HttpResponse(wrapper, mimetype='application/x-gtar')
+  response['Content-Disposition'] = (
+      'attachment; filename=patch%s_%s.tar.bz2' % (request.issue.key.id(),
+                                                   request.patchset.key.id()))
+  response['Content-Length'] = temp.tell()
+  temp.seek(0)
+  return response
+
+
+@deco.issue_required
+@deco.upload_required
 def description(request):
   """/<issue>/description - Gets/Sets an issue's description.
 
@@ -2199,19 +1789,18 @@ def description(request):
   if request.method != 'POST':
     description = request.issue.description or ""
     return HttpTextResponse(description)
-  if not request.issue.user_can_edit(request.user):
+  if not request.issue.edit_allowed:
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
   issue = request.issue
   issue.description = request.POST.get('description')
   issue.put()
-  _notify_issue(request, issue, 'Changed')
   return HttpTextResponse('')
 
 
-@issue_required
-@upload_required
-@json_response
+@deco.issue_required
+@deco.upload_required
+@deco.json_response
 def fields(request):
   """/<issue>/fields - Gets/Sets fields on the issue.
 
@@ -2230,23 +1819,23 @@ def fields(request):
       response['subject'] = request.issue.subject
     return response
 
-  if not request.issue.user_can_edit(request.user):
+  if not request.issue.edit_allowed:
     if not IS_DEV:
       return HttpTextResponse('Login required', status=401)
-  fields = simplejson.loads(request.POST.get('fields'))
+  fields = json.loads(request.POST.get('fields'))
   issue = request.issue
   if 'description' in fields:
     issue.description = fields['description']
   if 'reviewers' in fields:
     issue.reviewers = _get_emails_from_raw(fields['reviewers'])
+    issue.calculate_updates_for()
   if 'subject' in fields:
     issue.subject = fields['subject']
   issue.put()
-  _notify_issue(request, issue, 'Changed')
   return HttpTextResponse('')
 
 
-@patch_required
+@deco.patch_required
 def patch(request):
   """/<issue>/patch/<patchset>/<patch> - View a raw patch."""
   return patch_helper(request)
@@ -2284,7 +1873,8 @@ def patch_helper(request, nav_type='patch'):
                   })
 
 
-@image_required
+@deco.access_control_allow_origin_star
+@deco.image_required
 def image(request):
   """/<issue>/content/<patchset>/<patch>/<content> - Return patch's content."""
   response = HttpResponse(request.content.data, content_type=request.mime_type)
@@ -2295,7 +1885,8 @@ def image(request):
   return response
 
 
-@patch_required
+@deco.access_control_allow_origin_star
+@deco.patch_required
 def download_patch(request):
   """/download/issue<issue>_<patchset>_<patch>.diff - Download patch."""
   return HttpTextResponse(request.patch.text)
@@ -2311,34 +1902,37 @@ def _issue_as_dict(issue, messages, request=None):
     'closed': issue.closed,
     'cc': issue.cc,
     'reviewers': issue.reviewers,
-    'patchsets': [p.key().id() for p in issue.patchset_set.order('created')],
+    'patchsets': [p.key.id() for p in issue.patchsets],
     'description': issue.description,
     'subject': issue.subject,
-    'issue': issue.key().id(),
+    'project': issue.project,
+    'issue': issue.key.id(),
     'base_url': issue.base,
     'private': issue.private,
   }
   if messages:
-    values['messages'] = [
-      {
+    values['messages'] = sorted(
+      ({
         'sender': m.sender,
         'recipients': m.recipients,
         'date': str(m.date),
         'text': m.text,
         'approval': m.approval,
+        'disapproval': m.disapproval,
       }
-      for m in models.Message.gql('WHERE ANCESTOR IS :1', issue)
-    ]
+      for m in models.Message.query(ancestor=issue.key)),
+      key=lambda x: x['date'])
   return values
 
 
-def _patchset_as_dict(patchset, request=None):
+def _patchset_as_dict(patchset, comments, request):
   """Converts a patchset into a dict."""
+  issue = patchset.issue_key.get()
   values = {
-    'patchset': patchset.key().id(),
-    'issue': patchset.issue.key().id(),
-    'owner': library.get_nickname(patchset.issue.owner, True, request),
-    'owner_email': patchset.issue.owner.email(),
+    'patchset': patchset.key.id(),
+    'issue': issue.key.id(),
+    'owner': library.get_nickname(issue.owner, True, request),
+    'owner_email': issue.owner.email(),
     'message': patchset.message,
     'url': patchset.url,
     'created': str(patchset.created),
@@ -2346,12 +1940,12 @@ def _patchset_as_dict(patchset, request=None):
     'num_comments': patchset.num_comments,
     'files': {},
   }
-  for patch in models.Patch.gql("WHERE patchset = :1", patchset):
+  for patch in models.Patch.query(models.Patch.patchset_key == patchset.key):
     # num_comments and num_drafts are left out for performance reason:
     # they cause a datastore query on first access. They could be added
     # optionally if the need ever arises.
     values['files'][patch.filename] = {
-        'id': patch.key().id(),
+        'id': patch.key.id(),
         'is_binary': patch.is_binary,
         'no_base_file': patch.no_base_file,
         'num_added': patch.num_added,
@@ -2360,26 +1954,49 @@ def _patchset_as_dict(patchset, request=None):
         'status': patch.status,
         'property_changes': '\n'.join(patch.property_changes),
     }
+    if comments:
+      visible_comments = []
+      requester_email = request.user.email() if request.user else 'no email'
+      query = (models.Comment
+               .query(models.Comment.patch_key == patch.key)
+               .order(models.Comment.date))
+      for c in query:
+        if not c.draft or requester_email == c.author.email():
+          visible_comments.append({
+              'author': library.get_nickname(c.author, True, request),
+              'author_email': c.author.email(),
+              'date': str(c.date),
+              'lineno': c.lineno,
+              'text': c.text,
+              'left': c.left,
+              'draft': c.draft,
+              'message_id': c.message_id,
+              })
+
+      values['files'][patch.filename]['messages'] = visible_comments
+
   return values
 
 
-@issue_required
-@json_response
+@deco.access_control_allow_origin_star
+@deco.issue_required
+@deco.json_response
 def api_issue(request):
   """/api/<issue> - Gets issue's data as a JSON-encoded dictionary."""
-  messages = ('messages' in request.GET and
-      request.GET.get('messages').lower() == 'true')
+  messages = request.GET.get('messages', 'false').lower() == 'true'
   values = _issue_as_dict(request.issue, messages, request)
   return values
 
 
-@patchset_required
-@json_response
+@deco.access_control_allow_origin_star
+@deco.patchset_required
+@deco.json_response
 def api_patchset(request):
   """/api/<issue>/<patchset> - Gets an issue's patchset data as a JSON-encoded
   dictionary.
   """
-  values = _patchset_as_dict(request.patchset, request)
+  comments = request.GET.get('comments', 'false').lower() == 'true'
+  values = _patchset_as_dict(request.patchset, comments, request)
   return values
 
 
@@ -2418,7 +2035,7 @@ def _get_column_width_for_user(request):
   return column_width
 
 
-@patch_filename_required
+@deco.patch_filename_required
 def diff(request):
   """/<issue>/diff/<patchset>/<patch> - View a patch as a side-by-side diff"""
   if request.patch.no_base_file:
@@ -2429,7 +2046,7 @@ def diff(request):
   patchset = request.patchset
   patch = request.patch
 
-  patchsets = list(request.issue.patchset_set.order('created'))
+  patchsets = list(request.issue.patchsets)
 
   context = _get_context_for_user(request)
   column_width = _get_column_width_for_user(request)
@@ -2438,7 +2055,7 @@ def diff(request):
   else:
     try:
       rows = _get_diff_table_rows(request, patch, context, column_width)
-    except FetchError, err:
+    except FetchError as err:
       return HttpTextResponse(str(err), status=404)
 
   _add_next_prev(patchset, patch)
@@ -2482,15 +2099,15 @@ def _get_diff_table_rows(request, patch, context, column_width):
       content.text = None
       content.put()
     else:
-      content.delete()
-      request.patch.content = None
+      content.key.delete()
+      request.patch.content_key = None
       request.patch.put()
 
   return rows
 
 
-@patch_required
-@json_response
+@deco.patch_required
+@deco.json_response
 def diff_skipped_lines(request, id_before, id_after, where, column_width):
   """/<issue>/diff/<patchset>/<patch> - Returns a fragment of skipped lines.
 
@@ -2511,7 +2128,7 @@ def diff_skipped_lines(request, id_before, id_after, where, column_width):
 
   try:
     rows = _get_diff_table_rows(request, patch, None, column_width)
-  except FetchError, err:
+  except FetchError as err:
     return HttpTextResponse('Error: %s; please report!' % err, status=500)
   return _get_skipped_lines_response(rows, id_before, id_after, where, context)
 
@@ -2574,32 +2191,34 @@ def _get_skipped_lines_response(rows, id_before, id_after, where, context):
 def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
                     column_width, patch_filename=None):
   """Helper function that returns objects for diff2 views"""
-  ps_left = models.PatchSet.get_by_id(int(ps_left_id), parent=request.issue)
+  ps_left = models.PatchSet.get_by_id(int(ps_left_id), parent=request.issue.key)
   if ps_left is None:
     return HttpTextResponse(
         'No patch set exists with that id (%s)' % ps_left_id, status=404)
-  ps_left.issue = request.issue
-  ps_right = models.PatchSet.get_by_id(int(ps_right_id), parent=request.issue)
+  ps_left.issue_key = request.issue.key
+  ps_right = models.PatchSet.get_by_id(
+    int(ps_right_id), parent=request.issue.key)
   if ps_right is None:
     return HttpTextResponse(
         'No patch set exists with that id (%s)' % ps_right_id, status=404)
-  ps_right.issue = request.issue
+  ps_right.issue_key = request.issue.key
   if patch_id is not None:
-    patch_right = models.Patch.get_by_id(int(patch_id), parent=ps_right)
+    patch_right = models.Patch.get_by_id(int(patch_id), parent=ps_right.key)
   else:
     patch_right = None
   if patch_right is not None:
-    patch_right.patchset = ps_right
+    patch_right.patchset_key = ps_right.key
     if patch_filename is None:
       patch_filename = patch_right.filename
   # Now find the corresponding patch in ps_left
-  patch_left = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                                ps_left, patch_filename).get()
+  patch_left = models.Patch.query(
+      models.Patch.patchset_key == ps_left.key,
+      models.Patch.filename == patch_filename).get()
 
   if patch_left:
     try:
       new_content_left = patch_left.get_patched_content()
-    except FetchError, err:
+    except FetchError as err:
       return HttpTextResponse(str(err), status=404)
     lines_left = new_content_left.lines
   elif patch_right:
@@ -2610,7 +2229,7 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
   if patch_right:
     try:
       new_content_right = patch_right.get_patched_content()
-    except FetchError, err:
+    except FetchError as err:
       return HttpTextResponse(str(err), status=404)
     lines_right = new_content_right.lines
   elif patch_left:
@@ -2631,21 +2250,23 @@ def _get_diff2_data(request, ps_left_id, ps_right_id, patch_id, context,
               ps_left=ps_left, ps_right=ps_right, rows=rows)
 
 
-@issue_required
+@deco.issue_required
 def diff2(request, ps_left_id, ps_right_id, patch_filename):
   """/<issue>/diff2/... - View the delta between two different patch sets."""
   context = _get_context_for_user(request)
   column_width = _get_column_width_for_user(request)
 
-  ps_right = models.PatchSet.get_by_id(int(ps_right_id), parent=request.issue)
+  ps_right = models.PatchSet.get_by_id(
+    int(ps_right_id), parent=request.issue.key)
   patch_right = None
 
   if ps_right:
-    patch_right = models.Patch.gql('WHERE patchset = :1 AND filename = :2',
-                                   ps_right, patch_filename).get()
+    patch_right = models.Patch.query(
+        models.Patch.patchset_key == ps_right.key,
+        models.Patch.filename == patch_filename).get()
 
   if patch_right:
-    patch_id = patch_right.key().id()
+    patch_id = patch_right.key.id()
   elif patch_filename.isdigit():
     # Perhaps it's an ID that's passed in, based on the old URL scheme.
     patch_id = int(patch_filename)
@@ -2657,7 +2278,7 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
   if isinstance(data, HttpResponse) and data.status_code != 302:
     return data
 
-  patchsets = list(request.issue.patchset_set.order('created'))
+  patchsets = list(request.issue.patchsets)
 
   if data["patch_right"]:
     _add_next_prev2(data["ps_left"], data["ps_right"], data["patch_right"])
@@ -2677,8 +2298,8 @@ def diff2(request, ps_left_id, ps_right_id, patch_filename):
                   })
 
 
-@issue_required
-@json_response
+@deco.issue_required
+@deco.json_response
 def diff2_skipped_lines(request, ps_left_id, ps_right_id, patch_id,
                         id_before, id_after, where, column_width):
   """/<issue>/diff2/... - Returns a fragment of skipped lines"""
@@ -2709,14 +2330,13 @@ def _get_comment_counts(account, patchset):
   """
   # A key-only query won't work because we need to fetch the patch key
   # in the for loop further down.
-  comment_query = models.Comment.all()
-  comment_query.ancestor(patchset)
+  comment_query = models.Comment.query(ancestor=patchset.key)
 
   # Get all comment counts with one query rather than one per patch.
   comments_by_patch = {}
   drafts_by_patch = {}
   for c in comment_query:
-    pkey = models.Comment.patch.get_value_for_datastore(c)
+    pkey = c.patch_key
     if not c.draft:
       comments_by_patch[pkey] = comments_by_patch.setdefault(pkey, 0) + 1
     elif account and c.author == account.user:
@@ -2728,9 +2348,8 @@ def _get_comment_counts(account, patchset):
 def _add_next_prev(patchset, patch):
   """Helper to add .next and .prev attributes to a patch object."""
   patch.prev = patch.next = None
-  patches = models.Patch.all().filter('patchset =', patchset.key()).order(
-      'filename').fetch(1000)
-  patchset.patches = patches  # Required to render the jump to select.
+  patches = list(patchset.patches)
+  patchset.patches_cache = patches  # Required to render the jump to select.
 
   comments_by_patch, drafts_by_patch = _get_comment_counts(
      models.Account.current_user_account, patchset)
@@ -2746,8 +2365,8 @@ def _add_next_prev(patchset, patch):
       found_patch = True
       continue
 
-    p._num_comments = comments_by_patch.get(p.key(), 0)
-    p._num_drafts = drafts_by_patch.get(p.key(), 0)
+    p._num_comments = comments_by_patch.get(p.key, 0)
+    p._num_drafts = drafts_by_patch.get(p.key, 0)
 
     if not found_patch:
       last_patch = p
@@ -2771,9 +2390,8 @@ def _add_next_prev(patchset, patch):
 def _add_next_prev2(ps_left, ps_right, patch_right):
   """Helper to add .next and .prev attributes to a patch object."""
   patch_right.prev = patch_right.next = None
-  patches = list(models.Patch.gql("WHERE patchset = :1 ORDER BY filename",
-                                  ps_right))
-  ps_right.patches = patches  # Required to render the jump to select.
+  patches = list(ps_right.patches)
+  ps_right.patches_cache = patches  # Required to render the jump to select.
 
   n_comments, n_drafts = _get_comment_counts(
     models.Account.current_user_account, ps_right)
@@ -2789,19 +2407,19 @@ def _add_next_prev2(ps_left, ps_right, patch_right):
       found_patch = True
       continue
 
-    p._num_comments = n_comments.get(p.key(), 0)
-    p._num_drafts = n_drafts.get(p.key(), 0)
+    p._num_comments = n_comments.get(p.key, 0)
+    p._num_drafts = n_drafts.get(p.key, 0)
 
     if not found_patch:
       last_patch = p
       if ((p.num_comments > 0 or p.num_drafts > 0) and
-          ps_left.key().id() in p.delta):
+          ps_left.key.id() in p.delta):
         last_patch_with_comment = p
     else:
       if next_patch is None:
         next_patch = p
       if ((p.num_comments > 0 or p.num_drafts > 0) and
-          ps_left.key().id() in p.delta):
+          ps_left.key.id() in p.delta):
         next_patch_with_comment = p
         # safe to stop scanning now because the next with out a comment
         # will already have been filled in by some earlier patch
@@ -2813,7 +2431,82 @@ def _add_next_prev2(ps_left, ps_right, patch_right):
   patch_right.next_with_comment = next_patch_with_comment
 
 
-@post_required
+def _add_or_update_comment(user, issue, patch, lineno, left, text, message_id):
+  comment = None
+  if message_id:
+    comment = models.Comment.get_by_id(message_id, parent=patch.key)
+    if comment is None or not comment.draft or comment.author != user:
+      comment = None
+      message_id = None
+  if not message_id:
+    # Prefix with 'z' to avoid key names starting with digits.
+    message_id = 'z' + binascii.hexlify(_random_bytes(16))
+
+  if not text.rstrip():
+    if comment is not None:
+      assert comment.draft and comment.author == user
+      comment.key.delete()  # Deletion
+      comment = None
+      # Re-query the comment count.
+      models.Account.current_user_account.update_drafts(issue)
+  else:
+    if comment is None:
+      comment = models.Comment(id=message_id, parent=patch.key)
+    comment.patch_key = patch.key
+    comment.lineno = lineno
+    comment.left = left
+    comment.text = text
+    comment.message_id = message_id
+    comment.put()
+    # The actual count doesn't matter, just that there's at least one.
+    models.Account.current_user_account.update_drafts(issue, 1)
+  return comment
+
+
+@deco.login_required
+@deco.patchset_required
+@deco.require_methods('POST')
+@deco.json_response
+def api_draft_comments(request):
+  """/api/<issue>/<patchset>/draft_comments - Store a number of draft
+  comments for a particular issue and patchset.
+
+  This API differs from inline_draft in two ways:
+
+  1) api_draft_comments handles multiple comments at once so that
+     clients can upload draft comments in bulk.
+  2) api_draft_comments returns a response in JSON rather than
+     in HTML, which lets clients process the response programmatically.
+
+  Note: creating or editing draft comments is *not* XSRF-protected,
+  because it is not unusual to come back after hours; the XSRF tokens
+  time out after 1 or 2 hours.  The final submit of the drafts for
+  others to view *is* XSRF-protected.
+  """
+  try:
+    def sanitize(comment):
+      patch = models.Patch.get_by_id(int(comment.patch_id),
+                                     parent=request.patchset.key)
+      assert not patch is None
+      message_id = str(comment.message_id) if message_id in comment else None,
+      return {
+        user: request.user,
+        issue: request.issue,
+        patch: patch,
+        lineno: int(comment.lineno),
+        left: bool(comment.left),
+        text: str(comment.text),
+        message_id: message_id,
+      }
+    return [
+      {message_id: _add_or_update_comment(**comment).message_id}
+      for comment in map(sanitize, json.load(request.data))
+    ]
+  except Exception as err:
+    return HttpTextResponse('An error occurred.', status=500)
+
+
+@deco.require_methods('POST')
 def inline_draft(request):
   """/inline_draft - Ajax handler to submit an in-line draft comment.
 
@@ -2827,7 +2520,7 @@ def inline_draft(request):
   """
   try:
     return _inline_draft(request)
-  except Exception, err:
+  except Exception as err:
     logging.exception('Exception in inline_draft processing:')
     # TODO(guido): return some kind of error instead?
     # Return HttpResponse for now because the JS part expects
@@ -2854,52 +2547,29 @@ def _inline_draft(request):
   assert issue  # XXX
   patchset_id = int(request.POST.get('patchset') or
                     request.POST[side == 'a' and 'ps_left' or 'ps_right'])
-  patchset = models.PatchSet.get_by_id(int(patchset_id), parent=issue)
+  patchset = models.PatchSet.get_by_id(int(patchset_id), parent=issue.key)
   assert patchset  # XXX
   patch_id = int(request.POST.get('patch') or
                  request.POST[side == 'a' and 'patch_left' or 'patch_right'])
-  patch = models.Patch.get_by_id(int(patch_id), parent=patchset)
+  patch = models.Patch.get_by_id(int(patch_id), parent=patchset.key)
   assert patch  # XXX
   text = request.POST.get('text')
   lineno = int(request.POST['lineno'])
   message_id = request.POST.get('message_id')
-  comment = None
-  if message_id:
-    comment = models.Comment.get_by_key_name(message_id, parent=patch)
-    if comment is None or not comment.draft or comment.author != request.user:
-      comment = None
-      message_id = None
-  if not message_id:
-    # Prefix with 'z' to avoid key names starting with digits.
-    message_id = 'z' + binascii.hexlify(_random_bytes(16))
+  comment = _add_or_update_comment(user=request.user, issue=issue, patch=patch,
+                                   lineno=lineno, left=left,
+                                   text=text, message_id=message_id)
+  issue.calculate_draft_count_by_user()
+  issue_fut = issue.put_async()
 
-  if not text.rstrip():
-    if comment is not None:
-      assert comment.draft and comment.author == request.user
-      comment.delete()  # Deletion
-      comment = None
-      # Re-query the comment count.
-      models.Account.current_user_account.update_drafts(issue)
-  else:
-    if comment is None:
-      comment = models.Comment(key_name=message_id, parent=patch)
-    comment.patch = patch
-    comment.lineno = lineno
-    comment.left = left
-    comment.text = db.Text(text)
-    comment.message_id = message_id
-    comment.put()
-    # The actual count doesn't matter, just that there's at least one.
-    models.Account.current_user_account.update_drafts(issue, 1)
-
-  query = models.Comment.gql(
-      'WHERE patch = :patch AND lineno = :lineno AND left = :left '
-      'ORDER BY date',
-      patch=patch, lineno=lineno, left=left)
+  query = models.Comment.query(
+      models.Comment.patch_key == patch.key, models.Comment.lineno == lineno,
+      models.Comment.left == left).order(models.Comment.date)
   comments = list(c for c in query if not c.draft or c.author == request.user)
   if comment is not None and comment.author is None:
     # Show anonymous draft even though we don't save it
     comments.append(comment)
+  issue_fut.get_result()
   if not comments:
     return HttpTextResponse(' ')
   for c in comments:
@@ -2931,10 +2601,10 @@ def _get_affected_files(issue, full_diff=False):
   files = []
   modified_count = 0
   diff = ''
-  patchsets = list(issue.patchset_set.order('created'))
+  patchsets = list(issue.patchsets)
   if len(patchsets):
     patchset = patchsets[-1]
-    for patch in patchset.patch_set.order('filename'):
+    for patch in patchset.patches:
       file_str = ''
       if patch.status:
         file_str += patch.status + ' '
@@ -2959,35 +2629,38 @@ def _get_mail_template(request, issue, full_diff=False):
   context = {}
   template = 'mails/comment.txt'
   if request.user == issue.owner:
-    if db.GqlQuery('SELECT * FROM Message WHERE ANCESTOR IS :1 AND sender = :2',
-                   issue, db.Email(request.user.email())).count(1) == 0:
+    query = models.Message.query(
+        models.Message.sender == request.user.email(), ancestor=issue.key)
+    if query.count(1) == 0:
       template = 'mails/review.txt'
       files, patch = _get_affected_files(issue, full_diff)
       context.update({'files': files, 'patch': patch, 'base': issue.base})
   return template, context
 
 
-@login_required
-@issue_required
-@xsrf_required
+@deco.login_required
+@deco.issue_required
+@deco.xsrf_required
 def publish(request):
   """ /<issue>/publish - Publish draft comments and send mail."""
   issue = request.issue
-  if request.user == issue.owner:
+  if issue.edit_allowed:
     form_class = PublishForm
   else:
     form_class = MiniPublishForm
   draft_message = None
   if not request.POST.get('message_only', None):
-    query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
-                                'AND draft = TRUE'), issue,
-                               request.user.email())
+    query = models.Message.query(
+        models.Message.issue_key == issue.key,
+        models.Message.sender == request.user.email(),
+        models.Message.draft == True)
     draft_message = query.get()
   if request.method != 'POST':
     reviewers = issue.reviewers[:]
     cc = issue.cc[:]
-    if request.user != issue.owner and (request.user.email()
-                                        not in issue.reviewers):
+    if (request.user != issue.owner and
+        request.user.email() not in issue.reviewers and
+        not issue.is_collaborator(request.user)):
       reviewers.append(request.user.email())
       if request.user.email() in cc:
         cc.remove(request.user.email())
@@ -3013,16 +2686,27 @@ def publish(request):
                                              'draft_message': draft_message,
                                              })
 
-  form = form_class(request.POST)
-  if not form.is_valid():
+  # Supply subject so that if this is a bare request to /publish, it won't
+  # fail out if we've selected PublishForm (which requires a subject).
+  augmented_POST = request.POST.copy()
+  if issue.subject:
+    augmented_POST.setdefault('subject', issue.subject)
+  form = form_class(augmented_POST)
+
+  # If the user is blocked, intentionally redirects him to the form again to
+  # confuse him.
+  account = models.Account.get_account_for_user(request.user)
+  if account.blocked or not form.is_valid():
     return respond(request, 'publish.html', {'form': form, 'issue': issue})
-  if request.user == issue.owner:
+  if issue.edit_allowed:
     issue.subject = form.cleaned_data['subject']
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     reviewers = _get_emails(form, 'reviewers')
   else:
     reviewers = issue.reviewers
-    if request.user != issue.owner and request.user.email() not in reviewers:
+    if (request.user != issue.owner and
+        request.user.email() not in reviewers and
+        not issue.is_collaborator(request.user)):
       reviewers.append(db.Email(request.user.email()))
   if form.is_valid() and not form.cleaned_data.get('message_only', False):
     cc = _get_emails(form, 'cc')
@@ -3054,15 +2738,29 @@ def publish(request):
   tbd.append(msg)
 
   for obj in tbd:
-    db.put(obj)
-
-  _notify_issue(request, issue, 'Comments published')
+    obj.put()
 
   # There are now no comments here (modulo race conditions)
   models.Account.current_user_account.update_drafts(issue, 0)
   if form.cleaned_data.get('no_redirect', False):
     return HttpTextResponse('OK')
-  return HttpResponseRedirect(reverse(show, args=[issue.key().id()]))
+  return HttpResponseRedirect(reverse(show, args=[issue.key.id()]))
+
+
+@deco.login_required
+@deco.issue_required
+@deco.xsrf_required
+def delete_drafts(request):
+  """Deletes all drafts of the current user for an issue."""
+  query = models.Comment.query(
+      models.Comment.author == request.user, models.Comment.draft == True,
+      ancestor=request.issue.key)
+  keys = query.fetch(keys_only=True)
+  ndb.delete_multi(keys)
+  request.issue.calculate_draft_count_by_user()
+  request.issue.put()
+  return HttpResponseRedirect(
+    reverse(publish, args=[request.issue.key.id()]))
 
 
 def _encode_safely(s):
@@ -3089,85 +2787,108 @@ def _get_draft_comments(request, issue, preview=False):
   comments = []
   tbd = []
   # XXX Should request all drafts for this issue once, now we can.
-  for patchset in issue.patchset_set.order('created'):
-    ps_comments = list(models.Comment.gql(
-        'WHERE ANCESTOR IS :1 AND author = :2 AND draft = TRUE',
-        patchset, request.user))
+  for patchset in issue.patchsets:
+    ps_comments = list(models.Comment.query(
+        models.Comment.author == request.user,
+        models.Comment.draft == True, ancestor=patchset.key))
     if ps_comments:
-      patches = dict((p.key(), p) for p in patchset.patch_set)
+      patches = dict((p.key, p) for p in patchset.patches)
       for p in patches.itervalues():
-        p.patchset = patchset
+        p.patchset_key = patchset.key
       for c in ps_comments:
         c.draft = False
         # Get the patch key value without loading the patch entity.
         # NOTE: Unlike the old version of this code, this is the
         # recommended and documented way to do this!
-        pkey = models.Comment.patch.get_value_for_datastore(c)
+        pkey = c.patch_key
         if pkey in patches:
           patch = patches[pkey]
-          c.patch = patch
+          c.patch_key = patch.key
       if not preview:
-        tbd.append(ps_comments)
+        tbd.extend(ps_comments)
         patchset.update_comment_count(len(ps_comments))
         tbd.append(patchset)
-      ps_comments.sort(key=lambda c: (c.patch.filename, not c.left,
+      ps_comments.sort(key=lambda c: (c.patch_key.get().filename, not c.left,
                                       c.lineno, c.date))
       comments += ps_comments
+
   return tbd, comments
+
+
+def _patchlines2cache(patchlines, left):
+  """Helper that converts return value of ParsePatchToLines for caching.
+
+  Each line in patchlines is (old_line_no, new_line_no, line).  When
+  comment is on the left we store the old_line_no, otherwise
+  new_line_no.
+  """
+  if left:
+    it = ((old, line) for old, _, line in patchlines)
+  else:
+    it = ((new, line) for _, new, line in patchlines)
+  return dict(it)
 
 
 def _get_draft_details(request, comments):
   """Helper to display comments with context in the email message."""
   last_key = None
   output = []
-  linecache = {}  # Maps (c.patch.key(), c.left) to list of lines
+  linecache = {}  # Maps (c.patch_key, c.left) to mapping (lineno, line)
   modified_patches = []
   fetch_base_failed = False
+
   for c in comments:
-    if (c.patch.key(), c.left) != last_key:
+    patch = c.patch_key.get()
+    if (patch.key, c.left) != last_key:
       url = request.build_absolute_uri(
-        reverse(diff, args=[request.issue.key().id(),
-                            c.patch.patchset.key().id(),
-                            c.patch.filename]))
-      output.append('\n%s\nFile %s (%s):' % (url, c.patch.filename,
+        reverse(diff, args=[request.issue.key.id(),
+                            patch.patchset_key.id(),
+                            patch.filename]))
+      output.append('\n%s\nFile %s (%s):' % (url, patch.filename,
                                              c.left and "left" or "right"))
-      last_key = (c.patch.key(), c.left)
-      patch = c.patch
+      last_key = (patch.key, c.left)
       if patch.no_base_file:
-        linecache[last_key] = patching.ParsePatchToLines(patch.lines)
+        linecache[last_key] = _patchlines2cache(
+          patching.ParsePatchToLines(patch.lines), c.left)
       else:
         try:
           if c.left:
             old_lines = patch.get_content().text.splitlines(True)
-            linecache[last_key] = old_lines
+            linecache[last_key] = dict(enumerate(old_lines, 1))
           else:
             new_lines = patch.get_patched_content().text.splitlines(True)
-            linecache[last_key] = new_lines
+            linecache[last_key] = dict(enumerate(new_lines, 1))
         except FetchError:
-          linecache[last_key] = patching.ParsePatchToLines(patch.lines)
+          linecache[last_key] = _patchlines2cache(
+            patching.ParsePatchToLines(patch.lines), c.left)
           fetch_base_failed = True
-    file_lines = linecache[last_key]
-    context = ''
-    if patch.no_base_file or fetch_base_failed:
-      for old_line_no, new_line_no, line_text in file_lines:
-        if ((c.lineno == old_line_no and c.left) or
-            (c.lineno == new_line_no and not c.left)):
-          context = line_text.strip()
-          break
-    else:
-      if 1 <= c.lineno <= len(file_lines):
-        context = file_lines[c.lineno - 1].strip()
+    context = linecache[last_key].get(c.lineno, '').strip()
     url = request.build_absolute_uri(
-      '%s#%scode%d' % (reverse(diff, args=[request.issue.key().id(),
-                                           c.patch.patchset.key().id(),
-                                           c.patch.filename]),
+      '%s#%scode%d' % (reverse(diff, args=[request.issue.key.id(),
+                                           patch.patchset_key.id(),
+                                           patch.filename]),
                        c.left and "old" or "new",
                        c.lineno))
-    output.append('\n%s\n%s:%d: %s\n%s' % (url, c.patch.filename, c.lineno,
+    output.append('\n%s\n%s:%d: %s\n%s' % (url, patch.filename, c.lineno,
                                            context, c.text.rstrip()))
   if modified_patches:
-    db.put(modified_patches)
+    ndb.put_multi(modified_patches)
   return '\n'.join(output)
+
+
+def _get_modified_counts(issue):
+  """Helper to determine the modified line counts of the latest patch set."""
+  modified_added_count = 0
+  modified_removed_count = 0
+
+  # Count the modified lines in the patchset.
+  patchsets = list(issue.patchsets)
+  if patchsets:
+    for patch in patchsets[-1].patches:
+      modified_added_count += patch.num_added
+      modified_removed_count += patch.num_removed
+
+  return modified_added_count, modified_removed_count
 
 
 def _make_message(request, issue, message, comments=None, send_mail=False,
@@ -3177,7 +2898,9 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   template, context = _get_mail_template(request, issue, full_diff=attach_patch)
   # Decide who should receive mail
   my_email = db.Email(request.user.email())
-  to = [db.Email(issue.owner.email())] + issue.reviewers
+  to = ([db.Email(issue.owner.email())] +
+        issue.reviewers +
+        [db.Email(email) for email in issue.collaborator_emails()])
   cc = issue.cc[:]
   if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
     cc.append(db.Email(django_settings.RIETVELD_INCOMING_MAIL_ADDRESS))
@@ -3186,15 +2909,15 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     to.remove(my_email)
   if my_email in cc:
     cc.remove(my_email)
-  issue_id = issue.key().id()
-  subject = '%s (issue %d)' % (issue.subject, issue_id)
+  issue_id = issue.key.id()
+  subject = issue.mail_subject()
   patch = None
   if attach_patch:
     subject = 'PATCH: ' + subject
     if 'patch' in context:
       patch = context['patch']
       del context['patch']
-  if issue.message_set.count(1) > 0:
+  if issue.num_messages:
     subject = 'Re: ' + subject
   if comments:
     details = _get_draft_details(request, comments)
@@ -3203,29 +2926,34 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   message = message.replace('\r\n', '\n')
   text = ((message.strip() + '\n\n' + details.strip())).strip()
   if draft is None:
-    msg = models.Message(issue=issue,
+    msg = models.Message(issue_key=issue.key,
                          subject=subject,
                          sender=my_email,
                          recipients=reply_to,
-                         text=db.Text(text),
-                         parent=issue)
+                         text=text,
+                         parent=issue.key,
+                         issue_was_closed=issue.closed)
   else:
     msg = draft
     msg.subject = subject
     msg.recipients = reply_to
-    msg.text = db.Text(text)
+    msg.text = text
     msg.draft = False
     msg.date = datetime.datetime.now()
+    msg.issue_was_closed = issue.closed
+  issue.calculate_updates_for(msg)
 
   if in_reply_to:
     try:
-      msg.in_reply_to = models.Message.get(in_reply_to)
-      replied_issue_id = msg.in_reply_to.issue.key().id()
+      replied_msg_id = int(in_reply_to)
+      replied_msg = models.Message.get_by_id(replied_msg_id, parent=issue.key)
+      msg.in_reply_to_key = replied_msg.key
+      replied_issue_id = replied_msg.issue_key.id()
       if replied_issue_id != issue_id:
         logging.warn('In-reply-to Message is for a different issue: '
                      '%s instead of %s', replied_issue_id, issue_id)
-        msg.in_reply_to = None
-    except (db.KindError, db.BadKeyError):
+        msg.in_reply_to_key = None
+    except (db.KindError, db.BadKeyError, ValueError):
       logging.warn('Invalid in-reply-to Message or key given: %s', in_reply_to)
 
   if send_mail:
@@ -3234,7 +2962,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
       num_trimmed = len(context['files']) - 200
       del context['files'][200:]
       context['files'].append('[[ %d additional files ]]' % num_trimmed)
-    url = request.build_absolute_uri(reverse(show, args=[issue.key().id()]))
+    url = request.build_absolute_uri(reverse(show, args=[issue.key.id()]))
     reviewer_nicknames = ', '.join(library.get_nickname(rev_temp, True,
                                                         request)
                                    for rev_temp in issue.reviewers)
@@ -3244,12 +2972,23 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     reply_to = ', '.join(reply_to)
     description = (issue.description or '').replace('\r\n', '\n')
     home = request.build_absolute_uri(reverse(index))
+    modified_added_count, modified_removed_count = _get_modified_counts(issue)
     context.update({'reviewer_nicknames': reviewer_nicknames,
                     'cc_nicknames': cc_nicknames,
                     'my_nickname': my_nickname, 'url': url,
                     'message': message, 'details': details,
                     'description': description, 'home': home,
+                    'added_lines' : modified_added_count,
+                    'removed_lines': modified_removed_count,
                     })
+    for key, value in context.iteritems():
+      if isinstance(value, str):
+        try:
+          encoding.force_unicode(value)
+        except UnicodeDecodeError:
+          logging.error('Key %s is not valid unicode. value: %r' % (key, value))
+          # The content failed to be decoded as utf-8. Enforce it as ASCII.
+          context[key] = value.decode('ascii', 'replace')
     body = django.template.loader.render_to_string(
       template, context, context_instance=RequestContext(request))
     logging.warn('Mail: to=%s; cc=%s', ', '.join(to), ', '.join(cc))
@@ -3261,7 +3000,7 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
     if cc:
       send_args['cc'] = [_encode_safely(address) for address in cc]
     if patch:
-      send_args['attachments'] = [('issue_%s_patch.diff' % issue.key().id(),
+      send_args['attachments'] = [('issue_%s_patch.diff' % issue.key.id(),
                                    patch)]
 
     attempts = 0
@@ -3269,6 +3008,14 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
       try:
         mail.send_mail(**send_args)
         break
+      except mail.InvalidSenderError:
+        if django_settings.RIETVELD_INCOMING_MAIL_ADDRESS:
+          previous_sender = send_args['sender']
+          if previous_sender not in send_args['to']:
+            send_args['to'].append(previous_sender)
+          send_args['sender'] = django_settings.RIETVELD_INCOMING_MAIL_ADDRESS
+        else:
+          raise
       except apiproxy_errors.DeadlineExceededError:
         # apiproxy_errors.DeadlineExceededError is raised when the
         # deadline of an API call is reached (e.g. for mail it's
@@ -3283,42 +3030,42 @@ def _make_message(request, issue, message, comments=None, send_mail=False,
   return msg
 
 
-@post_required
-@login_required
-@xsrf_required
-@issue_required
+@deco.require_methods('POST')
+@deco.login_required
+@deco.xsrf_required
+@deco.issue_required
 def star(request):
   """Add a star to an Issue."""
   account = models.Account.current_user_account
   account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
     account.stars = []
-  id = request.issue.key().id()
-  if id not in account.stars:
-    account.stars.append(id)
+  keyid = request.issue.key.id()
+  if keyid not in account.stars:
+    account.stars.append(keyid)
     account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
-@post_required
-@login_required
-@issue_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.login_required
+@deco.issue_required
+@deco.xsrf_required
 def unstar(request):
   """Remove the star from an Issue."""
   account = models.Account.current_user_account
   account.user_has_selected_nickname()  # This will preserve account.fresh.
   if account.stars is None:
     account.stars = []
-  id = request.issue.key().id()
-  if id in account.stars:
-    account.stars[:] = [i for i in account.stars if i != id]
+  keyid = request.issue.key.id()
+  if keyid in account.stars:
+    account.stars[:] = [i for i in account.stars if i != keyid]
     account.put()
   return respond(request, 'issue_star.html', {'issue': request.issue})
 
 
-@login_required
-@issue_required
+@deco.login_required
+@deco.issue_required
 def draft_message(request):
   """/<issue>/draft_message - Retrieve, modify and delete draft messages.
 
@@ -3327,9 +3074,10 @@ def draft_message(request):
   time out after 1 or 2 hours.  The final submit of the drafts for
   others to view *is* XSRF-protected.
   """
-  query = models.Message.gql(('WHERE issue = :1 AND sender = :2 '
-                              'AND draft = TRUE'),
-                             request.issue, request.user.email())
+  query = models.Message.query(
+      models.Message.issue_key == request.issue.key,
+      models.Message.sender == request.user.email(),
+      models.Message.draft == True)
   if query.count() == 0:
     draft_message = None
   else:
@@ -3364,8 +3112,9 @@ def _post_draft_message(request, draft):
     draft: A Message instance or None.
   """
   if draft is None:
-    draft = models.Message(issue=request.issue, parent=request.issue,
-                           sender=request.user.email(), draft=True)
+    draft = models.Message(
+      issue_key=request.issue.key, parent=request.issue.key,
+      sender=request.user.email(), draft=True)
   draft.text = request.POST.get('reviewmsg')
   draft.put()
   return HttpTextResponse(draft.text)
@@ -3380,11 +3129,11 @@ def _delete_draft_message(draft):
     draft: A Message instance or None.
   """
   if draft is not None:
-    draft.delete()
+    draft.key.delete()
   return HttpTextResponse('OK')
 
 
-@json_response
+@deco.json_response
 def search(request):
   """/search - Search for issues or patchset.
 
@@ -3400,10 +3149,10 @@ def search(request):
       return HttpTextResponse('Invalid arguments', status=400)
   logging.info('%s' % form.cleaned_data)
   keys_only = form.cleaned_data['keys_only'] or False
-  format = form.cleaned_data['format'] or 'html'
+  requested_format = form.cleaned_data['format'] or 'html'
   limit = form.cleaned_data['limit']
   with_messages = form.cleaned_data['with_messages']
-  if format == 'html':
+  if requested_format == 'html':
     keys_only = False
     limit = limit or DEFAULT_LIMIT
   else:
@@ -3417,61 +3166,89 @@ def search(request):
       else:
         limit = 100
 
-  q = models.Issue.all(keys_only=keys_only)
-  if form.cleaned_data['cursor']:
-    q.with_cursor(form.cleaned_data['cursor'])
+  q = models.Issue.query(default_options=ndb.QueryOptions(keys_only=keys_only))
+  encoded_cursor = form.cleaned_data['cursor'] or None
+  if encoded_cursor:
+    cursor = datastore_query.Cursor(urlsafe=encoded_cursor)
+  else:
+    cursor = None
+
   if form.cleaned_data['closed'] is not None:
-    q.filter('closed = ', form.cleaned_data['closed'])
+    q = q.filter(models.Issue.closed == form.cleaned_data['closed'])
   if form.cleaned_data['owner']:
-    q.filter('owner = ', form.cleaned_data['owner'])
+    q = q.filter(models.Issue.owner == form.cleaned_data['owner'])
   if form.cleaned_data['reviewer']:
-    q.filter('reviewers = ', form.cleaned_data['reviewer'])
+    q = q.filter(models.Issue.reviewers == form.cleaned_data['reviewer'])
+  if form.cleaned_data['cc']:
+    q = q.filter(models.Issue.cc == form.cleaned_data['cc'])
   if form.cleaned_data['private'] is not None:
-    q.filter('private = ', form.cleaned_data['private'])
+    q = q.filter(models.Issue.private == form.cleaned_data['private'])
   if form.cleaned_data['repo_guid']:
-    q.filter('repo_guid = ', form.cleaned_data['repo_guid'])
+    q = q.filter(models.Issue.repo_guid == form.cleaned_data['repo_guid'])
   if form.cleaned_data['base']:
-    q.filter('base = ', form.cleaned_data['base'])
+    q = q.filter(models.Issue.base == form.cleaned_data['base'])
 
-  # Default sort by ascending key to save on indexes.
-  sorted_by = '__key__'
-  if form.cleaned_data['modified_before']:
-    q.filter('modified < ', form.cleaned_data['modified_before'])
-    sorted_by = 'modified'
-  if form.cleaned_data['modified_after']:
-    q.filter('modified >= ', form.cleaned_data['modified_after'])
-    sorted_by = 'modified'
-  if form.cleaned_data['created_before']:
-    q.filter('created < ', form.cleaned_data['created_before'])
-    sorted_by = 'created'
+  # Calculate a default value depending on the query parameter.
+  # Prefer sorting by modified date over created date and showing
+  # newest first over oldest.
+  default_sort = '-modified'
   if form.cleaned_data['created_after']:
-    q.filter('created >= ', form.cleaned_data['created_after'])
-    sorted_by = 'created'
+    q = q.filter(models.Issue.created >= form.cleaned_data['created_after'])
+    default_sort = 'created'
+  if form.cleaned_data['modified_after']:
+    q = q.filter(models.Issue.modified >= form.cleaned_data['modified_after'])
+    default_sort = 'modified'
+  if form.cleaned_data['created_before']:
+    q = q.filter(models.Issue.created < form.cleaned_data['created_before'])
+    default_sort = '-created'
+  if form.cleaned_data['modified_before']:
+    q = q.filter(models.Issue.modified < form.cleaned_data['modified_before'])
+    default_sort = '-modified'
 
-  q.order(sorted_by)
+  sorted_by = form.cleaned_data['order'] or default_sort
+  direction = (
+    datastore_query.PropertyOrder.DESCENDING
+    if sorted_by.startswith('-') else datastore_query.PropertyOrder.ASCENDING)
+  q = q.order(datastore_query.PropertyOrder(sorted_by.lstrip('-'), direction))
 
   # Update the cursor value in the result.
-  if format == 'html':
+  if requested_format == 'html':
     nav_params = dict(
         (k, v) for k, v in form.cleaned_data.iteritems() if v is not None)
     return _paginate_issues_with_cursor(
         reverse(search),
         request,
         q,
+        cursor,
         limit,
         'search_results.html',
         extra_nav_parameters=nav_params)
 
-  results = q.fetch(limit)
-  form.cleaned_data['cursor'] = q.cursor()
-  if keys_only:
-    # There's not enough information to filter. The only thing that is leaked is
-    # the issue's key.
-    filtered_results = results
-  else:
-    filtered_results = [i for i in results if _can_view_issue(request.user, i)]
+  # We do not simply use fetch_page() because we do some post-filtering which
+  # could lead to under-filled pages.   Instead, we iterate, filter and keep
+  # going until we have enough post-filtered results, then return those along
+  # with the cursor after the last item.
+  filtered_results = []
+  next_cursor = None
+  query_iter = q.iter(start_cursor=cursor, produce_cursors=True)
+
+  for result in query_iter:
+    if keys_only:
+      # There's not enough information to filter. The only thing that is leaked
+      # is the issue's key.
+      filtered_results.append(result)
+    elif result.view_allowed:
+      filtered_results.append(result)
+
+    if len(filtered_results) >= limit:
+      break
+
+  # If any results are returned, also include a cursor to try to get more.
+  if filtered_results:
+    next_cursor = query_iter.cursor_after()
+
   data = {
-    'cursor': form.cleaned_data['cursor'],
+    'cursor': next_cursor.urlsafe() if next_cursor else '',
   }
   if keys_only:
     data['results'] = [i.id() for i in filtered_results]
@@ -3487,26 +3264,26 @@ def search(request):
 def repos(request):
   """/repos - Show the list of known Subversion repositories."""
   # Clean up garbage created by buggy edits
-  bad_branches = models.Branch.gql('WHERE owner = :1', None).fetch(100)
-  if bad_branches:
-    db.delete(bad_branches)
+  bad_branch_keys = models.Branch.query(models.Branch.owner == None).fetch(
+      100, keys_only=True)
+  if bad_branch_keys:
+    ndb.delete_multi(bad_branch_keys)
   repo_map = {}
-  for repo in models.Repository.all().fetch(1000, batch_size=100):
-    repo_map[str(repo.key())] = repo
+  for repo in models.Repository.query().fetch(1000, batch_size=100):
+    repo_map[repo.key] = repo
   branches = []
-  for branch in models.Branch.all().fetch(2000, batch_size=100):
-    # Using ._repo instead of .repo returns the db.Key of the referenced entity.
-    # Access to a protected member FOO of a client class
-    # pylint: disable=W0212
-    branch.repository = repo_map[str(branch._repo)]
-    branches.append(branch)
+  for branch in models.Branch.query().fetch(2000, batch_size=100):
+    repo_key = branch.repo_key
+    if repo_key in repo_map:
+      branch.repository = repo_map[repo_key]
+      branches.append(branch)
   branches.sort(key=lambda b: map(
     unicode.lower, (b.repository.name, b.category, b.name)))
   return respond(request, 'repos.html', {'branches': branches})
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def repo_new(request):
   """/repo_new - Create a new Subversion repository record."""
   if request.method != 'POST':
@@ -3521,7 +3298,7 @@ def repo_new(request):
         url=form.cleaned_data.get('url'),
         guid=form.cleaned_data.get('guid'),
         )
-    except (db.BadValueError, ValueError), err:
+    except (db.BadValueError, ValueError) as err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'repo_new.html', {'form': form})
@@ -3530,7 +3307,7 @@ def repo_new(request):
   if not branch_url.endswith('/'):
     branch_url += '/'
   branch_url += 'trunk/'
-  branch = models.Branch(repo=repo, repo_name=repo.name,
+  branch = models.Branch(repo_key=repo.key, repo_name=repo.name,
                          category='*trunk*', name='Trunk',
                          url=branch_url)
   branch.put()
@@ -3547,30 +3324,30 @@ BRANCHES = [
 
 
 # TODO: Make this a POST request to avoid XSRF attacks.
-@admin_required
+@deco.admin_required
 def repo_init(_request):
   """/repo_init - Initialze the list of known Subversion repositories."""
-  python = models.Repository.gql("WHERE name = 'Python'").get()
+  python = models.Repository.query(models.Repository.name == 'Python').get()
   if python is None:
     python = models.Repository(name='Python', url=SVN_ROOT)
     python.put()
     pybranches = []
   else:
-    pybranches = list(models.Branch.gql('WHERE repo = :1', python))
+    pybranches = list(models.Branch.query(models.Branch.repo_key == python.key))
   for category, name, url in BRANCHES:
     url = python.url + url
     for br in pybranches:
       if (br.category, br.name, br.url) == (category, name, url):
         break
     else:
-      br = models.Branch(repo=python, repo_name='Python',
+      br = models.Branch(repo_key=python.key, repo_name='Python',
                          category=category, name=name, url=url)
       br.put()
   return HttpResponseRedirect(reverse(repos))
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def branch_new(request, repo_id):
   """/branch_new/<repo> - Add a new Branch to a Repository record."""
   repo = models.Repository.get_by_id(int(repo_id))
@@ -3584,12 +3361,12 @@ def branch_new(request, repo_id):
   if not errors:
     try:
       branch = models.Branch(
-        repo=repo,
+        repo_key=repo.key,
         category=form.cleaned_data.get('category'),
         name=form.cleaned_data.get('name'),
         url=form.cleaned_data.get('url'),
         )
-    except (db.BadValueError, ValueError), err:
+    except (db.BadValueError, ValueError) as err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'branch_new.html', {'form': form, 'repo': repo})
@@ -3598,8 +3375,8 @@ def branch_new(request, repo_id):
   return HttpResponseRedirect(reverse(repos))
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def branch_edit(request, branch_id):
   """/branch_edit/<branch> - Edit a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))
@@ -3620,7 +3397,7 @@ def branch_edit(request, branch_id):
       branch.category = form.cleaned_data.get('category')
       branch.name = form.cleaned_data.get('name')
       branch.url = form.cleaned_data.get('url')
-    except (db.BadValueError, ValueError), err:
+    except (db.BadValueError, ValueError) as err:
       errors['__all__'] = unicode(err)
   if errors:
     return respond(request, 'branch_edit.html',
@@ -3629,29 +3406,31 @@ def branch_edit(request, branch_id):
   return HttpResponseRedirect(reverse(repos))
 
 
-@post_required
-@login_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.login_required
+@deco.xsrf_required
 def branch_delete(request, branch_id):
   """/branch_delete/<branch> - Delete a Branch record."""
   branch = models.Branch.get_by_id(int(branch_id))
   if branch.owner != request.user:
     return HttpTextResponse('You do not own this branch', status=403)
-  repo = branch.repo
-  branch.delete()
-  num_branches = models.Branch.gql('WHERE repo = :1', repo).count()
+
+  repo_key = branch.repo_key
+  branch.key.delete()
+  num_branches = models.Branch.query(models.Branch.repo_key == repo_key).count()
   if not num_branches:
     # Even if we don't own the repository?  Yes, I think so!  Empty
     # repositories have no representation on screen.
-    repo.delete()
+    repo_key.delete()
+
   return HttpResponseRedirect(reverse(repos))
 
 
 ### User Profiles ###
 
 
-@login_required
-@xsrf_required
+@deco.login_required
+@deco.xsrf_required
 def settings(request):
   account = models.Account.current_user_account
   if request.method != 'POST':
@@ -3662,60 +3441,108 @@ def settings(request):
                                  'context': default_context,
                                  'column_width': default_column_width,
                                  'notify_by_email': account.notify_by_email,
-                                 'notify_by_chat': account.notify_by_chat,
                                  })
-    chat_status = None
-    if account.notify_by_chat:
-      try:
-        presence = xmpp.get_presence(account.email)
-      except Exception, err:
-        logging.error('Exception getting XMPP presence: %s', err)
-        chat_status = 'Error (%s)' % err
-      else:
-        if presence:
-          chat_status = 'online'
-        else:
-          chat_status = 'offline'
-    return respond(request, 'settings.html', {'form': form,
-                                              'chat_status': chat_status})
+    return respond(request, 'settings.html', {'form': form})
   form = SettingsForm(request.POST)
   if form.is_valid():
     account.nickname = form.cleaned_data.get('nickname')
     account.default_context = form.cleaned_data.get('context')
     account.default_column_width = form.cleaned_data.get('column_width')
     account.notify_by_email = form.cleaned_data.get('notify_by_email')
-    notify_by_chat = form.cleaned_data.get('notify_by_chat')
-    must_invite = notify_by_chat and not account.notify_by_chat
-    account.notify_by_chat = notify_by_chat
     account.fresh = False
     account.put()
-    if must_invite:
-      logging.info('Sending XMPP invite to %s', account.email)
-      try:
-        xmpp.send_invite(account.email)
-      except Exception, err:
-        # XXX How to tell user it failed?
-        logging.error('XMPP invite to %s failed', account.email)
   else:
     return respond(request, 'settings.html', {'form': form})
   return HttpResponseRedirect(reverse(mine))
 
 
-@post_required
-@login_required
-@xsrf_required
+@deco.require_methods('POST')
+@deco.login_required
+@deco.xsrf_required
 def account_delete(_request):
   account = models.Account.current_user_account
-  account.delete()
+  account.key.delete()
   return HttpResponseRedirect(users.create_logout_url(reverse(index)))
 
 
-@user_key_required
+@deco.login_required
+@deco.xsrf_required
+def migrate_entities(request):
+  """Migrates entities from the specified user to the signed in user."""
+  msg = None
+  if request.method == 'POST':
+    form = MigrateEntitiesForm(request.POST)
+    form.set_user(request.user)
+    if form.is_valid():
+      # verify that the account belongs to the user
+      old_account = form.cleaned_data['account']
+      old_account_key = str(old_account.key)
+      new_account_key = str(models.Account.current_user_account.key)
+      for kind in ('Issue', 'Repository', 'Branch'):
+        taskqueue.add(url=reverse(task_migrate_entities),
+                      params={'kind': kind,
+                              'old': old_account_key,
+                              'new': new_account_key},
+                      queue_name='migrate-entities')
+      msg = (u'Migration job started. The issues, repositories and branches'
+             u' created with your old account (%s) will be moved to your'
+             u' current account (%s) in a background task and should'
+             u' be visible for your current account shortly.'
+             % (old_account.user.email(), request.user.email()))
+  else:
+    form = MigrateEntitiesForm()
+  return respond(request, 'migrate_entities.html', {'form': form, 'msg': msg})
+
+
+@deco.task_queue_required('migrate-entities')
+def task_migrate_entities(request):
+  """/restricted/tasks/migrate_entities - Migrates entities from one account to
+  another.
+  """
+  kind = request.POST.get('kind')
+  old = request.POST.get('old')
+  new = request.POST.get('new')
+  batch_size = 20
+  if kind is None or old is None or new is None:
+    logging.warning('Missing parameters')
+    return HttpResponse()
+  if kind not in ('Issue', 'Repository', 'Branch'):
+    logging.warning('Invalid kind: %s' % kind)
+    return HttpResponse()
+  old_account = ndb.Key(models.Account, old).get()
+  new_account = ndb.Key(models.Account, new).get()
+  if old_account is None or new_account is None:
+    logging.warning('Invalid accounts')
+    return HttpResponse()
+  # make sure that accounts match
+  if old_account.user.user_id() != new_account.user.user_id():
+    logging.warning('Accounts don\'t match')
+    return HttpResponse()
+  model = getattr(models, kind)
+  encoded_key = request.POST.get('key')
+  model_cls = model.__class__
+  query = model.query(model_cls.owner == old_account.user).order(model_cls.key)
+  if encoded_key:
+    query = query.filter(model_cls.key > ndb.Key(urlsafe=encoded_key))
+  tbd = []
+  for entity in query.fetch(batch_size):
+    entity.owner = new_account.user
+    tbd.append(entity)
+  if tbd:
+    ndb.put_multi(tbd)
+    taskqueue.add(url=reverse(task_migrate_entities),
+                  params={'kind': kind, 'old': old, 'new': new,
+                          'key': str(tbd[-1].key)},
+                  queue_name='migrate-entities')
+  return HttpResponse()
+
+
+@deco.user_key_required
 def user_popup(request):
   """/user_popup - Pop up to show the user info."""
   try:
     return _user_popup(request)
-  except Exception, err:
+  except Exception as err:
     logging.exception('Exception in user_popup processing:')
     # Return HttpResponse because the JS part expects a 200 status code.
     return HttpHtmlResponse(
@@ -3727,14 +3554,11 @@ def _user_popup(request):
   user = request.user_to_show
   popup_html = memcache.get('user_popup:' + user.email())
   if popup_html is None:
-    num_issues_created = db.GqlQuery(
-      'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND owner = :1',
-      user).count()
-    num_issues_reviewed = db.GqlQuery(
-      'SELECT * FROM Issue '
-      'WHERE closed = FALSE AND reviewers = :1',
-      user.email()).count()
+    num_issues_created = models.Issue.query(
+        models.Issue.closed == False, models.Issue.owner == user).count()
+    num_issues_reviewed = models.Issue.query(
+        models.Issue.closed == False,
+      models.Issue.reviewers == user.email()).count()
 
     user.nickname = models.Account.get_nickname_for_email(user.email())
     popup_html = render_to_response('user_popup.html',
@@ -3748,25 +3572,7 @@ def _user_popup(request):
   return popup_html
 
 
-@post_required
-def incoming_chat(request):
-  """/_ah/xmpp/message/chat/
-
-  This handles incoming XMPP (chat) messages.
-
-  Just reply saying we ignored the chat.
-  """
-  try:
-    msg = xmpp.Message(request.POST)
-  except xmpp.InvalidMessageError, err:
-    logging.warn('Incoming invalid chat message: %s' % err)
-    return HttpTextResponse('')
-  sts = msg.reply('Sorry, Rietveld does not support chat input')
-  logging.debug('XMPP status %r', sts)
-  return HttpTextResponse('')
-
-
-@post_required
+@deco.require_methods('POST')
 def incoming_mail(request, recipients):
   """/_ah/mail/(.*)
 
@@ -3776,7 +3582,7 @@ def incoming_mail(request, recipients):
   """
   try:
     _process_incoming_mail(request.raw_post_data, recipients)
-  except InvalidIncomingEmailError, err:
+  except InvalidIncomingEmailError as err:
     logging.debug(str(err))
   return HttpTextResponse('')
 
@@ -3790,8 +3596,16 @@ def _process_incoming_mail(raw_message, recipients):
   if 'X-Google-Appengine-App-Id' in incoming_msg.original:
     raise InvalidIncomingEmailError('Mail sent by App Engine')
 
+  # Use the subject to find the issue number.
+  # Originally the tag was (issueNNN).
+  # Then we changed it to be (issue NNN by WHO).
+  # We want to match either of these, and we need to deal with
+  # the fact that some mail readers will fold the long subject,
+  # turning a single space into "\r\n ".
+  # We use "issue\s*" to handle all these forms,
+  # and we omit the closing ) to accept both the original and the "by WHO" form.
   subject = incoming_msg.subject or ''
-  match = re.search(r'\(issue *(?P<id>\d+)\)$', subject)
+  match = re.search(r'\(issue\s*(?P<id>\d+)', subject)
   if match is None:
     raise InvalidIncomingEmailError('No issue id found: %s', subject)
   issue_id = int(match.groupdict()['id'])
@@ -3808,6 +3622,13 @@ def _process_incoming_mail(raw_message, recipients):
     # As a workaround we try to decode the payload ourselves.
     if payload.encoding == '8bit' and payload.charset:
       body = payload.payload.decode(payload.charset)
+    # If neither encoding not charset is set, but payload contains
+    # non-ASCII chars we can't use payload.decode() because it returns
+    # payload.payload unmodified. The later type cast to db.Text fails
+    # with a UnicodeDecodeError then.
+    elif payload.encoding is None and payload.charset is None:
+      # assume utf-8 but set replace flag to go for sure.
+      body = payload.payload.decode('utf-8', 'replace')
     else:
       body = payload.decode()
     break
@@ -3822,29 +3643,34 @@ def _process_incoming_mail(raw_message, recipients):
 
   # If the subject is long, this might come wrapped into more than one line.
   subject = ' '.join([x.strip() for x in subject.splitlines()])
-  msg = models.Message(issue=issue, parent=issue,
+  msg = models.Message(issue_key=issue.key, parent=issue.key,
                        subject=subject,
-                       sender=db.Email(sender),
-                       recipients=[db.Email(x) for x in recipients],
+                       sender=sender,
+                       recipients=[x for x in recipients],
                        date=datetime.datetime.now(),
-                       text=db.Text(body),
+                       text=body,
                        draft=False)
-  msg.put()
 
   # Add sender to reviewers if needed.
   all_emails = [str(x).lower()
-                for x in [issue.owner.email()]+issue.reviewers+issue.cc]
+                for x in ([issue.owner.email()] +
+                          issue.reviewers +
+                          issue.cc +
+                          issue.collaborator_emails())]
   if sender.lower() not in all_emails:
-    query = models.Account.all().filter('lower_email =', sender.lower())
+    query = models.Account.query(models.Account.lower_email == sender.lower())
     account = query.get()
     if account is not None:
       issue.reviewers.append(account.email)  # e.g. account.email is CamelCase
     else:
       issue.reviewers.append(db.Email(sender))
-    issue.put()
+
+  issue.calculate_updates_for(msg)
+  issue.put()
+  msg.put()
 
 
-@login_required
+@deco.login_required
 def xsrf_token(request):
   """/xsrf_token - Return the user's XSRF token.
 
@@ -3892,37 +3718,1191 @@ def customized_upload_py(request):
   return HttpResponse(source, content_type='text/x-python; charset=utf-8')
 
 
-@post_required
-def calculate_delta(request):
-  """/calculate_delta - Calculate deltas for a patchset.
+@deco.task_queue_required('deltacalculation')
+def task_calculate_delta(request):
+  """/restricted/tasks/calculate_delta - Calculate deltas for a patchset.
 
   This URL is called by taskqueue to calculate deltas behind the
   scenes. Returning a HttpResponse with any 2xx status means that the
   task was finished successfully. Raising an exception means that the
   taskqueue will retry to run the task.
-
-  This code is similar to the code in _get_patchset_info() which is
-  run when a patchset should be displayed in the UI.
   """
-  key = request.POST.get('key')
-  if not key:
-    logging.debug('No key given.')
+  ps_key = request.POST.get('key')
+  if not ps_key:
+    logging.error('No patchset key given.')
     return HttpResponse()
   try:
-    patchset = models.PatchSet.get(key)
-  except (db.KindError, db.BadKeyError), err:
-    logging.debug('Invalid PatchSet key %r: %s' % (key, err))
+    patchset = ndb.Key(urlsafe=ps_key).get()
+  except (db.KindError, db.BadKeyError) as err:
+    logging.error('Invalid PatchSet key %r: %s' % (ps_key, err))
     return HttpResponse()
   if patchset is None:  # e.g. PatchSet was deleted inbetween
+    logging.error('Missing PatchSet key %r' % ps_key)
     return HttpResponse()
-  patchset_id = patchset.key().id()
-  patchsets = None
-  for patch in patchset.patch_set.filter('delta_calculated =', False):
-    if patchsets is None:
-      # patchsets is retrieved on first iteration because patchsets
-      # isn't needed outside the loop at all.
-      patchsets = list(patchset.issue.patchset_set.order('created'))
-    patch.delta = _calculate_delta(patch, patchset_id, patchsets)
-    patch.delta_calculated = True
-    patch.put()
+  patchset.calculate_deltas()
   return HttpResponse()
+
+
+def _build_state_value(django_request, user):
+  """Composes the value for the 'state' parameter.
+
+  Packs the current request URI and an XSRF token into an opaque string that
+  can be passed to the authentication server via the 'state' parameter.
+
+  Meant to be similar to oauth2client.appengine._build_state_value.
+
+  Args:
+    django_request: Django HttpRequest object, The request.
+    user: google.appengine.api.users.User, The current user.
+
+  Returns:
+    The state value as a string.
+  """
+  relative_path = django_request.get_full_path().encode('utf-8')
+  uri = django_request.build_absolute_uri(relative_path)
+  token = xsrfutil.generate_token(xsrf_secret_key(), user.user_id(),
+                                  action_id=str(uri))
+  return  uri + ':' + token
+
+
+def _create_flow(django_request):
+  """Create the Flow object.
+
+  The Flow is calculated using mostly fixed values and constants retrieved
+  from other modules.
+
+  Args:
+    django_request: Django HttpRequest object, The request.
+
+  Returns:
+    oauth2client.client.OAuth2WebServerFlow object.
+  """
+  redirect_path = reverse(oauth2callback)
+  redirect_uri = django_request.build_absolute_uri(redirect_path)
+  client_id, client_secret, _ = auth_utils.SecretKey.get_config()
+  return OAuth2WebServerFlow(client_id, client_secret, auth_utils.EMAIL_SCOPE,
+                             redirect_uri=redirect_uri,
+                             approval_prompt='force')
+
+
+def _validate_port(port_value):
+  """Makes sure the port value is valid and can be used by a non-root user.
+
+  Args:
+    port_value: Integer or string version of integer.
+
+  Returns:
+    Integer version of port_value if valid, otherwise None.
+  """
+  try:
+    port_value = int(port_value)
+  except (ValueError, TypeError):
+    return None
+
+  if not (1024 <= port_value <= 49151):
+    return None
+
+  return port_value
+
+
+@deco.login_required
+def get_access_token(request):
+  """/get-access-token - Facilitates OAuth 2.0 dance for client.
+
+  Meant to take a 'port' query parameter and redirect to localhost with that
+  port and the user's access token appended.
+  """
+  user = request.user
+  flow = _create_flow(request)
+
+  flow.params['state'] = _build_state_value(request, user)
+  credentials = StorageByKeyName(
+      CredentialsNDBModel, user.user_id(), 'credentials').get()
+
+  authorize_url = flow.step1_get_authorize_url()
+  redirect_response_object = HttpResponseRedirect(authorize_url)
+  if credentials is None or credentials.invalid:
+    return redirect_response_object
+
+  # Find out if credentials is expired
+  refresh_failed = False
+  if credentials.access_token is None or credentials.access_token_expired:
+    try:
+      credentials.refresh(httplib2.Http())
+    except AccessTokenRefreshError:
+      return redirect_response_object
+    except:
+      refresh_failed = True
+
+  port_value = _validate_port(request.GET.get('port'))
+  if port_value is None:
+    return HttpTextResponse('Access Token: %s' % (credentials.access_token,))
+
+  # Send access token along to localhost client
+  redirect_template_args = {'port': port_value}
+  if refresh_failed:
+    quoted_error = urllib.quote(OAUTH_DEFAULT_ERROR_MESSAGE)
+    redirect_template_args['error'] = quoted_error
+    client_uri = ACCESS_TOKEN_FAIL_REDIRECT_TEMPLATE % redirect_template_args
+  else:
+    quoted_access_token = urllib.quote(credentials.access_token)
+    redirect_template_args['token'] = quoted_access_token
+    client_uri = ACCESS_TOKEN_REDIRECT_TEMPLATE % redirect_template_args
+
+  return HttpResponseRedirect(client_uri)
+
+
+@deco.login_required
+def oauth2callback(request):
+  """/oauth2callback - Callback handler for OAuth 2.0 redirect.
+
+  Handles redirect and moves forward to the rest of the application.
+  """
+  error = request.GET.get('error')
+  if error:
+    error_msg = request.GET.get('error_description', error)
+    return HttpTextResponse(
+        'The authorization request failed: %s' % _safe_html(error_msg))
+  else:
+    user = request.user
+    flow = _create_flow(request)
+    credentials = flow.step2_exchange(request.GET)
+    StorageByKeyName(
+        CredentialsNDBModel, user.user_id(), 'credentials').put(credentials)
+    redirect_uri = _parse_state_value(str(request.GET.get('state')),
+                                      user)
+    return HttpResponseRedirect(redirect_uri)
+
+
+@deco.admin_required
+def set_client_id_and_secret(request):
+  """/restricted/set-client-id-and-secret - Allows admin to set Client ID and
+  Secret.
+
+  These values, from the Google APIs console, are required to validate
+  OAuth 2.0 tokens within auth_utils.py.
+  """
+  if request.method == 'POST':
+    form = ClientIDAndSecretForm(request.POST)
+    if form.is_valid():
+      client_id = form.cleaned_data['client_id']
+      client_secret = form.cleaned_data['client_secret']
+      additional_client_ids = form.cleaned_data['additional_client_ids']
+      auth_utils.SecretKey.set_config(client_id, client_secret,
+                                      additional_client_ids)
+    return HttpResponseRedirect(reverse(set_client_id_and_secret))
+  else:
+    form = ClientIDAndSecretForm()
+    return respond(request, 'set_client_id_and_secret.html', {'form': form})
+
+
+### Statistics.
+
+
+DATE_FORMAT = '%Y-%m-%d'
+
+
+def update_stats(request):
+  """Endpoint that will trigger a taskqueue to update the score of all
+  AccountStatsBase derived entities.
+  """
+  if IS_DEV:
+    # Sadly, there is no way to know the admin port.
+    dashboard = 'http://%s:8000/taskqueue' % os.environ['SERVER_NAME']
+  else:
+    # Do not use app_identity.get_application_id() since we need the 's~'.
+    appid = os.environ['APPLICATION_ID']
+    versionid = os.environ['CURRENT_VERSION_ID']
+    dashboard = (
+        'https://appengine.google.com/queues?queue_name=update-stats&'
+        'app_id=%s&version_id=%s&' % (appid, versionid))
+  msg = ''
+  if request.method != 'POST':
+    form = UpdateStatsForm()
+    return respond(
+        request,
+        'admin_update_stats.html',
+        {'form': form, 'dashboard': dashboard, 'msg': msg})
+
+  form = UpdateStatsForm(request.POST)
+  if not form.is_valid():
+    form = UpdateStatsForm()
+    msg = 'Invalid form data.'
+    return respond(
+        request,
+        'admin_update_stats.html',
+        {'form': form, 'dashboard': dashboard, 'msg': msg})
+
+  tasks_to_trigger = form.cleaned_data['tasks_to_trigger'].split(',')
+  tasks_to_trigger = filter(None, (t.strip().lower() for t in tasks_to_trigger))
+  today = datetime.datetime.utcnow().date()
+
+  tasks = []
+  if not tasks_to_trigger:
+    msg = 'No task to trigger.'
+  # Special case 'refresh'.
+  elif (len(tasks_to_trigger) == 1 and
+        tasks_to_trigger[0] in ('destroy', 'refresh')):
+    taskqueue.add(
+        url=reverse(task_refresh_all_stats_score),
+        params={'destroy': str(int(tasks_to_trigger[0] == 'destroy'))},
+        queue_name='refresh-all-stats-score')
+    msg = 'Triggered %s.' % tasks_to_trigger[0]
+  else:
+    tasks = []
+    for task in tasks_to_trigger:
+      if task in ('monthly', '30'):
+        tasks.append(task)
+      elif models.verify_account_statistics_name(task):
+        if task.count('-') == 2:
+          tasks.append(task)
+        else:
+          # It's a month. Add every single day of the month as long as it's
+          # before today.
+          year, month = map(int, task.split('-'))
+          days = calendar.monthrange(year, month)[1]
+          tasks.extend(
+              '%s-%02d' % (task, d + 1) for d in range(days)
+              if datetime.date(year, month, d + 1) < today)
+      else:
+        msg = 'Invalid item.'
+        break
+    else:
+      if len(set(tasks)) != len(tasks):
+        msg = 'Duplicate items found.'
+      else:
+        taskqueue.add(
+            url=reverse(task_update_stats),
+            params={'tasks': json.dumps(tasks), 'date': str(today)},
+            queue_name='update-stats')
+        msg = 'Triggered the following tasks: %s.' % ', '.join(tasks)
+  logging.info(msg)
+  return respond(
+      request,
+      'admin_update_stats.html',
+      {'form': form, 'dashboard': dashboard, 'msg': msg})
+
+
+def cron_update_yesterday_stats(_request):
+  """Daily cron job to trigger all the necessary task queue.
+
+  - Triggers a task to update daily summaries.
+  - This task will then trigger a task to update rolling summaries.
+  - This task will then trigger a task to update monthly summaries.
+
+  Using 3 separate tasks to space out datastore contention and reduces the
+  scope of each task so the complete under 10 minutes, making retries softer
+  on the system when the datastore throws exceptions or the load for the day
+  is high.
+  """
+  today = datetime.datetime.utcnow().date()
+  day = str(today - datetime.timedelta(days=1))
+  tasks = [day, '30', 'monthly']
+  taskqueue.add(
+      url=reverse(task_update_stats),
+      params={'tasks': json.dumps(tasks), 'date': str(today)},
+      queue_name='update-stats')
+  out = 'Triggered tasks for day %s: %s' % (day, ', '.join(tasks))
+  logging.info(out)
+  return HttpTextResponse(out)
+
+
+def figure_out_real_accounts(people_involved, people_caches):
+  """Removes people that are known to be role accounts or mailing lists.
+
+  Sadly, Account instances are created even for mailing lists (!) but mailing
+  lists never create an issue, so assume that a reviewer that never created an
+  issue is a nobody.
+
+  Arguments:
+    people_involved: set or list of email addresses to scan.
+    people_caches: a lookup cache of already resolved email addresses.
+
+  Returns:
+    list of the email addresses that are not nobodies.
+  """
+  # Using '+' as a filter removes a fair number of WATCHLISTS entries.
+  people_involved = set(
+      i for i in people_involved
+      if ('+' not in i and
+        not i.startswith('commit-bot') and
+        not i.endswith('gserviceaccount.com')))
+  people_involved -= people_caches['fake']
+
+  # People we are still unsure about that need to be looked up.
+  people_to_look_for = list(people_involved - people_caches['real'])
+
+  futures = [
+    models.Issue.query(models.Issue.owner == users.User(r)).fetch(
+      limit=1, keys_only=True)
+    for r in people_to_look_for
+  ]
+  for i, future in enumerate(futures):
+    account_email = people_to_look_for[i]
+    if not list(future):
+      people_caches['fake'].add(account_email)
+      people_involved.remove(account_email)
+    else:
+      people_caches['real'].add(account_email)
+  return people_involved
+
+
+def search_relevant_first_email_for_user(
+    issue_owner, messages, user, people_caches):
+  """Calculates which Message is representative for the request latency for this
+  review for this user.
+
+  Returns:
+  - index in |messages| that is the most representative for this user as a
+    reviewer or None if no Message is relevant at all. In that case, the caller
+    should fall back to Issue.created.
+  - bool if it looks like a drive-by.
+
+  It is guaranteed that the index returned is a Message sent either by
+  |issue_owner| or |user|.
+  """
+  # Shortcut. No need to calculate the value.
+  if issue_owner == user:
+    return None, False
+
+  # Search for the first of:
+  # - message by the issue owner sent to the user or to mailing lists.
+  # - message by the user, for DRIVE_BY and NOT_REQUESTED.
+  # Otherwise, return None.
+  last_owner_message_index = None
+  for i, m in enumerate(messages):
+    if m.sender == issue_owner:
+      last_owner_message_index = i
+      if user in m.recipients:
+        return i, False
+      # Detect the use case where a request for review is sent to a mailing list
+      # and a random reviewer picks it up. We don't want to downgrade the
+      # reviewer from a proper review down to DRIVE_BY, so mark it as the
+      # important message for everyone. A common usecase is code reviews on
+      # golang-dev@googlegroups.com.
+      recipients = set(m.recipients) - set([m.sender, issue_owner])
+      if not figure_out_real_accounts(recipients, people_caches):
+        return i, False
+    elif m.sender == user:
+      # The issue owner didn't send a request specifically to this user but the
+      # dude replied anyway. It can happen if the user was on the cc list with
+      # user+cc@example.com. In that case, use the last issue owner email.
+      # We want to use this message for latency calculation DRIVE_BY and
+      # NOT_REQUESTED.
+      if last_owner_message_index is not None:
+        return last_owner_message_index, True
+      # issue_owner is MIA.
+      return i, True
+    else:
+      # Maybe a reviewer added 'user' on the review on its behalf. Likely
+      # m.sender wants to defer the review to someone else.
+      if user in m.recipients:
+        return i, False
+  # Sends the last Message index if there is any.
+  return last_owner_message_index, False
+
+
+def process_issue(
+    start, day_to_process, message_index, drive_by, issue_owner, messages,
+    user):
+  """Calculates 'latency', 'lgtms' and 'review_type' for a reviewer on an Issue.
+
+  Arguments:
+  - start: moment to use to calculate the latency. Can be either the moment a
+           Message was sent or Issue.created if no other signal exists.
+  - day_to_process: the day to look for for new 'events'.
+  - message_index: result of search_relevant_first_email_for_user().
+  - drive_by: the state of things looks like a DRIVE_BY or a NOT_REQUESTED.
+  - issue_owner: shortcut for issue.owner.email().
+  - messages: shortcut for issue.messages sorted by date. Cannot be empty.
+  - user: user to calculate latency.
+
+  A Message must have been sent on day_to_process that would imply data,
+  otherwise None, None is returned.
+  """
+  assert isinstance(start, datetime.datetime), start
+  assert isinstance(day_to_process, datetime.date), day_to_process
+  assert message_index is None or 0 <= message_index < len(messages), (
+      message_index)
+  assert drive_by in (True, False), drive_by
+  assert issue_owner.count('@') == 1, issue_owner
+  assert all(isinstance(m, models.Message) for m in messages), messages
+  assert user.count('@') == 1, user
+
+  lgtms = sum(
+      m.sender == user and
+      m.find(models.Message.LGTM_RE, owner_allowed=True) and
+      not m.find(models.Message.NOT_LGTM_RE, owner_allowed=True)
+      for m in messages)
+
+  # TODO(maruel): Check for the base username part, e.g.:
+  # if user.split('@', 1)[0] == issue_owner.split('@', 1)[0]:
+  # For example, many people have both matching @google.com and @chromium.org
+  # accounts.
+  if user == issue_owner:
+    if not any(m.date.date() == day_to_process for m in messages):
+      return -1, None, None
+    # There's no concept of review latency for OUTGOING reviews.
+    return -1, lgtms, models.AccountStatsBase.OUTGOING
+
+  if message_index is None:
+    # Neither issue_owner nor user sent an email, ignore.
+    return -1, None, None
+
+  if drive_by:
+    # Tricky case. Need to determine the difference between NOT_REQUESTED and
+    # DRIVE_BY. To determine if an issue is NOT_REQUESTED, look if the owner
+    # never sent a request for review in the previous messages.
+    review_type = (
+      models.AccountStatsBase.NOT_REQUESTED
+      if messages[message_index].sender == user
+      else models.AccountStatsBase.DRIVE_BY)
+  else:
+    review_type = models.AccountStatsBase.NORMAL
+
+  for m in messages[message_index:]:
+    if m.sender == user:
+      if m.date.date() < day_to_process:
+        # It was already updated on a previous day. Skip calculation.
+        return -1, None, None
+      return int((m.date - start).total_seconds()), lgtms, review_type
+
+  # 'user' didn't send a message, so no latency can be calculated.
+  assert not lgtms, lgtms
+  return -1, lgtms, models.AccountStatsBase.IGNORED
+
+
+def yield_people_issue_to_update(day_to_process, issues, messages_looked_up):
+  """Yields all the combinations of user-day-issue that needs to be updated.
+
+  Arguments:
+  - issues: set() of all the Issue touched.
+  - messages_looked_up: list of one int to count the number of Message looked
+    up.
+
+  Yields:
+   - tuple user, day, issue_id, latency, lgtms, review_type.
+  """
+  assert isinstance(day_to_process, datetime.datetime), day_to_process
+  assert not issues and isinstance(issues, set), issues
+  assert [0] == messages_looked_up, messages_looked_up
+
+  day_to_process_date = day_to_process.date()
+  # Cache people that are valid accounts or not to reduce datastore lookups.
+  people_caches = {'fake': set(), 'real': set()}
+  # dict((user, day) -> set(issue_id)) mapping of
+  # the AccountStatsDay that will need to be recalculated.
+  need_to_update = {}
+  # TODO(maruel): Use asynchronous programming to start moving on to the next
+  # issue right away. This means creating our own Future instances.
+
+  cursor = None
+  while True:
+    query = models.Message.query(
+        models.Message.date >= day_to_process,
+        default_options=ndb.QueryOptions(keys_only=True)).order(
+        models.Message.date)
+    # Someone sane would ask: why the hell do this? I don't know either but
+    # that's the only way to not have it throw an exception after 60 seconds.
+    message_keys, cursor, more = query.fetch_page(100, start_cursor=cursor)
+    if not message_keys:
+      # We're done, no more cursor.
+      break
+    for message_key in message_keys:
+      # messages_looked_up may be overcounted, as the messages on the next day
+      # on issues already processed will be accepted as valid, until a new issue
+      # is found.
+      messages_looked_up[0] += 1
+      issue_key = message_key.parent()
+      issue_id = issue_key.id()
+      if issue_id in issues:
+        # This issue was already processed.
+        continue
+
+      # Aggressively fetch data concurrently.
+      message_future = message_key.get_async()
+      issue_future = issue_key.get_async()
+      messages_future = models.Message.query(ancestor=issue_key).fetch_async(
+          batch_size=1000)
+      if message_future.get_result().date.date() > day_to_process_date:
+        # Now on the next day. It is important to stop, especially when looking
+        # at very old CLs.
+        messages_looked_up[0] -= 1
+        cursor = None
+        break
+
+      # Make sure to not process this issue a second time.
+      issues.add(issue_id)
+      issue = issue_future.get_result()
+      # Sort manually instead of using .order('date') to save one index. Strips
+      # off any Message after day_to_process.
+      messages = sorted(
+          (m for m in messages_future.get_result()
+           if m.date.date() <= day_to_process_date),
+          key=lambda x: x.date)
+
+      # Updates the dict of the people-day pairs that will need to be updated.
+      issue_owner = issue.owner.email()
+      # Ignore issue.reviewers since it can change over time. Sadly m.recipients
+      # also contains people cc'ed so take care of these manually.
+      people_to_consider = set(m.sender for m in messages)
+      people_to_consider.add(issue_owner)
+      for m in messages:
+        for r in m.recipients:
+          if (any(n.sender == r for n in messages) or
+              r in issue.reviewers or
+              r not in issue.cc):
+            people_to_consider.add(r)
+
+      # 'issue_owner' is by definition a real account. Save one datastore
+      # lookup.
+      people_caches['real'].add(issue_owner)
+
+      for user in figure_out_real_accounts(people_to_consider, people_caches):
+        message_index, drive_by = search_relevant_first_email_for_user(
+            issue_owner, messages, user, people_caches)
+        if (message_index == None or
+            ( drive_by and
+              messages[message_index].sender == user and
+              not any(m.sender == issue_owner
+                      for m in messages[:message_index]))):
+          # There's no important message, calculate differently by using the
+          # issue creation date.
+          start = issue.created
+        else:
+          start = messages[message_index].date
+
+        # Note that start != day_to_process_date
+        start_str = str(start.date())
+        user_issue_set = need_to_update.setdefault((user, start_str), set())
+        if not issue_id in user_issue_set:
+          user_issue_set.add(issue_id)
+          latency, lgtms, review_type = process_issue(
+              start, day_to_process_date, message_index, drive_by, issue_owner,
+              messages, user)
+          if review_type is None:
+            # process_issue() determined there is nothing to update.
+            continue
+          yield user, start_str, issue_id, latency, lgtms, review_type
+    if not cursor:
+      break
+
+
+@deco.task_queue_required('update-stats')
+def task_update_stats(request):
+  """Dispatches the relevant task to execute.
+
+  Can dispatch either update_daily_stats, update_monthly_stats or
+  update_rolling_stats.
+  """
+  tasks = json.loads(request.POST.get('tasks'))
+  date_str = request.POST.get('date')
+  cursor = ndb.Cursor(urlsafe=request.POST.get('cursor'))
+  countdown = 15
+  if not tasks:
+    msg = 'Nothing to execute!?'
+    logging.warning(msg)
+    out = HttpTextResponse(msg)
+  else:
+    # Dispatch the task to execute.
+    task = tasks.pop(0)
+    logging.info('Running %s.', task)
+    if task.count('-') == 2:
+      out, cursor = update_daily_stats(
+          cursor, datetime.datetime.strptime(task, DATE_FORMAT))
+    elif task == 'monthly':
+      # The only reason day is used is in case a task queue spills over the next
+      # day.
+      day = datetime.datetime.strptime(date_str, DATE_FORMAT)
+      out, cursor = update_monthly_stats(cursor, day)
+    elif task == '30':
+      yesterday = (
+          datetime.datetime.strptime(date_str, DATE_FORMAT)
+          - datetime.timedelta(days=1)).date()
+      out, cursor = update_rolling_stats(cursor, yesterday)
+    else:
+      msg = 'Unknown task %s, ignoring.' % task
+      cursor = ''
+      logging.error(msg)
+      out = HttpTextResponse(msg)
+
+    if cursor:
+      # Not done yet!
+      tasks.insert(0, task)
+      countdown = 0
+
+  if out.status_code == 200 and tasks:
+    logging.info('%d tasks to go!\n%s', len(tasks), ', '.join(tasks))
+    # Space out the task queue execution by 15s to reduce the risk of
+    # datastore inconsistency to get in the way, since no transaction is used.
+    # This means to process a full month, it'll include 31*15s = 7:45 minutes
+    # delay. 15s is not a lot but we are in an hurry!
+    taskqueue.add(
+        url=reverse(task_update_stats),
+        params={
+          'tasks': json.dumps(tasks),
+          'date': date_str,
+          'cursor': cursor.urlsafe() if cursor else ''},
+        queue_name='update-stats',
+        countdown=countdown)
+  return out
+
+
+def update_daily_stats(cursor, day_to_process):
+  """Updates the statistics about every reviewer for the day.
+
+  Note that joe@google != joe@chromium, so make sure to always review with the
+  right email address or your stats will suffer.
+
+  The goal here is:
+  - detect all the active reviewers in the past day.
+  - for each of them, update their statistics for the past day.
+
+  There can be thousands of CLs modified in a single day so throughput
+  efficiency is important here, as it has only 10 minutes to complete.
+  """
+  start = time.time()
+  # Look at all messages sent in the day. The issues associated to these
+  # messages are the issues we care about.
+  issues = set()
+  # Use a list so it can be modified inside the generator.
+  messages_looked_up = [0]
+  total = 0
+  try:
+    chunk_size = 10
+    max_futures = 200
+    futures = []
+    items = []
+    for packet in yield_people_issue_to_update(
+        day_to_process, issues, messages_looked_up):
+      user, day, issue_id, latency, lgtms, review_type = packet
+      account_key = ndb.Key('Account', models.Account.get_id_for_email(user))
+      found = False
+      for item in items:
+        # A user could touch multiple issues in a single day.
+        if item.key.id() == day and item.key.parent() == account_key:
+          found = True
+          break
+      else:
+        # Find the object and grab it. Do not use get_or_insert() to save a
+        # transaction and double-write.
+        item = models.AccountStatsDay.get_by_id(
+            day, parent=account_key, use_cache=False)
+        if not item:
+          # Create a new one.
+          item = models.AccountStatsDay(id=day, parent=account_key)
+
+      if issue_id in item.issues:
+        # It was already there, update.
+        i = item.issues.index(issue_id)
+
+        if (item.latencies[i] == latency and
+            item.lgtms[i] == lgtms and
+            item.review_types[i] == review_type):
+          # Was already calculated, skip.
+          continue
+
+        # Make sure to not "downgrade" the object.
+        if item.lgtms[i] > lgtms:
+          # Never lower the number of lgtms.
+          continue
+
+        if item.latencies[i] >= 0 and latency == -1:
+          # Unchanged or "lower priority", no need to store again.
+          continue
+
+        if (item.latencies[i] >= 0 and latency >= 0 and
+            item.latencies[i] != latency):
+          # That's rare, the new calculated latency doesn't match the previously
+          # calculated latency. File an error but let it go.
+          logging.error(
+              'New calculated latency doesn\'t match previously calculated '
+              'value.\n%s != %s\nItem %d in:\n%s',
+              item.latencies[i], latency, i, item)
+
+        item.latencies[i] = latency
+        item.lgtms[i] = lgtms
+        item.review_types[i] = review_type
+      else:
+        # TODO(maruel): Sort?
+        item.issues.append(issue_id)
+        item.latencies.append(latency)
+        item.lgtms.append(lgtms)
+        item.review_types.append(review_type)
+
+      if not found:
+        items.append(item)
+        if len(items) == chunk_size:
+          futures.extend(ndb.put_multi_async(items, use_cache=False))
+          total += chunk_size
+          items = []
+          futures = [f for f in futures if not f.done()]
+          while len(futures) > max_futures:
+            # Slow down to limit memory usage.
+            ndb.Future.wait_any(futures)
+            futures = [f for f in futures if not f.done()]
+
+    if items:
+      futures.extend(ndb.put_multi_async(items, use_cache=False))
+      total += len(items)
+    ndb.Future.wait_all(futures)
+    result = 200
+  except (db.Timeout, DeadlineExceededError):
+    result = 500
+
+  out = (
+      '%s\n'
+      '%d messages\n'
+      '%d issues\n'
+      'Updated %d items\n'
+      'In %.1fs\n') % (
+        day_to_process.date(), messages_looked_up[0], len(issues),
+        total, time.time() - start)
+  if result == 200:
+    logging.info(out)
+  else:
+    logging.error(out)
+  return HttpTextResponse(out, status=result), ''
+
+
+def update_rolling_stats(cursor, reference_day):
+  """Looks at all accounts and recreates all the rolling 30 days
+  AccountStatsMulti summaries.
+
+  Note that during the update, the leaderboard will be inconsistent.
+
+  Only do 1000 accounts at a time since there's a memory leak in the function.
+  """
+  assert isinstance(cursor, ndb.Cursor), cursor
+  assert isinstance(reference_day, datetime.date), reference_day
+  start = time.time()
+  total = 0
+  total_deleted = 0
+  try:
+    # Process *all* the accounts.
+    duration = '30'
+    chunk_size = 10
+    futures = []
+    items = []
+    to_delete = []
+    accounts = 0
+    while True:
+      query = models.Account.query()
+      account_keys, next_cursor, more = query.fetch_page(
+        100, keys_only=True, start_cursor=cursor)
+      if not account_keys:
+        # We're done, no more cursor.
+        next_cursor = None
+        break
+
+      a_key = ''
+      for a_key in account_keys:
+        accounts += 1
+        # TODO(maruel): If date of each issue was saved in the entity, this
+        # would not be necessary, assuming the entity doesn't become itself
+        # corrupted.
+        rolling_future = models.AccountStatsMulti.get_by_id_async(
+            duration, parent=a_key)
+        days = [
+          str(reference_day - datetime.timedelta(days=i))
+          for i in xrange(int(duration))
+        ]
+        days_keys = [
+          ndb.Key(models.AccountStatsDay, d, parent=a_key) for d in days
+        ]
+        valid_days = filter(None, ndb.get_multi(days_keys))
+        if not valid_days:
+          rolling = rolling_future.get_result()
+          if rolling:
+            to_delete.append(rolling.key)
+            if len(to_delete) == chunk_size:
+              futures.extend(ndb.delete_multi_async(to_delete))
+              total_deleted += chunk_size
+              to_delete = []
+              futures = [f for f in futures if not f.done()]
+          continue
+
+        # Always override the content.
+        rolling = models.AccountStatsMulti(id=duration, parent=a_key)
+        # Sum all the daily instances into the rolling summary. Always start
+        # over because it's not just adding data, it's also removing data from
+        # the day that got excluded from the rolling summary.
+        if models.sum_account_statistics(rolling, valid_days):
+          items.append(rolling)
+          if len(items) == chunk_size:
+            futures.extend(ndb.put_multi_async(items))
+            total += chunk_size
+            items = []
+            futures = [f for f in futures if not f.done()]
+
+      if accounts == 1000 or (time.time() - start) > 300:
+        # Limit memory usage.
+        logging.info('%d accounts, last was %s', accounts, a_key.id()[1:-1])
+        break
+
+    if items:
+      futures.extend(ndb.put_multi_async(items))
+      total += len(items)
+    if to_delete:
+      futures.extend(ndb.delete_multi_async(to_delete))
+      total_deleted += len(to_delete)
+    ndb.Future.wait_all(futures)
+    result = 200
+  except (db.Timeout, DeadlineExceededError):
+    result = 500
+
+  out = '%s\nLooked up %d accounts\nStored %d items\nDeleted %d\nIn %.1fs\n' % (
+      reference_day, accounts, total, total_deleted, time.time() - start)
+  if result == 200:
+    logging.info(out)
+  else:
+    logging.error(out)
+  return HttpTextResponse(out, status=result), next_cursor
+
+
+def update_monthly_stats(cursor, day_to_process):
+  """Looks at all AccountStatsDay instance updated on that day and updates the
+  corresponding AccountStatsMulti instance.
+
+  This taskqueue updates all the corresponding monthly AccountStatsMulti
+  summaries by looking at all AccountStatsDay.modified.
+  """
+  today = datetime.datetime.utcnow().date()
+  start = time.time()
+  total = 0
+  skipped = 0
+  try:
+    # The biggest problem here is not time but memory usage so limit the number
+    # of ongoing futures.
+    max_futures = 200
+    futures = []
+    days_stats_fetched = 0
+    yielded = 0
+    q = models.AccountStatsDay.query(
+        models.AccountStatsDay.modified >= day_to_process,
+        default_options=ndb.QueryOptions(keys_only=True))
+    months_to_regenerate = set()
+    while True:
+      day_stats_keys, cursor, more = q.fetch_page(100, start_cursor=cursor)
+      if not day_stats_keys:
+        cursor = None
+        break
+      days_stats_fetched += len(day_stats_keys)
+      if not (days_stats_fetched % 1000):
+        logging.info('Scanned %d AccountStatsDay.', days_stats_fetched)
+
+      # Create a batch of items to process.
+      batch = []
+      for key in day_stats_keys:
+        month_name = key.id().rsplit('-', 1)[0]
+        account_name = key.parent().id()
+        lookup_key = '%s-%s' % (month_name, account_name)
+        if not lookup_key in months_to_regenerate:
+          batch.append((month_name, account_name))
+        months_to_regenerate.add(lookup_key)
+
+      for month_name, account_id in batch:
+        yielded += 1
+        if not (yielded % 1000):
+          logging.info(
+              '%d items done, %d skipped, %d yielded %d futures.',
+              total, skipped, yielded, len(futures))
+
+        account_key = ndb.Key(models.Account, account_id)
+        monthly = models.AccountStatsMulti.get_by_id(
+            month_name, parent=account_key, use_cache=False)
+        if not monthly:
+          # Create a new one.
+          monthly = models.AccountStatsMulti(id=month_name, parent=account_key)
+        elif monthly.modified.date() == today:
+          # It was modified today, skip it.
+          skipped += 1
+          continue
+
+        days_in_month = calendar.monthrange(*map(int, month_name.split('-')))[1]
+        days_name = [
+          month_name + '-%02d' % (i + 1) for i in range(days_in_month)
+        ]
+        days_keys = [
+          ndb.Key(models.AccountStatsDay, d, parent=account_key)
+          for d in days_name
+        ]
+        days = [d for d in ndb.get_multi(days_keys, use_cache=False) if d]
+        assert days, (month_name, account_id)
+        if models.sum_account_statistics(monthly, days):
+          futures.extend(ndb.put_multi_async([monthly], use_cache=False))
+          total += 1
+          while len(futures) > max_futures:
+            # Slow down to limit memory usage.
+            ndb.Future.wait_any(futures)
+            futures = [f for f in futures if not f.done()]
+        else:
+          skipped += 1
+
+      if (time.time() - start) > 400:
+        break
+
+    ndb.Future.wait_all(futures)
+    result = 200
+  except (db.Timeout, DeadlineExceededError) as e:
+    logging.error(str(e))
+    result = 500
+
+  out = '%s\nStored %d items\nSkipped %d\nIn %.1fs\n' % (
+      day_to_process.date(), total, skipped, time.time() - start)
+  if result == 200:
+    logging.info(out)
+  else:
+    logging.error(out)
+  return HttpTextResponse(out, status=result), cursor
+
+
+@deco.task_queue_required('refresh-all-stats-score')
+def task_refresh_all_stats_score(request):
+  """Updates all the scores or destroy them all.
+
+  - Updating score is necessary when models.compute_score() is changed.
+  - Destroying the instances is necessary if
+    search_relevant_first_email_for_user() or process_issue() are modified.
+  """
+  start = time.time()
+  cls_name = request.POST.get('cls') or 'Day'
+  destroy = int(request.POST.get('destroy', '0'))
+  cursor = datastore_query.Cursor(urlsafe=request.POST.get('cursor'))
+  task_count = int(request.POST.get('task_count', '0'))
+  assert cls_name in ('Day', 'Multi'), cls_name
+  cls = (
+      models.AccountStatsDay
+      if cls_name == 'Day' else models.AccountStatsMulti)
+
+  # Task queues are given 10 minutes. Do it in 9 minutes chunks to protect
+  # against most timeout conditions.
+  timeout = 540
+  updated = 0
+  skipped = 0
+  try:
+    futures = []
+    chunk_size = 10
+    items = []
+    more = True
+    if destroy:
+      options = ndb.QueryOptions(keys_only=True)
+    else:
+      options = ndb.QueryOptions()
+    while more:
+      batch, cursor, more = cls.query(default_options=options).fetch_page(
+          20, start_cursor=cursor)
+      if destroy:
+        futures.extend(ndb.delete_multi_async(batch))
+        updated += len(batch)
+      else:
+        for i in batch:
+          score = models.compute_score(i)
+          if i.score != score:
+            items.append(i)
+            if len(items) == chunk_size:
+              futures.extend(ndb.put_multi_async(items))
+              updated += chunk_size
+              items = []
+              futures = [f for f in futures if not f.done()]
+          else:
+            skipped += 1
+      if time.time() - start >= timeout:
+        break
+    if items:
+      futures.extend(ndb.put_multi_async(items))
+      updated += chunk_size
+    ndb.Future.wait_all(futures)
+    if not more and cls_name == 'Day':
+      # Move to the Multi instances.
+      more = True
+      cls_name = 'Multi'
+      cursor = datastore_query.Cursor()
+    if more:
+      taskqueue.add(
+          url=reverse(task_refresh_all_stats_score),
+          params={
+            'cls': cls_name,
+            'cursor': cursor.urlsafe() if cursor else '',
+            'destroy': str(destroy),
+            'task_count': str(task_count+1),
+          },
+          queue_name='refresh-all-stats-score')
+    result = 200
+  except (db.Timeout, DeadlineExceededError):
+    result = 500
+  out = 'Index: %d\nType = %s\nStored %d items\nSkipped %d\nIn %.1fs\n' % (
+      task_count, cls.__name__, updated, skipped, time.time() - start)
+  if result == 200:
+    logging.info(out)
+  else:
+    logging.error(out)
+  return HttpTextResponse(out, status=result)
+
+
+def quarter_to_months(when):
+  """Manually handles the forms 'YYYY' or 'YYYY-QX'."""
+  today = datetime.datetime.utcnow().date()
+  if when.isdigit() and 2008 <= int(when) <= today.year:
+    # Select the whole year.
+    year = int(when)
+    if year == today.year:
+      out = ['%04d-%02d' % (year, i + 1) for i in range(today.month)]
+    else:
+      out = ['%04d-%02d' % (year, i + 1) for i in range(12)]
+  else:
+    quarter = re.match(r'^(\d\d\d\d-)[qQ]([1-4])$', when)
+    if not quarter:
+      return None
+    prefix = quarter.group(1)
+    # Convert the quarter into 3 months group.
+    base = (int(quarter.group(2)) - 1) * 3 + 1
+    out = ['%s%02d' % (prefix, i) for i in range(base, base+3)]
+
+  logging.info('Expanded to %s' % ', '.join(out))
+  return out
+
+
+def show_user_impl(user, when):
+  months = None
+  if not models.verify_account_statistics_name(when):
+    months = quarter_to_months(when)
+    if not months:
+      return None
+
+  account_key = ndb.Key(models.Account, models.Account.get_id_for_email(user))
+  # Determines which entity class should be loaded by the number of '-'.
+  cls = (
+      models.AccountStatsDay
+      if when.count('-') == 2 else models.AccountStatsMulti)
+  if months:
+    # Normalize to 'q'.
+    when = when.lower()
+    # Loads the stats for the 3 months and merge them.
+    keys = [ndb.Key(cls, i, parent=account_key) for i in months]
+    values = filter(None, ndb.get_multi(keys))
+    stats = cls(id=when, parent=account_key)
+    models.sum_account_statistics(stats, values)
+  else:
+    stats = cls.get_by_id(when, parent=account_key)
+    if not stats:
+      # It's a valid date or rolling summary key, so if there's nothing, just
+      # return the fact there's no data with an empty object.
+      stats = cls(id=when, parent=account_key)
+  return stats
+
+
+@deco.user_key_required
+def show_user_stats(request, when):
+  stats = show_user_impl(request.user_to_show.email(), when)
+  if not stats:
+    return HttpResponseNotFound()
+  incoming = [
+    {
+      'issue': stats.issues[i],
+      'latency': stats.latencies[i],
+      'lgtms': stats.lgtms[i],
+      'review_type':
+          models.AccountStatsBase.REVIEW_TYPES[stats.review_types[i]],
+    } for i in xrange(len(stats.issues))
+    if stats.review_types[i] != models.AccountStatsBase.OUTGOING
+  ]
+  outgoing = [
+    {
+      'issue': stats.issues[i],
+      'lgtms': stats.lgtms[i],
+    } for i in xrange(len(stats.issues))
+    if stats.review_types[i] == models.AccountStatsBase.OUTGOING
+  ]
+  return respond(
+      request,
+      'user_stats.html',
+      {
+        'viewed_account': request.user_to_show,
+        'incoming': incoming,
+        'outgoing': outgoing,
+        'stats': stats,
+        'when': when,
+      })
+
+
+@deco.json_response
+@deco.user_key_required
+def show_user_stats_json(request, when):
+  stats = show_user_impl(request.user_to_show.email(), when)
+  if not stats:
+    return {deco.STATUS_CODE: 404}
+  return stats.to_dict()
+
+
+def leaderboard_impl(when, limit):
+  """Returns the leaderboard for this Rietveld instance on |when|.
+
+  It returns the list of the reviewers sorted by their score for
+  the past weeks, a specific day or month or a quarter.
+  """
+  when = when.lower()
+  months = None
+  if not models.verify_account_statistics_name(when):
+    months = quarter_to_months(when)
+    if not months:
+      return None
+
+  cls = (
+      models.AccountStatsDay
+      if when.count('-') == 2 else models.AccountStatsMulti)
+  if months:
+    # Use the IN operator to simultaneously select the 3 months.
+    results = cls.query(cls.name.IN(months)).order(cls.score).fetch(limit)
+    # Then merge all the results accordingly.
+    tops = {}
+    for i in results:
+      tops.setdefault(i.user, []).append(i)
+    for key, values in tops.iteritems():
+      values.sort(key=lambda x: x.name)
+      out = models.AccountStatsMulti(id=when, parent=values[0].key.parent())
+      models.sum_account_statistics(out, values)
+      tops[key] = out
+    tops = sorted(tops.itervalues(), key=lambda x: x.score)
+  else:
+    # Grabs the pre-calculated entities or daily entity.
+    tops = cls.query(cls.name == when).order(cls.score).fetch(limit)
+
+  # Remove anyone with a None score.
+  return [t for t in tops if t.score is not None]
+
+
+def stats_to_dict(t):
+  """Adds value 'user'.
+
+  It is a meta property so it is not included in to_dict() by default.
+  """
+  o = t.to_dict()
+  o['user'] = t.user
+  return o
+
+
+@deco.json_response
+def leaderboard_json(request, when):
+  limit = _clean_int(request.GET.get('limit'), 300, 1, 1000)
+  data = leaderboard_impl(when, limit)
+  if data is None:
+    return {deco.STATUS_CODE: 404}
+  return [stats_to_dict(t) for t in data]
+
+
+def leaderboard(request, when):
+  """Prints the leaderboard for this Rietveld instance."""
+  limit = _clean_int(request.GET.get('limit'), 300, 1, 1000)
+  data = leaderboard_impl(when, limit)
+  if data is None:
+    return HttpResponseNotFound()
+  tops = []
+  shame = []
+  for i in data:
+    if i.score == models.AccountStatsBase.NULL_SCORE:
+      shame.append(i)
+    else:
+      tops.append(i)
+  return respond(
+      request, 'leaderboard.html', {'tops': tops, 'shame': shame, 'when': when})

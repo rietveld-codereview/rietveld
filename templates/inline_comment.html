@@ -45,7 +45,7 @@ class="{%if bucket.quoted%}comment-text-quoted{%else%}comment-text{%endif%}"
 <input type="hidden" name="lineno" value="{{lineno}}">
 <input type="hidden" name="oldtext" value="{{c.text}}">
 {%if c.message_id%}<input type="hidden" name="message_id" value="{{c.message_id}}">{%endif%}
-<textarea name="text" cols="60" rows="5">{{c.text}}</textarea><br>
+<textarea name="text" style="width:96%" rows="10">{{c.text}}</textarea><br>
 <input type="submit" name="save" value="Save" onclick="return M_submitInlineComment(this.form, {{forloop.counter0}}, {{lineno}}, '{{side}}')">
 <input type="reset" name="cancel" value="Cancel" onclick="M_resetAndHideInlineComment(this.form, {{forloop.counter0}}, {{lineno}}, '{{side}}')">
 <input type="submit" name="discard" value="Discard" onclick="return M_removeInlineComment(this.form, {{forloop.counter0}}, {{lineno}}, '{{side}}')">
@@ -57,7 +57,9 @@ class="{%if bucket.quoted%}comment-text-quoted{%else%}comment-text{%endif%}"
    href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}')"
 ><b>Reply</b></a>
 {%if c.backend%}<a href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Please fix.', true)"><b>Please fix</b></a>
-{%else%}<a href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Done.', true)"><b>Done</b></a>{%endif%}
+{%else%}<a name="comment-done" href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Done.', true)"><b>Done</b></a>
+<a name="comment-ack" href="javascript:M_replyToInlineComment('{%nickname c.author True%}', '{{c.date|date:"Y/m/d H:i:s"}}', {{forloop.counter0}}, {{lineno}}, '{{side}}', 'Acknowledged.', true)"><b>Ack</b></a>
+{%endif%}
 {%ifequal c.backend "bugbot"%} &nbsp; <a target="_blank" href="http://bugbotexp{{file.depot_path|escape}}"><b>&raquo; Suppress</b></a>{%endifequal%}
 {%endif%}
 {%endif%}

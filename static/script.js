@@ -114,6 +114,45 @@ function M_getPageOffsetTop(element) {
   return y;
 }
 
+function M_editPatchsetTitle(issue, patchset, xsrf_token,
+                             original_patchset_title, patch_count) {
+
+  var new_patchset_title = prompt(
+      'Please enter the new title of Patch Set ' + patch_count,
+      original_patchset_title);
+  if (new_patchset_title == null) { 
+    return false;
+  } else if (new_patchset_title == original_patchset_title) {
+    // Do not make an HTTP req if the new specified title is exactly the same.
+    return false;
+  }
+
+  //Build POST data for request.
+  var data = [];
+  data.push('xsrf_token=' + xsrf_token);
+  data.push('patchset_title=' + new_patchset_title);
+
+  var httpreq = M_getXMLHttpRequest();
+  if (!httpreq) {
+    return true;
+  }
+  httpreq.onreadystatechange = function() {
+    if (httpreq.readyState == 4) {
+      if (httpreq.status == 200) {
+        window.location.reload();
+      }
+    }
+  }
+  httpreq.open(
+      'POST',
+       base_url + issue + "/patchset/" + patchset + '/edit_patchset_title',
+       true);
+  httpreq.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  httpreq.send(data.join("&"));
+
+  return true;
+}
+
 /**
  * Return distance in pixels of the given element from the left of the document.
  * @param {Element} element The element whose offset we want to find
@@ -491,7 +530,8 @@ function M_toggleIssueOverviewByAnchor() {
       var elem = document.getElementById(anchor);
       elem.className += ' referenced';
       var num = elem.getAttribute('name');
-      M_switchChangelistComment(num);
+      if (anchor.slice(3) != lastMsgID)
+        M_switchChangelistComment(num);
     } else if (anchor.slice(0, 2) == 'ps') {
       // hide last patchset which is visible by default.
       M_toggleSectionForPS(issueId, lastPSId);
@@ -677,6 +717,10 @@ function M_replyToMessage(message_id, written_time, author,
     M_setValueFromDivs(divs, form.message);
     form.message.value += "\n";
   }
+  // Scroll view to bottom of message textarea and scroll textarea to bottom
+  // too, so that the user can write w/o adjusting the views first.
+  M_scrollIntoView(window, form.send_mail, 1);
+  form.message.scrollTop = form.message.scrollHeight;
   M_addTextResizer_(form);
   M_hideElement(replyLink);
 }
@@ -1413,12 +1457,15 @@ function M_handleTableTouchStart(evt) {
   if (evt.touches && evt.touches.length == 1) { // 1 finger touch
     M_clearTableTouchTimeout();
     M_timerLongTap = setTimeout(function() {
-     M_clearTableTouchTimeout();
+      M_clearTableTouchTimeout();
       M_handleTableDblClick(evt);
     }, 1000);
   }
 }
 
+function M_handleTableTouchMove(evt) {
+  M_clearTableTouchTimeout();
+}
 
 /**
  * Handles touchend event for long taps on mobile devices.
@@ -1915,6 +1962,68 @@ M_HookState.prototype.gotoPrevHook = function(opt_findComment) {
 };
 
 /**
+ * Finds the list of comments attached to the current hook, if any.
+ *
+ * @param self The calling object.
+ * @return The list of comment DOM elements.
+ */
+function M_findCommentsForCurrentHook_(self) {
+  var hooks = self.visibleHookCache;
+  var hasHook = (self.hookPos >= 0 && self.hookPos < hooks.length &&
+		 M_isElementVisible(self.win, hooks[self.hookPos].cells[0]));
+  if (!hasHook)
+    return [];
+
+  // Go through this tr and collect divs.
+  var comments = hooks[self.hookPos].getElementsByTagName("div");
+  if (comments && comments.length == 0) {
+    // Don't give up too early and look a bit forward
+    var sibling = hooks[self.hookPos].nextSibling;
+    while (sibling && sibling.tagName != "TR") {
+      sibling = sibling.nextSibling;
+    }
+    comments = sibling.getElementsByTagName("div");
+  }
+  return comments;
+}
+
+/**
+ * If the currently selected hook is a comment, either respond to it or edit
+ * the draft if there is one already. Prefer the right side of the table.
+ */
+M_HookState.prototype.markAsDone = function() {
+  var comments = M_findCommentsForCurrentHook_(this);
+  var commentsLength = comments.length;
+  if (!comments || !commentsLength)
+    return;
+
+  var last = null;
+  // Try responding to the last comment. The general hope is that
+  // these are returned in DOM order.
+  for (var i = commentsLength - 1; i >= 0; i--) {
+    if (comments[i].getAttribute("name") == "comment-border") {
+      last = comments[i];
+      break;
+    }
+  }
+  if (!last)
+    return;
+
+  var links = last.getElementsByTagName("a");
+  if (links) {
+    for (var i = links.length - 1; i >= 0; i--) {
+      if (links[i].getAttribute("name") == "comment-done" &&
+          links[i].style.display != "none") {
+        document.location.href = links[i].href;
+	// Prevent done from being posted again.
+	links[i].setAttribute("name", "");
+        return;
+      }
+    }
+  }
+};
+
+/**
  * If the currently selected hook is a comment, either respond to it or edit
  * the draft if there is one already. Prefer the right side of the table.
  */
@@ -1922,46 +2031,38 @@ M_HookState.prototype.respond = function() {
   if (this.indicated_element &&
       ! this.indicated_element.getAttribute("name") != "hook") {
     // Turn indicated element into a "real" hook so we can add comments.
-    this.indicated_element.setAttribute("name", "hook")
+    this.indicated_element.setAttribute("name", "hook");
   }
   this.updateHooks();
   var hooks = this.visibleHookCache;
-  if (this.hookPos >= 0 && this.hookPos < hooks.length &&
-      M_isElementVisible(this.win, hooks[this.hookPos].cells[0])) {
-    // Go through this tr and try responding to the last comment. The general
-    // hope is that these are returned in DOM order
-    var comments = hooks[this.hookPos].getElementsByTagName("div");
-    var commentsLength = comments.length;
-    if (comments && commentsLength == 0) {
-      // Don't give up too early and look a bit forward
-      var sibling = hooks[this.hookPos].nextSibling;
-      while (sibling && sibling.tagName != "TR") {
-        sibling = sibling.nextSibling;
+  var hasHook = (this.hookPos >= 0 && this.hookPos < hooks.length &&
+                 M_isElementVisible(this.win, hooks[this.hookPos].cells[0]));
+  if (!hasHook)
+    return;
+
+  var comments = M_findCommentsForCurrentHook_(this);
+  var commentsLength = comments.length;
+  if (comments && commentsLength > 0) {
+    var last = null;
+    for (var i = commentsLength - 1; i >= 0; i--) {
+      if (comments[i].getAttribute("name") == "comment-border") {
+        last = comments[i];
+        break;
       }
-      comments = sibling.getElementsByTagName("div");
-      commentsLength = comments.length;
     }
-    if (comments && commentsLength > 0) {
-      var last = null;
-      for (var i = commentsLength - 1; i >= 0; i--) {
-        if (comments[i].getAttribute("name") == "comment-border") {
-          last = comments[i];
-          break;
-        }
-      }
-      if (last) {
-        var links = last.getElementsByTagName("a");
-        if (links) {
-          for (var i = links.length - 1; i >= 0; i--) {
-            if (links[i].getAttribute("name") == "comment-reply" &&
-                links[i].style.display != "none") {
-              document.location.href = links[i].href;
-              return;
-            }
+    if (last) {
+      var links = last.getElementsByTagName("a");
+      if (links) {
+        for (var i = links.length - 1; i >= 0; i--) {
+          if (links[i].getAttribute("name") == "comment-reply" &&
+              links[i].style.display != "none") {
+            document.location.href = links[i].href;
+            return;
           }
         }
       }
-    } else {
+    }
+  } else {
     // Create a comment at this line
     // TODO: Implement this in a sane fashion, e.g. opens up a comment
     // at the end of the diff chunk.
@@ -1974,7 +2075,6 @@ M_HookState.prototype.respond = function() {
         M_createInlineComment(parseInt(tr.cells[i].id.substr(7)), 'a');
         return;
       }
-    }
     }
   }
 };
@@ -2194,7 +2294,7 @@ function M_keyDownCommon(evt, handler, input_handler) {
  */
 function M_commentTextKeyDown_(src, key) {
   if (src.nodeName == "TEXTAREA") {
-    if (key == 'Ctrl-S') {
+    if (key == 'Ctrl-S' || key == 'Ctrl-Enter') {
       // Save the form corresponding to this text area.
       M_disableCarefulUnload();
       if (src.form.save.onclick) {
@@ -2288,6 +2388,9 @@ function M_keyDown(evt) {
     } else if (key == 'Enter') {
       // respond to current comment
       if (hookState) hookState.respond();
+    } else if (key == 'D') {
+      // mark current comment as done
+      if (hookState) hookState.markAsDone();
     } else {
       return true;
     }
@@ -2722,7 +2825,7 @@ function M_dashboardKeyDown(evt) {
       if (dashboardState) {
 	var child = dashboardState.curTR.cells[2].firstChild;
 	while (child && child.nodeName != "A") {
-	  child = child.firstChild;
+	  child = child.firstElementChild;
 	}
 	if (child) {
 	  location.href = child.href;
@@ -2764,11 +2867,11 @@ function M_fillTableCell_(attrs, text) {
  * See _ShortenBuffer() in codereview/engine.py.
  */
 function M_expandSkipped(id_before, id_after, where, id_skip) {
-  links = document.getElementById('skiplinks-'+id_skip).getElementsByTagName('a');
+  var links = document.getElementById('skiplinks-'+id_skip).getElementsByTagName('a');
   for (var i=0; i<links.length; i++) {
 	links[i].href = '#skiplinks-'+id_skip;
   }
-  tr = document.getElementById('skip-'+id_skip);
+  var tr = document.getElementById('skip-'+id_skip);
   var httpreq = M_getXMLHttpRequest();
   if (!httpreq) {
     html = '<td colspan="2" style="text-align: center;">';
@@ -2783,11 +2886,11 @@ function M_expandSkipped(id_before, id_after, where, id_skip) {
   if (context_select) {
     context = context_select.value;
   }
-  aborted = false;
+  var aborted = false;
   httpreq.onreadystatechange = function () {
     if (httpreq.readyState == 4 && !aborted) {
       if (httpreq.status == 200) {
-        response = eval('('+httpreq.responseText+')');
+        var response = eval('('+httpreq.responseText+')');
 	var last_row = null;
         for (var i=0; i<response.length; i++) {
           var data = response[i];

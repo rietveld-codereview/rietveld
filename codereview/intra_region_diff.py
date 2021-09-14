@@ -52,6 +52,8 @@ BEGIN_TAG = "<span class=\"%s\">"
 END_TAG = "</span>"
 # Tag used for visual tab indication.
 TAB_TAG = "<span class=\"visualtab\">&raquo;</span>"
+# Tag used for trailing space indication.
+TRAILING_SPACE_TAG = "<span class=\"visualspace\">&middot;</span>"
 # Color scheme to govern the display properties of diff blocks and matching
 # blocks. Each value e.g. 'oldlight' corresponds to a CSS style.
 COLOR_SCHEME = {
@@ -118,6 +120,18 @@ def _ExpandTabs(text, column, tabsize, mark_tabs=False):
   return expanded + text
 
 
+def TryDecode(text):
+  """Takes either a str or unicode instance and tries to return an unicode
+  instance.
+
+  It only works on best effort.
+  """
+  try:
+    return unicode(text, "utf8")
+  except (TypeError, UnicodeDecodeError):
+    return text
+
+
 def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
   """Break text into lines.
 
@@ -126,13 +140,13 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
 
   To break the text, insert brk, which does not count toward
   the column count of the next line and is assumed to be valid HTML.
-  
+
   During the text breaking process, replaces tabs with spaces up
   to the next column that is a multiple of tabsize.
-  
+
   If mark_tabs is true, replace the first space of each expanded
   tab with TAB_TAG.
-  
+
   Input and output are assumed to be in UTF-8; the computation is done
   in Unicode.  (Still not good enough if zero-width characters are
   present.) If the input is not valid UTF-8, then the encoding is
@@ -142,12 +156,11 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
   A trailing newline is always stripped from the input first.
   """
   assert tabsize > 0, tabsize
+  has_newline = False
   if text.endswith("\n"):
     text = text[:-1]
-  try:
-    text = unicode(text, "utf-8")
-  except:
-    pass
+    has_newline = True
+  text = TryDecode(text)
   # Expand all tabs.
   # If mark_tabs is true, we retain one \t character as a marker during
   # expansion so that we later replace it with an HTML snippet.
@@ -164,6 +177,9 @@ def Break(text, offset=0, limit=80, brk="\n     ", tabsize=8, mark_tabs=False):
     text = cgi.escape(text)
   # Colorize tab markers
   text = text.replace("\t", TAB_TAG)
+  if has_newline:
+      s_text = text.rstrip()
+      text = s_text + (TRAILING_SPACE_TAG * (len(text) - len(s_text)))
   if isinstance(text, unicode):
     return text.encode("utf-8", "replace")
   return text
@@ -280,14 +296,8 @@ def WordDiff(line1, line2, diff_params):
   match_expr, min_match_ratio, min_match_size, _ = diff_params
   exp = EXPRS[match_expr]
   # Strings may have been left undecoded up to now. Assume UTF-8.
-  try:
-    line1 = unicode(line1, "utf8")
-  except:
-    pass
-  try:
-    line2 = unicode(line2, "utf8")
-  except:
-    pass
+  line1 = TryDecode(line1)
+  line2 = TryDecode(line2)
 
   a = re.findall(exp, line1, re.U)
   b = re.findall(exp, line2, re.U)

@@ -14,7 +14,7 @@
 
 import md5
 
-from django.contrib.syndication.feeds import Feed
+from django.contrib.syndication.views import Feed
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.utils.feedgenerator import Atom1Feed
@@ -35,21 +35,21 @@ class BaseFeed(Feed):
     return 'rietveld'
 
   def item_guid(self, item):
-    return 'urn:md5:%s' % (md5.new(str(item.key())).hexdigest())
+    return 'urn:md5:%s' % (md5.new(str(item.key)).hexdigest())
 
   def item_link(self, item):
     if isinstance(item, models.PatchSet):
       if item.data is not None:
         return reverse('codereview.views.download',
-                       args=[item.issue.key().id(),item.key().id()])
+                       args=[item.issue_key.id(), item.key.id()])
       else:
         # Patch set is too large, only the splitted diffs are available.
-        return reverse('codereview.views.show', args=[item.parent_key().id()])
+        return reverse('codereview.views.show', args=[item.key.parent().id()])
     if isinstance(item, models.Message):
       return '%s#msg-%s' % (reverse('codereview.views.show',
-                                    args=[item.issue.key().id()]),
-                            item.key())
-    return reverse('codereview.views.show', args=[item.key().id()])
+                                    args=[item.issue_key.id()]),
+                            item.key.id())
+    return reverse('codereview.views.show', args=[item.key.id()])
 
   def item_title(self, item):
     return 'the title'
@@ -58,7 +58,7 @@ class BaseFeed(Feed):
     if isinstance(item, models.Issue):
       return library.get_nickname(item.owner, True)
     if isinstance(item, models.PatchSet):
-      return library.get_nickname(item.issue.owner, True)
+      return library.get_nickname(item.issue_key.get().owner, True)
     if isinstance(item, models.Message):
       return library.get_nickname(item.sender, True)
     return 'Rietveld'
@@ -77,7 +77,7 @@ class BaseFeed(Feed):
 
 class BaseUserFeed(BaseFeed):
 
-  def get_object(self, bits):
+  def get_object(self, request, *bits):
     """Returns the account for the requested user feed.
 
     bits is a list of URL path elements. The first element of this list
@@ -96,40 +96,55 @@ class BaseUserFeed(BaseFeed):
 
 class ReviewsFeed(BaseUserFeed):
   title = 'Code Review - All issues I have to review'
+  title_template = 'feeds/reviews_title.html'
+  description_template = 'feeds/reviews_description.html'
 
   def items(self, obj):
-    return _rss_helper(obj.email, 'closed = FALSE AND reviewers = :1',
-                       use_email=True)
+    return _rss_helper(
+      obj.email, models.Issue.closed == False, models.Issue.reviewers,
+      use_email=True)
 
 
 class ClosedFeed(BaseUserFeed):
   title = "Code Review - Reviews closed by me"
+  title_template = 'feeds/closed_title.html'
+  description_template = 'feeds/closed_description.html'
 
   def items(self, obj):
-    return _rss_helper(obj.email, 'closed = TRUE AND owner = :1')
+    return _rss_helper(
+      obj.email, models.Issue.closed == True, models.Issue.owner)
 
 
 class MineFeed(BaseUserFeed):
   title = 'Code Review - My issues'
+  title_template = 'feeds/mine_title.html'
+  description_template = 'feeds/mine_description.html'
 
   def items(self, obj):
-    return _rss_helper(obj.email, 'closed = FALSE AND owner = :1')
+    return _rss_helper(
+      obj.email, models.Issue.closed == False, models.Issue.owner)
 
 
 class AllFeed(BaseFeed):
   title = 'Code Review - All issues'
+  title_template = 'feeds/all_title.html'
+  description_template = 'feeds/all_description.html'
 
   def items(self):
-    query = models.Issue.gql('WHERE closed = FALSE AND private = FALSE '
-                             'ORDER BY modified DESC')
+    query = models.Issue.query(
+        models.Issue.closed == False, models.Issue.private == False).order(
+        -models.Issue.modified)
     return query.fetch(RSS_LIMIT)
 
 
 class OneIssueFeed(BaseFeed):
+  title_template = 'feeds/issue_title.html'
+  description_template = 'feeds/issue_description.html'
+
   def link(self):
     return reverse('codereview.views.index')
 
-  def get_object(self, bits):
+  def get_object(self, request, *bits):
     if len(bits) != 1:
       raise ObjectDoesNotExist
     obj = models.Issue.get_by_id(int(bits[0]))
@@ -138,12 +153,12 @@ class OneIssueFeed(BaseFeed):
     raise ObjectDoesNotExist
 
   def title(self, obj):
-    return 'Code review - Issue %d: %s' % (obj.key().id(), obj.subject)
+    return 'Code review - Issue %d: %s' % (obj.key.id(), obj.subject)
 
   def items(self, obj):
-    all = list(obj.patchset_set) + list(obj.message_set)
-    all.sort(key=self.item_pubdate)
-    return all
+    items = list(obj.patchsets) + list(obj.messages)
+    items.sort(key=self.item_pubdate)
+    return items
 
 
 ### RSS feeds ###
@@ -151,13 +166,13 @@ class OneIssueFeed(BaseFeed):
 # Maximum number of issues reported by RSS feeds
 RSS_LIMIT = 20
 
-def _rss_helper(email, query_string, use_email=False):
+def _rss_helper(email, query_cond, query_attr, use_email=False):
   account = models.Account.get_account_for_email(email)
-  if account is None:
-    issues = []
-  else:
-    query = models.Issue.gql('WHERE %s AND private = FALSE '
-                             'ORDER BY modified DESC' % query_string,
-                             use_email and account.email or account.user)
-    issues = query.fetch(RSS_LIMIT)
-  return issues
+  if not account:
+    return []
+
+  attr_val = use_email and account.email or account.user
+  query = models.Issue.query(
+      query_cond, query_attr == attr_val, models.Issue.private == False).order(
+      -models.Issue.modified)
+  return query.fetch(RSS_LIMIT)

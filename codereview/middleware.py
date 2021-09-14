@@ -16,23 +16,33 @@
 
 import logging
 
-from google.appengine.api import users
 from google.appengine.runtime import apiproxy_errors
 from google.appengine.runtime import DeadlineExceededError
 
 from django.conf import settings
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect
 from django.template import Context, loader
 
+from codereview import auth_utils
 from codereview import models
+
+
+class AddHSTSHeaderMiddleware(object):
+  """Add HTTP Strict Transport Security header."""
+
+  def process_response(self, request, response):
+    if request.is_secure():
+      response['Strict-Transport-Security'] = (
+          'max-age=%d' % settings.HSTS_MAX_AGE)
+    return response
 
 
 class AddUserToRequestMiddleware(object):
   """Add a user object and a user_is_admin flag to each request."""
 
   def process_request(self, request):
-    request.user = users.get_current_user()
-    request.user_is_admin = users.is_current_user_admin()
+    request.user = auth_utils.get_current_user()
+    request.user_is_admin = auth_utils.is_current_user_admin()
 
     # Update the cached value of the current user's Account
     account = None
@@ -81,3 +91,15 @@ class PropagateExceptionMiddleware(object):
       content = tpl.render(ctx)
       content_type = 'text/html'
     return HttpResponse(content, status=status, content_type=content_type)
+
+
+class RedirectToHTTPSMiddleware(object):
+  """Redirect HTTP requests to the equivalent HTTPS resource."""
+  def process_request(self, request):
+    is_cron = request.META.get('HTTP_X_APPENGINE_CRON', '') == 'true'
+    if settings.DEBUG or request.method == 'POST' or is_cron:
+      return
+    if not request.is_secure():
+      host = request.get_host().split(':')[0]
+      return HttpResponsePermanentRedirect(
+          'https://%s%s' % (host, request.get_full_path()))

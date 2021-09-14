@@ -23,7 +23,7 @@ login_warned = false;
     <input type="hidden" name="issue" value="{{issue.key.id}}">
     <input type="hidden" name="patchset" value="{{patchset.key.id}}">
     <input type="hidden" name="patch" value="{{patch.key.id}}">
-    <textarea name="text" cols="60" rows="5"></textarea><br>
+    <textarea name="text" style="width:96%" rows="10"></textarea><br>
     <input type="submit" name="save" value="Save"
            onclick="return M_submitInlineComment(this.form);">
     <input type="reset" name="cancel" value="Cancel"
@@ -71,7 +71,7 @@ login_warned = false;
 <div style="float: right; color: #333333; background-color: #eeeeec; border: 1px solid lightgray; -moz-border-radius: 5px 5px 5px 5px; padding: 5px;">
   <div>
     Jump to: <select onchange="M_jumpToPatch(this, {{issue.key.id}}, {{patchset.key.id}}, true);">
-      {% for jump_patch in patchset.patch_set %}
+      {% for jump_patch in patchset.patches_cache %}
         <option value="{{jump_patch.key.id}}"
          {%ifequal jump_patch.key.id patch.key.id%} selected="selected"{%endifequal%}>{{jump_patch.filename}}</option>
       {% endfor %}
@@ -125,6 +125,7 @@ login_warned = false;
 <table style="padding: 5px;" cellpadding="0" cellspacing="0" id="thecode"
        ondblclick="M_handleTableDblClick(event)"
        ontouchstart="M_handleTableTouchStart(event)"
+       ontouchmove="M_handleTableTouchMove(event)"
        ontouchend="M_handleTableTouchEnd(event)">
 {%for row in rows%}{{row|safe}}{%endfor%}
 </table>
