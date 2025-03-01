@@ -1,3 +1,13 @@
+# WARNING: The Rietveld instance on App Engine may disappear!
+
+By Guido van Rossum (Rietveld's original creator).
+
+I keep receiving emails from Google indicating that I have to do some kind of work to keep it
+(and all my other App Engine apps) running. I don't speak their language any more, so I will just give up.
+Unless someone is interested in taking over ownership of this Rietveld instance, it will eventually disappear.
+
+Sorry.
+
 Welcome to Rietveld
 -------------------
 
