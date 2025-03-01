@@ -1,4 +1,4 @@
-# WARNING: The Rietveld instance on App Engine may disappear!
+# WARNING: The Rietveld server on App Engine may disappear!
 
 By Guido van Rossum (Rietveld's original creator).
 
