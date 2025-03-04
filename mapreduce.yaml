@@ -1,19 +1,23 @@
-mapreduce:
-- name: MAINT Delete unused accounts
-  mapper:
-    input_reader: mapreduce.input_readers.DatastoreInputReader
-    handler: admin_tasks.delete_unused_accounts
-    params:
-    - name: entity_kind
-      default: codereview.models.Account
-    - name: queue_name
-      default: mapreduce
-- name: MAINT Update schema of all Accounts
-  mapper:
-    input_reader: mapreduce.input_readers.DatastoreInputReader
-    handler: admin_tasks.update_account_schema
-    params:
-    - name: entity_kind
-      default: codereview.models.Account
-    - name: queue_name
-      default: mapreduce
+api_version: '1'
+application: codereview-hr
+basic_scaling:
+  max_instances: '10'
+default_expiration: 7d
+env_variables:
+  DJANGO_SETTINGS_MODULE: settings
+handlers:
+- login: admin
+  script: backends.app
+  secure: optional
+  url: /_ah/(start|stop)
+includes:
+- mapreduce/include.yaml
+libraries:
+- name: django
+  version: '1.4'
+- name: webapp2
+  version: 2.5.2
+module: mapreduce
+runtime: python27
+threadsafe: false
+version: use-version-arg

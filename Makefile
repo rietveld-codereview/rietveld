@@ -70,7 +70,7 @@ update_frontend: update_revision mapreduce
 
 update_backend: update_revision mapreduce
 	@echo "---[Updating backend $(APPID)]---"
-	$(APPCFG) $(APPCFG_FLAGS) backends update . --application $(APPID) --version $(VERSION)
+	$(APPCFG) $(APPCFG_FLAGS) update mapreduce.yaml --application $(APPID) --version $(VERSION)
 
 update: update_frontend update_backend
 
